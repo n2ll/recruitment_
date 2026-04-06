@@ -97,14 +97,14 @@ export async function appendToScreeningSheet(data: {
     data.branch,
     data.available_date,
     data.status,
-    false,    // 스크리닝 완료 체크박스 (미완료)
+    "FALSE",  // 스크리닝 완료 체크박스 (미완료)
     "",       // msg_sent
     "",       // 메모
   ];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: "스크리닝 관리!A:A",
+    range: "스크리닝 관리!A2:H",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [row] },
   });
