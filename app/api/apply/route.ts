@@ -111,6 +111,13 @@ export async function POST(req: NextRequest) {
     // ── 필터 통과 시 시트2(스크리닝 관리)에도 추가 ───────────
     if (filterPass) {
       try {
+        console.log("[시트2 데이터]", JSON.stringify({
+          name: inserted.name,
+          phone: inserted.phone,
+          branch: inserted.branch,
+          available_date: inserted.available_date,
+          status: inserted.status,
+        }));
         await appendToScreeningSheet({
           name: inserted.name,
           phone: inserted.phone,
