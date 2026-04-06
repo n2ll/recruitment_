@@ -97,7 +97,7 @@ export async function appendToScreeningSheet(data: {
     data.branch,
     data.available_date,
     data.status,
-    "FALSE",  // 스크리닝 완료 체크박스 (미완료)
+    false,    // 스크리닝 완료 체크박스 (미완료)
     "",       // msg_sent
     "",       // 메모
   ];
