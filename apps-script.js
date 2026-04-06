@@ -28,8 +28,13 @@ var COL_MSG_SENT = 7;   // G: msg_sent
 
 // ─── 메인 트리거 ─────────────────────────────────────────
 function onEditTrigger(e) {
-  var sheet = e.source.getActiveSheet();
-  var range = e.range;
+  // e가 없으면 (수동 실행 등) 무시
+  if (!e) return;
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var range = e.range || sheet.getActiveRange();
+
+  if (!range) return;
 
   // 스크리닝 관리 시트의 체크박스(F열)만 감지
   if (sheet.getName() !== SCREENING_SHEET) return;
