@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
       introduction,
       experience,
       source,
+      availableDate,
+      selfOwnership,
     } = body;
 
     // ── 필수 필드 검증 ─────────────────────────────────────
@@ -32,7 +34,9 @@ export async function POST(req: NextRequest) {
       !vehicleType?.trim() ||
       !branch1 ||
       !workHours?.length ||
-      !introduction?.trim()
+      !introduction?.trim() ||
+      !availableDate ||
+      !selfOwnership
     ) {
       return NextResponse.json(
         { error: "필수 항목이 누락되었거나 형식이 올바르지 않습니다." },
@@ -65,6 +69,8 @@ export async function POST(req: NextRequest) {
       work_hours: Array.isArray(workHours) ? workHours.join(", ") : workHours,
       introduction,
       experience: experience || null,
+      available_date: availableDate,
+      self_ownership: selfOwnership,
       source: source || "direct",
       branch: branch1,
       status: "서류심사",

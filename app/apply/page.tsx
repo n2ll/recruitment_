@@ -31,6 +31,8 @@ interface FormData {
   workHours: string[];
   introduction: string;
   experience: string;
+  availableDate: string;
+  selfOwnership: string;
 }
 
 function Dropdown({
@@ -110,6 +112,7 @@ function ApplyPage() {
     ownVehicle: "", licenseType: "", vehicleType: "",
     branch1: branchParam, branch2: "",
     workHours: [], introduction: "", experience: "",
+    availableDate: "", selfOwnership: "",
   });
 
   const [step, setStep] = useState<"form" | "done">("form");
@@ -140,6 +143,8 @@ function ApplyPage() {
     if (!form.branch1) e.branch1 = "희망 근무 지점을 선택해주세요";
     if (form.workHours.length === 0) e.workHours = "희망 근무 시간대를 하나 이상 선택해주세요";
     if (!form.introduction.trim()) e.introduction = "자기소개를 작성해주세요";
+    if (!form.availableDate) e.availableDate = "업무 시작 가능일을 선택해주세요";
+    if (!form.selfOwnership) e.selfOwnership = "본인 명의 여부를 선택해주세요";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -373,6 +378,38 @@ function ApplyPage() {
               onChange={(e) => set("experience")(e.target.value)} />
           </section>
 
+          <div className="divider" />
+
+          {/* 07 추가 확인 사항 */}
+          <section className="section">
+            <div className="section-header">
+              <span className="section-num">07</span>
+              <h3 className="section-title">추가 확인 사항</h3>
+            </div>
+
+            <div className="field-wrap">
+              <label className="field-label">업무 시작 가능일 <span className="req">*</span></label>
+              <input type="date" className={`input ${errors.availableDate ? "input-err" : ""}`}
+                value={form.availableDate}
+                onChange={(e) => set("availableDate")(e.target.value)} />
+              {errors.availableDate && <p className="error-msg">{errors.availableDate}</p>}
+            </div>
+
+            <div className="field-wrap">
+              <label className="field-label">본인 명의로 업무 진행 및 정산에 문제 없으신가요? <span className="req">*</span></label>
+              <div className="radio-group">
+                {["문제 없음", "문제 있음 (지원불가)"].map((opt) => (
+                  <button key={opt} type="button"
+                    className={`radio-btn ${form.selfOwnership === opt ? "radio-on" : ""}`}
+                    onClick={() => set("selfOwnership")(opt)}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              {errors.selfOwnership && <p className="error-msg">{errors.selfOwnership}</p>}
+            </div>
+          </section>
+
           {/* 제출 버튼 */}
           <button className={`submit-btn ${submitting ? "submitting" : ""}`}
             onClick={handleSubmit} disabled={submitting}>
@@ -475,6 +512,8 @@ const css = `
   }
   .input::placeholder, .textarea::placeholder { color: #b0b0a8; }
   .textarea { resize: vertical; line-height: 1.6; }
+  input[type="date"] { color-scheme: light; }
+  input[type="date"]:invalid, input[type="date"][value=""] { color: #b0b0a8; }
   .input-err { border-color: #ef4444 !important; }
   .error-msg { font-size: 12px; color: #ef4444; margin-top: 5px; font-weight: 500; }
 
