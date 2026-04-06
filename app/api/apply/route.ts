@@ -104,9 +104,13 @@ export async function POST(req: NextRequest) {
     // ── Supabase 데이터 → 구글 시트 동기화 ──────────────────
     try {
       await appendToSheet(inserted);
+    } catch (sheetErr) {
+      console.error("[시트1 sync error]", sheetErr);
+    }
 
-      // 필터 통과 시 시트2(스크리닝 관리)에도 추가
-      if (filterPass) {
+    // ── 필터 통과 시 시트2(스크리닝 관리)에도 추가 ───────────
+    if (filterPass) {
+      try {
         await appendToScreeningSheet({
           name: inserted.name,
           phone: inserted.phone,
@@ -114,9 +118,9 @@ export async function POST(req: NextRequest) {
           available_date: inserted.available_date,
           status: inserted.status,
         });
+      } catch (screenErr) {
+        console.error("[시트2 screening error]", screenErr);
       }
-    } catch (sheetErr) {
-      console.error("[Google Sheets sync error]", sheetErr);
     }
 
     // ── 슬랙 알림 ──────────────────────────────────────────
