@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { appendToSheet } from "@/lib/google-sheets";
+import { appendToSheet, appendToScreeningSheet } from "@/lib/google-sheets";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +56,15 @@ export async function POST(req: NextRequest) {
 
     const isDuplicate = existing && existing.length > 0;
 
+    // ── 자동 필터 3조건 ──────────────────────────────────────
+    const VALID_LICENSES = ["1종 보통", "2종 보통", "1종 대형"];
+    const filterPass =
+      ownVehicle === "있음" &&
+      VALID_LICENSES.includes(licenseType) &&
+      selfOwnership === "문제 없음";
+
+    const autoStatus = filterPass ? "연락대기" : "부적합";
+
     // ── Supabase에 저장 ─────────────────────────────────────
     const { data: inserted, error } = await supabase
       .from("applicants")
@@ -76,7 +85,8 @@ export async function POST(req: NextRequest) {
         self_ownership: selfOwnership,
         source: source || "direct",
         branch: branch1,
-        status: "서류심사",
+        status: autoStatus,
+        filter_pass: filterPass ? "Y" : "N",
         note: isDuplicate ? "중복지원" : null,
       })
       .select()
@@ -93,9 +103,19 @@ export async function POST(req: NextRequest) {
     // ── Supabase 데이터 → 구글 시트 동기화 ──────────────────
     try {
       await appendToSheet(inserted);
+
+      // 필터 통과 시 시트2(스크리닝 관리)에도 추가
+      if (filterPass) {
+        await appendToScreeningSheet({
+          name: inserted.name,
+          phone: inserted.phone,
+          branch: inserted.branch,
+          available_date: inserted.available_date,
+          status: inserted.status,
+        });
+      }
     } catch (sheetErr) {
       console.error("[Google Sheets sync error]", sheetErr);
-      // 시트 실패해도 Supabase에는 저장됨 — 치명적이지 않으므로 계속 진행
     }
 
     return NextResponse.json({

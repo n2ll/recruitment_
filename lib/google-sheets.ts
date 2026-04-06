@@ -36,6 +36,7 @@ export async function appendToSheet(data: {
   status: string;
   branch: string;
   source: string;
+  filter_pass: string | null;
   note: string | null;
 }) {
   const sheets = getSheets();
@@ -64,15 +65,46 @@ export async function appendToSheet(data: {
     data.status,      // 진행상황
     data.branch,      // branch
     data.source,      // source
-    "",               // filter_pass
-    "",               // msg1_sent
-    "",               // msg2_sent
-    data.note || "",  // 비고
+    data.filter_pass || "",  // filter_pass
+    "",                      // msg1_sent
+    "",                      // msg2_sent
+    data.note || "",         // 비고
   ];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     range: `${SHEET_NAME}!A:A`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [row] },
+  });
+}
+
+/**
+ * 필터 통과한 지원자를 시트2(스크리닝 관리)에 추가
+ */
+export async function appendToScreeningSheet(data: {
+  name: string;
+  phone: string;
+  branch: string;
+  available_date: string;
+  status: string;
+}) {
+  const sheets = getSheets();
+
+  const row = [
+    data.name,
+    data.phone,
+    data.branch,
+    data.available_date,
+    data.status,
+    "FALSE",  // 스크리닝 완료 체크박스 (미완료)
+    "",       // msg_sent
+    "",       // 메모
+  ];
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: "스크리닝 관리!A:A",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [row] },
   });
