@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { appendToSheet, appendToScreeningSheet } from "@/lib/google-sheets";
+import { sendSlackNotification } from "@/lib/slack";
 
 export async function POST(req: NextRequest) {
   try {
@@ -116,6 +117,20 @@ export async function POST(req: NextRequest) {
       }
     } catch (sheetErr) {
       console.error("[Google Sheets sync error]", sheetErr);
+    }
+
+    // ── 슬랙 알림 ──────────────────────────────────────────
+    try {
+      await sendSlackNotification({
+        name: inserted.name,
+        phone: inserted.phone,
+        branch: inserted.branch,
+        available_date: inserted.available_date,
+        filter_pass: inserted.filter_pass,
+        source: inserted.source,
+      });
+    } catch (slackErr) {
+      console.error("[Slack notification error]", slackErr);
     }
 
     return NextResponse.json({
