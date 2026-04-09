@@ -49,7 +49,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "screening";
+type Tab = "dashboard" | "applicants" | "screening" | "contact";
 
 const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
@@ -270,6 +270,12 @@ export default function AdminPage() {
             스크리닝
             {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
           </button>
+          <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
+            onClick={() => setTab("contact")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            배송원 컨택
+            {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
+          </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={fetchData}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -397,6 +403,63 @@ export default function AdminPage() {
                   )}
                 </div>
               )}
+            </div>
+          ) : tab === "contact" ? (
+            <div className="content">
+              <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
+              <p className="page-desc">지원자와의 문자 대화를 관리합니다. 이름을 클릭하면 대화창이 열립니다.</p>
+
+              <div className="filters">
+                <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+                  {BRANCHES.map((b) => <option key={b}>{b}</option>)}
+                </select>
+                <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+
+              <div className="contact-list">
+                {(() => {
+                  const contactList = data
+                    .filter((a) => {
+                      if (branchFilter !== "전체" && a.branch !== branchFilter) return false;
+                      if (search && !a.name.includes(search) && !a.phone.includes(search)) return false;
+                      return true;
+                    })
+                    .sort((a, b) => {
+                      // 안읽음 있는 사람 먼저
+                      if ((b.unread_count || 0) !== (a.unread_count || 0)) return (b.unread_count || 0) - (a.unread_count || 0);
+                      // 그 다음 최근 문자 순
+                      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+                      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+                      if (tb !== ta) return tb - ta;
+                      // 문자 없는 사람은 지원일 순
+                      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                    });
+
+                  return contactList.length === 0 ? (
+                    <div className="empty">해당하는 지원자가 없습니다.</div>
+                  ) : (
+                    contactList.map((a) => (
+                      <div key={a.id} className={`contact-card ${a.unread_count > 0 ? "contact-unread" : ""}`} onClick={() => openChat(a)}>
+                        <div className="contact-left">
+                          <div className="contact-name-row">
+                            <span className="contact-name">{a.name}</span>
+                            <span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span>
+                            {a.unread_count > 0 && <span className="unread-badge">{a.unread_count}</span>}
+                          </div>
+                          <div className="contact-meta">{a.phone} | {a.branch}</div>
+                        </div>
+                        <div className="contact-right">
+                          {a.last_message_at ? (
+                            <span className="contact-time">{new Date(a.last_message_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          ) : (
+                            <span className="contact-time" style={{ color: "#d1d5db" }}>대화 없음</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  );
+                })()}
+              </div>
             </div>
           ) : (
             <div className="content">
@@ -637,6 +700,22 @@ const css = `
   .phone-label { font-weight: 600; }
   .phone-info { color: #6b7280; }
   .phone-warn { color: #ef4444; font-weight: 700; margin-left: auto; }
+
+  /* 컨택 리스트 */
+  .contact-list { display: flex; flex-direction: column; gap: 8px; }
+  .contact-card {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
+    padding: 16px 20px; cursor: pointer; transition: all 0.15s;
+  }
+  .contact-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #F5C518; }
+  .contact-unread { border-left: 3px solid #ef4444; background: #fffbfb; }
+  .contact-left { flex: 1; }
+  .contact-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .contact-name { font-size: 15px; font-weight: 700; }
+  .contact-meta { font-size: 12px; color: #6b7280; }
+  .contact-right { text-align: right; flex-shrink: 0; margin-left: 16px; }
+  .contact-time { font-size: 12px; color: #9ca3af; }
 
   /* 이름 링크 */
   .name-link { cursor: pointer; color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
