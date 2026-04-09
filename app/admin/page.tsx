@@ -86,8 +86,8 @@ export default function AdminPage() {
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/admin/applicants");
       const json = await res.json();
@@ -95,7 +95,7 @@ export default function AdminPage() {
     } catch {
       console.error("데이터 로딩 실패");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -177,8 +177,9 @@ export default function AdminPage() {
   useEffect(() => {
     fetchData();
     fetchHeartbeats();
+    const dataInterval = setInterval(() => fetchData(true), 30000);
     const hbInterval = setInterval(fetchHeartbeats, 30000);
-    return () => clearInterval(hbInterval);
+    return () => { clearInterval(dataInterval); clearInterval(hbInterval); };
   }, [fetchData, fetchHeartbeats]);
 
   // 전용 폰 상태 판별
@@ -277,7 +278,7 @@ export default function AdminPage() {
             {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
           </button>
           <div className="sidebar-footer">
-            <button className="nav-btn" onClick={fetchData}>
+            <button className="nav-btn" onClick={() => fetchData()}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               새로고침
             </button>
