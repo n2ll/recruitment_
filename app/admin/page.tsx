@@ -25,6 +25,28 @@ interface Applicant {
   source: string;
   filter_pass: string | null;
   note: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+}
+
+interface Message {
+  id: string;
+  applicant_id: number | null;
+  applicant_phone: string;
+  direction: "inbound" | "outbound";
+  body: string;
+  status: string;
+  sent_by: string | null;
+  solapi_msg_id: string | null;
+  created_at: string;
+}
+
+interface Heartbeat {
+  device_id: string;
+  last_seen_at: string;
+  pending_count: number;
+  battery_level: number;
+  app_version: string | null;
 }
 
 type Tab = "dashboard" | "applicants" | "screening";
@@ -54,6 +76,16 @@ export default function AdminPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sending, setSending] = useState<number | null>(null);
 
+  // 문자 대화 관련 state
+  const [chatApplicant, setChatApplicant] = useState<Applicant | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [msgInput, setMsgInput] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+
+  // 전용 폰 heartbeat
+  const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -67,9 +99,96 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchHeartbeats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/heartbeat");
+      const json = await res.json();
+      setHeartbeats(json.data || []);
+    } catch {
+      console.error("Heartbeat 로딩 실패");
+    }
+  }, []);
+
+  const openChat = async (applicant: Applicant) => {
+    setChatApplicant(applicant);
+    setChatLoading(true);
+    try {
+      const res = await fetch(`/api/admin/messages/${applicant.id}`);
+      const json = await res.json();
+      setMessages(json.data || []);
+      // unread_count 로컬 초기화
+      setData((prev) =>
+        prev.map((a) => (a.id === applicant.id ? { ...a, unread_count: 0 } : a))
+      );
+    } catch {
+      console.error("대화 로딩 실패");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const closeChat = () => {
+    setChatApplicant(null);
+    setMessages([]);
+    setMsgInput("");
+  };
+
+  const sendMessage = async () => {
+    if (!chatApplicant || !msgInput.trim() || msgSending) return;
+    setMsgSending(true);
+    try {
+      const res = await fetch("/api/admin/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicant_id: chatApplicant.id,
+          phone: chatApplicant.phone,
+          body: msgInput.trim(),
+          sent_by: "관리자",
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMessages((prev) => [...prev, json.message]);
+        setMsgInput("");
+      } else {
+        alert("발송 실패: " + (json.error || "알 수 없는 오류"));
+      }
+    } catch {
+      alert("발송 중 오류 발생");
+    } finally {
+      setMsgSending(false);
+    }
+  };
+
+  // Realtime 구독 (대화 화면이 열려있을 때)
+  useEffect(() => {
+    if (!chatApplicant) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/messages/${chatApplicant.id}`);
+        const json = await res.json();
+        setMessages(json.data || []);
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [chatApplicant]);
+
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchHeartbeats();
+    const hbInterval = setInterval(fetchHeartbeats, 30000);
+    return () => clearInterval(hbInterval);
+  }, [fetchData, fetchHeartbeats]);
+
+  // 전용 폰 상태 판별
+  const phoneStatus = (() => {
+    if (heartbeats.length === 0) return { online: false, label: "미연결", hb: null as Heartbeat | null };
+    const latest = heartbeats[0];
+    const diff = Date.now() - new Date(latest.last_seen_at).getTime();
+    const online = diff < 10 * 60 * 1000; // 10분
+    return { online, label: online ? "온라인" : "오프라인", hb: latest };
+  })();
 
   const filtered = data.filter((a) => {
     if (branchFilter !== "전체" && a.branch !== branchFilter) return false;
@@ -161,6 +280,22 @@ export default function AdminPage() {
 
         {/* 메인 */}
         <main className="main">
+          {/* 전용 폰 상태 바 */}
+          <div className={`phone-bar ${phoneStatus.online ? "phone-online" : "phone-offline"}`}>
+            <span className={`phone-dot ${phoneStatus.online ? "dot-green" : "dot-red"}`} />
+            <span className="phone-label">전용 폰: {phoneStatus.label}</span>
+            {phoneStatus.hb && (
+              <>
+                <span className="phone-info">배터리 {phoneStatus.hb.battery_level}%</span>
+                <span className="phone-info">미전송 {phoneStatus.hb.pending_count}건</span>
+                <span className="phone-info">
+                  마지막 응답: {new Date(phoneStatus.hb.last_seen_at).toLocaleTimeString("ko-KR")}
+                </span>
+              </>
+            )}
+            {!phoneStatus.online && <span className="phone-warn">⚠ 10분 이상 미응답</span>}
+          </div>
+
           {loading ? (
             <div className="loading">로딩 중...</div>
           ) : tab === "dashboard" ? (
@@ -211,12 +346,15 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th><th>마지막 문자</th><th>안읽음</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
                       <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
-                        <td className="td-bold">{a.name}{a.note === "중복지원" && <span className="dup-tag">중복</span>}</td>
+                        <td className="td-bold">
+                          <span className="name-link" onClick={(e) => { e.stopPropagation(); openChat(a); }}>{a.name}</span>
+                          {a.note === "중복지원" && <span className="dup-tag">중복</span>}
+                        </td>
                         <td>{a.phone}</td>
                         <td>{a.branch}</td>
                         <td>{a.own_vehicle}</td>
@@ -225,6 +363,8 @@ export default function AdminPage() {
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{a.source}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
+                        <td>{a.last_message_at ? new Date(a.last_message_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
+                        <td>{a.unread_count > 0 ? <span className="unread-badge">{a.unread_count}</span> : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -291,6 +431,63 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {/* 대화 패널 (카카오톡 스타일) */}
+          {chatApplicant && (
+            <div className="chat-overlay">
+              <div className="chat-panel">
+                <div className="chat-header">
+                  <div>
+                    <h3 className="chat-name">{chatApplicant.name}</h3>
+                    <span className="chat-phone">{chatApplicant.phone}</span>
+                  </div>
+                  <button className="close-btn" onClick={closeChat}>✕</button>
+                </div>
+
+                <div className="chat-messages" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                  {chatLoading ? (
+                    <div className="chat-loading">로딩 중...</div>
+                  ) : messages.length === 0 ? (
+                    <div className="chat-empty">대화 내역이 없습니다.</div>
+                  ) : (
+                    messages.map((msg) => (
+                      <div key={msg.id} className={`chat-bubble-wrap ${msg.direction === "outbound" ? "bubble-right" : "bubble-left"}`}>
+                        <div className={`chat-bubble ${msg.direction === "outbound" ? "bubble-out" : "bubble-in"}`}>
+                          <p className="bubble-body">{msg.body}</p>
+                          <div className="bubble-meta">
+                            {msg.sent_by && <span>{msg.sent_by}</span>}
+                            <span>{new Date(msg.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="chat-input-area">
+                  <textarea
+                    className="chat-input"
+                    placeholder="메시지를 입력하세요..."
+                    value={msgInput}
+                    onChange={(e) => setMsgInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    rows={2}
+                  />
+                  <button
+                    className={`chat-send-btn ${msgSending ? "sc-btn-loading" : ""}`}
+                    onClick={sendMessage}
+                    disabled={msgSending || !msgInput.trim()}
+                  >
+                    {msgSending ? "발송중" : "발송"}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </main>
@@ -423,6 +620,99 @@ const css = `
   .sc-btn:hover { background: #E6B800; }
   .sc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .sc-btn-loading { background: #d4a50e; }
+
+  /* 전용 폰 상태 바 */
+  .phone-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 20px;
+    font-size: 12px; border-bottom: 1px solid #e8e8e0;
+  }
+  .phone-online { background: #f0fdf4; }
+  .phone-offline { background: #fef2f2; }
+  .phone-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+  }
+  .dot-green { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .dot-red { background: #ef4444; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.4; } }
+  .phone-label { font-weight: 600; }
+  .phone-info { color: #6b7280; }
+  .phone-warn { color: #ef4444; font-weight: 700; margin-left: auto; }
+
+  /* 이름 링크 */
+  .name-link { cursor: pointer; color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+  .name-link:hover { color: #1d4ed8; }
+
+  /* 안읽음 배지 */
+  .unread-badge {
+    display: inline-block; background: #ef4444; color: #fff;
+    font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+  }
+
+  /* 대화 패널 오버레이 */
+  .chat-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4); z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .chat-panel {
+    width: 440px; max-width: 95vw; height: 80vh; background: #fff;
+    border-radius: 16px; display: flex; flex-direction: column;
+    overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+  }
+  .chat-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid #e8e8e0; background: #fafaf7;
+  }
+  .chat-name { font-size: 16px; font-weight: 700; }
+  .chat-phone { font-size: 12px; color: #6b7280; }
+
+  .chat-messages {
+    flex: 1; overflow-y: auto; padding: 16px; background: #e8e4d9;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .chat-loading, .chat-empty {
+    text-align: center; color: #9ca3af; padding: 40px; font-size: 13px;
+  }
+
+  .chat-bubble-wrap { display: flex; }
+  .bubble-left { justify-content: flex-start; }
+  .bubble-right { justify-content: flex-end; }
+  .chat-bubble {
+    max-width: 75%; padding: 10px 14px; border-radius: 16px;
+    font-size: 13px; line-height: 1.5; word-break: break-word;
+  }
+  .bubble-in {
+    background: #fff; color: #1a1a1a;
+    border-top-left-radius: 4px;
+  }
+  .bubble-out {
+    background: #F5C518; color: #3D2B00;
+    border-top-right-radius: 4px;
+  }
+  .bubble-body { margin: 0; white-space: pre-wrap; }
+  .bubble-meta {
+    display: flex; gap: 8px; justify-content: flex-end;
+    font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 4px;
+  }
+
+  .chat-input-area {
+    display: flex; gap: 8px; padding: 12px 16px;
+    border-top: 1px solid #e8e8e0; background: #fff;
+  }
+  .chat-input {
+    flex: 1; border: 1.5px solid #e8e8e0; border-radius: 10px;
+    padding: 10px 12px; font-size: 13px; font-family: inherit;
+    resize: none; outline: none;
+  }
+  .chat-input:focus { border-color: #F5C518; }
+  .chat-send-btn {
+    padding: 10px 20px; background: #F5C518; color: #3D2B00;
+    border: none; border-radius: 10px; font-size: 13px; font-weight: 700;
+    font-family: inherit; cursor: pointer; white-space: nowrap;
+    align-self: flex-end;
+  }
+  .chat-send-btn:hover { background: #E6B800; }
+  .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   @media (max-width: 768px) {
     .sidebar { width: 60px; padding: 12px 6px; }
