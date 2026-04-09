@@ -18,12 +18,34 @@ export async function GET(
 
     const supabase = createServiceClient();
 
-    // 대화 내역 조회
-    const { data: messages, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("applicant_id", applicantId)
-      .order("created_at", { ascending: true });
+    // 지원자 phone 번호 조회
+    const { data: applicant } = await supabase
+      .from("applicants")
+      .select("phone")
+      .eq("id", applicantId)
+      .single();
+
+    // applicant_id 또는 phone 번호로 대화 내역 조회 (트리거 미실행 대비)
+    let messages;
+    let error;
+
+    if (applicant?.phone) {
+      const result = await supabase
+        .from("messages")
+        .select("*")
+        .or(`applicant_id.eq.${applicantId},applicant_phone.eq.${applicant.phone}`)
+        .order("created_at", { ascending: true });
+      messages = result.data;
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("messages")
+        .select("*")
+        .eq("applicant_id", applicantId)
+        .order("created_at", { ascending: true });
+      messages = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error("[messages fetch error]", error);
