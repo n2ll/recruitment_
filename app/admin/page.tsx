@@ -27,6 +27,12 @@ interface Applicant {
   note: string | null;
   last_message_at: string | null;
   unread_count: number;
+  start_date: string | null;
+  confirmed_slot: string | null;
+  confirmed_branch: string | null;
+  current_branch: string | null;
+  churned_at: string | null;
+  churn_reason: string | null;
 }
 
 interface Message {
@@ -49,22 +55,48 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "screening" | "contact";
+type Tab = "dashboard" | "applicants" | "screening" | "contact" | "hope-slots" | "confirmed-slots";
 
 const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
   연락대기: "#2563eb",
   부적합: "#ef4444",
-  온보딩: "#f59e0b",
+  확정: "#0ea5e9",
   대기: "#8b5cf6",
+  온보딩: "#f59e0b",
   현장투입: "#10b981",
+  이탈: "#475569",
 };
+
+const ALL_STATUSES = [
+  "서류심사", "연락대기", "부적합", "확정", "대기", "온보딩", "현장투입", "이탈",
+];
 
 const BRANCHES = [
   "전체", "은평", "마포상암", "서대문신촌", "용산한남",
   "도봉쌍문", "중구명동", "성동옥수", "동대문제기",
   "강북미아", "노원중계", "중랑면목", "광진자양",
 ];
+
+const BRANCH_NAMES = BRANCHES.slice(1);
+
+const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
+type SlotKey = typeof SLOTS[number];
+
+// work_hours 텍스트(콤마 join된 4슬롯 중 선택값) → 슬롯 매칭
+function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boolean {
+  if (!workHours) return false;
+  const wantPyeongil = slot.startsWith("평일");
+  const wantMorning = slot.endsWith("오전");
+  return workHours.split(",").map((t) => t.trim()).some((tok) => {
+    const dayOk = wantPyeongil ? tok.includes("평일") : tok.includes("주말");
+    const timeOk = wantMorning ? tok.includes("오전") : tok.includes("오후");
+    return dayOk && timeOk;
+  });
+}
+
+const ACTIVE_STATUSES = ["서류심사", "연락대기", "확정", "대기", "온보딩", "현장투입"];
+const CONFIRMED_STATUSES = ["확정", "온보딩", "현장투입"];
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -85,6 +117,9 @@ export default function AdminPage() {
 
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
+
+  // 슬롯 뷰 셀 선택 (drill-down 용)
+  const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -108,6 +143,34 @@ export default function AdminPage() {
       console.error("Heartbeat 로딩 실패");
     }
   }, []);
+
+  const patchApplicant = useCallback(
+    async (id: number, updates: Partial<Applicant>) => {
+      // 낙관적 업데이트
+      setData((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+      try {
+        const res = await fetch(`/api/admin/applicants/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          alert("저장 실패: " + (json.error || "알 수 없는 오류"));
+          fetchData(true);
+          return false;
+        }
+        setData((prev) => prev.map((a) => (a.id === id ? { ...a, ...json.data } : a)));
+        return true;
+      } catch (err) {
+        console.error("[patchApplicant]", err);
+        alert("네트워크 오류");
+        fetchData(true);
+        return false;
+      }
+    },
+    [fetchData]
+  );
 
   const openChat = async (applicant: Applicant) => {
     setChatApplicant(applicant);
@@ -271,6 +334,16 @@ export default function AdminPage() {
             스크리닝
             {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
           </button>
+          <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
+            onClick={() => setTab("hope-slots")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
+            희망 슬롯
+          </button>
+          <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
+            onClick={() => setTab("confirmed-slots")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+            확정 슬롯
+          </button>
           <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
             onClick={() => setTab("contact")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -345,7 +418,7 @@ export default function AdminPage() {
                   {BRANCHES.map((b) => <option key={b}>{b}</option>)}
                 </select>
                 <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  {["전체", "서류심사", "연락대기", "부적합", "온보딩", "대기", "현장투입"].map((s) => <option key={s}>{s}</option>)}
+                  {["전체", ...ALL_STATUSES].map((s) => <option key={s}>{s}</option>)}
                 </select>
                 <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
@@ -384,11 +457,85 @@ export default function AdminPage() {
                     <h3>{selected.name} 상세 정보</h3>
                     <button className="close-btn" onClick={() => setSelectedId(null)}>X</button>
                   </div>
+
+                  {/* 편집 가능 영역 */}
+                  <div className="edit-grid">
+                    <label className="edit-field">
+                      <span className="dl">진행 상태</span>
+                      <select
+                        className="edit-select"
+                        value={selected.status}
+                        onChange={(e) => patchApplicant(selected.id, { status: e.target.value })}
+                      >
+                        {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <label className="edit-field">
+                      <span className="dl">확정 슬롯</span>
+                      <select
+                        className="edit-select"
+                        value={selected.confirmed_slot || ""}
+                        onChange={(e) => patchApplicant(selected.id, { confirmed_slot: e.target.value || null })}
+                      >
+                        <option value="">—</option>
+                        {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <label className="edit-field">
+                      <span className="dl">확정 지점</span>
+                      <select
+                        className="edit-select"
+                        value={selected.confirmed_branch || ""}
+                        onChange={(e) => patchApplicant(selected.id, { confirmed_branch: e.target.value || null })}
+                      >
+                        <option value="">—</option>
+                        {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </label>
+                    <label className="edit-field">
+                      <span className="dl">현재 근무 지점</span>
+                      <select
+                        className="edit-select"
+                        value={selected.current_branch || ""}
+                        onChange={(e) => patchApplicant(selected.id, { current_branch: e.target.value || null })}
+                      >
+                        <option value="">— (비근무)</option>
+                        {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </label>
+                    <label className="edit-field">
+                      <span className="dl">시작일</span>
+                      <input
+                        type="date"
+                        className="edit-select"
+                        value={selected.start_date || ""}
+                        onChange={(e) => patchApplicant(selected.id, { start_date: e.target.value || null })}
+                      />
+                    </label>
+                    {selected.status === "이탈" && (
+                      <label className="edit-field edit-field-wide">
+                        <span className="dl">이탈 사유</span>
+                        <input
+                          type="text"
+                          className="edit-select"
+                          placeholder="사유 입력 후 포커스 해제 시 저장"
+                          defaultValue={selected.churn_reason || ""}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v !== (selected.churn_reason || "")) {
+                              patchApplicant(selected.id, { churn_reason: v || null });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+
                   <div className="detail-grid">
                     <div><span className="dl">거주지</span>{selected.location}</div>
                     <div><span className="dl">차종</span>{selected.vehicle_type}</div>
                     <div><span className="dl">희망지점</span>{selected.branch1}{selected.branch2 ? ` / ${selected.branch2}` : ""}</div>
-                    <div><span className="dl">근무시간</span>{selected.work_hours}</div>
+                    <div><span className="dl">희망시간</span>{selected.work_hours}</div>
                     <div><span className="dl">본인명의</span>{selected.self_ownership}</div>
                     <div><span className="dl">필터</span>{selected.filter_pass === "Y" ? "통과" : "탈락"}</div>
                   </div>
@@ -404,6 +551,223 @@ export default function AdminPage() {
                   )}
                 </div>
               )}
+            </div>
+          ) : tab === "hope-slots" ? (
+            <div className="content">
+              <h2 className="page-title">희망 슬롯 분포</h2>
+              <p className="page-desc">
+                지원자가 <strong>희망한</strong> 시간대·지점 기준 풀 분포입니다.
+                셀을 클릭하면 해당 조건의 지원자 목록이 표시됩니다.
+                (필터 통과 + 활성 상태만 집계)
+              </p>
+
+              <div className="matrix-wrap">
+                <table className="matrix">
+                  <thead>
+                    <tr>
+                      <th>지점 \ 슬롯</th>
+                      {SLOTS.map((s) => <th key={s}>{s}</th>)}
+                      <th>지점 합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {BRANCH_NAMES.map((b) => {
+                      const rowTotal = data.filter(
+                        (a) =>
+                          a.filter_pass === "Y" &&
+                          ACTIVE_STATUSES.includes(a.status) &&
+                          (a.branch1 === b || a.branch2 === b)
+                      ).length;
+                      return (
+                        <tr key={b}>
+                          <td className="td-bold">{b}</td>
+                          {SLOTS.map((s) => {
+                            const n = data.filter(
+                              (a) =>
+                                a.filter_pass === "Y" &&
+                                ACTIVE_STATUSES.includes(a.status) &&
+                                (a.branch1 === b || a.branch2 === b) &&
+                                matchesSlot(a.work_hours, s)
+                            ).length;
+                            const active = slotCell?.branch === b && slotCell?.slot === s;
+                            return (
+                              <td
+                                key={s}
+                                className={`matrix-cell ${n === 0 ? "cell-zero" : n >= 3 ? "cell-hot" : "cell-some"} ${active ? "cell-active" : ""}`}
+                                onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
+                              >
+                                {n}
+                              </td>
+                            );
+                          })}
+                          <td className="td-total">{rowTotal}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="matrix-total-row">
+                      <td className="td-bold">슬롯 합계</td>
+                      {SLOTS.map((s) => (
+                        <td key={s} className="td-total">
+                          {data.filter(
+                            (a) =>
+                              a.filter_pass === "Y" &&
+                              ACTIVE_STATUSES.includes(a.status) &&
+                              matchesSlot(a.work_hours, s)
+                          ).length}
+                        </td>
+                      ))}
+                      <td className="td-total">
+                        {data.filter(
+                          (a) => a.filter_pass === "Y" && ACTIVE_STATUSES.includes(a.status)
+                        ).length}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {slotCell && (() => {
+                const list = data.filter(
+                  (a) =>
+                    a.filter_pass === "Y" &&
+                    ACTIVE_STATUSES.includes(a.status) &&
+                    (a.branch1 === slotCell.branch || a.branch2 === slotCell.branch) &&
+                    matchesSlot(a.work_hours, slotCell.slot)
+                );
+                return (
+                  <div className="slot-drill">
+                    <div className="slot-drill-header">
+                      <h3>{slotCell.branch} · {slotCell.slot} · {list.length}명</h3>
+                      <button className="close-btn" onClick={() => setSlotCell(null)}>X</button>
+                    </div>
+                    {list.length === 0 ? (
+                      <div className="empty">해당 조건의 지원자가 없습니다.</div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table">
+                          <thead>
+                            <tr><th>성함</th><th>연락처</th><th>희망지점</th><th>상태</th><th>시작가능일</th><th>희망시간</th></tr>
+                          </thead>
+                          <tbody>
+                            {list.map((a) => (
+                              <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
+                                <td className="td-bold">{a.name}</td>
+                                <td>{a.phone}</td>
+                                <td>{a.branch1}{a.branch2 ? ` / ${a.branch2}` : ""}</td>
+                                <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
+                                <td>{a.available_date}</td>
+                                <td className="td-slim">{a.work_hours}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : tab === "confirmed-slots" ? (
+            <div className="content">
+              <h2 className="page-title">확정 슬롯 현황</h2>
+              <p className="page-desc">
+                실제 <strong>확정된 배치</strong> 기준 현황입니다. 각 슬롯 정원: <strong>확정 2 · 대기 1</strong>.
+                셀을 클릭하면 배치된 인원이 표시됩니다.
+              </p>
+
+              <div className="matrix-legend">
+                <span className="lg-dot lg-full" /> 정원 충족 (2+1)
+                <span className="lg-dot lg-half" /> 확정만 충족 (2+0)
+                <span className="lg-dot lg-short" /> 확정 부족 (&lt;2)
+                <span className="lg-dot lg-zero" /> 빈 슬롯
+              </div>
+
+              <div className="matrix-wrap">
+                <table className="matrix">
+                  <thead>
+                    <tr>
+                      <th>지점 \ 슬롯</th>
+                      {SLOTS.map((s) => <th key={s}>{s}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {BRANCH_NAMES.map((b) => (
+                      <tr key={b}>
+                        <td className="td-bold">{b}</td>
+                        {SLOTS.map((s) => {
+                          const confirmed = data.filter(
+                            (a) =>
+                              CONFIRMED_STATUSES.includes(a.status) &&
+                              a.confirmed_slot === s &&
+                              a.confirmed_branch === b
+                          ).length;
+                          const waiting = data.filter(
+                            (a) =>
+                              a.status === "대기" &&
+                              a.confirmed_slot === s &&
+                              a.confirmed_branch === b
+                          ).length;
+                          const cellClass =
+                            confirmed >= 2 && waiting >= 1 ? "cell-full"
+                            : confirmed >= 2 ? "cell-half"
+                            : confirmed === 0 && waiting === 0 ? "cell-zero"
+                            : "cell-short";
+                          const active = slotCell?.branch === b && slotCell?.slot === s;
+                          return (
+                            <td
+                              key={s}
+                              className={`matrix-cell ${cellClass} ${active ? "cell-active" : ""}`}
+                              onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
+                            >
+                              <div className="conf-main">{confirmed}/2</div>
+                              <div className="conf-sub">대기 {waiting}/1</div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {slotCell && (() => {
+                const list = data.filter(
+                  (a) =>
+                    a.confirmed_slot === slotCell.slot &&
+                    a.confirmed_branch === slotCell.branch &&
+                    [...CONFIRMED_STATUSES, "대기"].includes(a.status)
+                );
+                return (
+                  <div className="slot-drill">
+                    <div className="slot-drill-header">
+                      <h3>{slotCell.branch} · {slotCell.slot} · 배치된 {list.length}명</h3>
+                      <button className="close-btn" onClick={() => setSlotCell(null)}>X</button>
+                    </div>
+                    {list.length === 0 ? (
+                      <div className="empty">배치된 인원이 없습니다. 지원자 목록에서 확정 슬롯/지점을 지정해주세요.</div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table">
+                          <thead>
+                            <tr><th>성함</th><th>연락처</th><th>상태</th><th>시작일</th><th>현재 근무지</th></tr>
+                          </thead>
+                          <tbody>
+                            {list.map((a) => (
+                              <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
+                                <td className="td-bold">{a.name}</td>
+                                <td>{a.phone}</td>
+                                <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
+                                <td>{a.start_date || "-"}</td>
+                                <td>{a.current_branch || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : tab === "contact" ? (
             <div className="content">
@@ -663,6 +1027,79 @@ const css = `
   .detail-text { font-size: 13px; line-height: 1.6; color: #374151; white-space: pre-wrap; }
 
   .empty { text-align: center; padding: 60px; color: #9ca3af; font-size: 14px; }
+
+  /* 편집 가능 영역 */
+  .edit-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; padding: 16px; background: #FFFBEB; border: 1px solid #F5C518;
+    border-radius: 10px; margin-bottom: 16px;
+  }
+  .edit-field { display: flex; flex-direction: column; gap: 6px; }
+  .edit-field-wide { grid-column: 1 / -1; }
+  .edit-select {
+    padding: 8px 10px; border: 1.5px solid #E8E8E0; border-radius: 8px;
+    font-size: 13px; font-family: inherit; background: #fff; outline: none;
+    transition: border-color 0.15s;
+  }
+  .edit-select:focus { border-color: #B8860B; }
+
+  /* 슬롯 매트릭스 */
+  .matrix-wrap { overflow-x: auto; background: #fff; border-radius: 12px; border: 1px solid #e8e8e0; margin-bottom: 20px; }
+  .matrix {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    table-layout: fixed;
+  }
+  .matrix th {
+    text-align: center; padding: 12px 8px; font-weight: 600; font-size: 12px;
+    color: #6b7280; border-bottom: 1px solid #e8e8e0; background: #fafaf7;
+    white-space: nowrap;
+  }
+  .matrix th:first-child { text-align: left; padding-left: 14px; width: 140px; }
+  .matrix td {
+    padding: 10px 8px; border-bottom: 1px solid #f3f4f6; text-align: center;
+    vertical-align: middle;
+  }
+  .matrix td:first-child { text-align: left; padding-left: 14px; font-weight: 600; }
+  .matrix-cell {
+    cursor: pointer; font-weight: 700; transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .matrix-cell:hover { opacity: 0.8; transform: scale(0.98); }
+  .cell-zero { color: #d1d5db; background: #fafafa; }
+  .cell-some { color: #3d2b00; background: #fff8dc; }
+  .cell-hot { color: #92400e; background: #fef3c7; }
+  .cell-full { color: #064e3b; background: #d1fae5; }
+  .cell-half { color: #1e3a8a; background: #dbeafe; }
+  .cell-short { color: #991b1b; background: #fee2e2; }
+  .cell-active { outline: 2px solid #F5C518; outline-offset: -2px; }
+  .conf-main { font-size: 14px; font-weight: 700; }
+  .conf-sub { font-size: 10px; font-weight: 500; opacity: 0.7; margin-top: 2px; }
+  .td-total { font-weight: 700; color: #6b7280; background: #fafaf7; }
+  .matrix-total-row td { border-top: 2px solid #e8e8e0; background: #fafaf7; }
+
+  .matrix-legend {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+    font-size: 12px; color: #6b7280; align-items: center;
+  }
+  .lg-dot {
+    width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+    margin-right: 4px; vertical-align: middle;
+  }
+  .lg-full { background: #d1fae5; border: 1px solid #10b981; }
+  .lg-half { background: #dbeafe; border: 1px solid #3b82f6; }
+  .lg-short { background: #fee2e2; border: 1px solid #ef4444; }
+  .lg-zero { background: #fafafa; border: 1px solid #d1d5db; }
+
+  .slot-drill {
+    background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
+    padding: 16px; margin-top: 12px;
+  }
+  .slot-drill-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .slot-drill-header h3 { font-size: 14px; font-weight: 700; }
+  .td-slim { font-size: 11px; color: #6b7280; max-width: 280px; white-space: normal; }
 
   .screening-list { display: flex; flex-direction: column; gap: 12px; }
   .screening-card {

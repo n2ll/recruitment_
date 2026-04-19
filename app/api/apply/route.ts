@@ -135,19 +135,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 슬랙 알림 ──────────────────────────────────────────
-    try {
-      await sendSlackNotification({
-        name: inserted.name,
-        phone: inserted.phone,
-        branch: inserted.branch,
-        available_date: inserted.available_date,
-        filter_pass: inserted.filter_pass,
-        source: inserted.source,
-      });
-    } catch (slackErr) {
-      console.error("[Slack notification error]", slackErr);
-    }
+    // ── 슬랙 알림 (일시 off — 필요 시 주석 해제) ──────────
+    // try {
+    //   await sendSlackNotification({
+    //     name: inserted.name,
+    //     phone: inserted.phone,
+    //     branch: inserted.branch,
+    //     available_date: inserted.available_date,
+    //     filter_pass: inserted.filter_pass,
+    //     source: inserted.source,
+    //   });
+    // } catch (slackErr) {
+    //   console.error("[Slack notification error]", slackErr);
+    // }
 
     // ── 서류접수 안내 자동 발송 (알림톡 ① / SMS 폴백) ──────
     try {
