@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { appendToSheet, appendToScreeningSheet } from "@/lib/google-sheets";
 import { sendSlackNotification } from "@/lib/slack";
+import { sendNotification } from "@/lib/solapi";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
       source,
       availableDate,
       selfOwnership,
+      marketingConsent,
     } = body;
 
     // ── 필수 필드 검증 ─────────────────────────────────────
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
     const autoStatus = filterPass ? "연락대기" : "부적합";
 
     // ── Supabase에 저장 ─────────────────────────────────────
+    const consent = marketingConsent === true;
     const { data: inserted, error } = await supabase
       .from("applicants")
       .insert({
@@ -89,6 +92,8 @@ export async function POST(req: NextRequest) {
         status: autoStatus,
         filter_pass: filterPass ? "Y" : "N",
         note: isDuplicate ? "중복지원" : null,
+        marketing_consent: consent,
+        marketing_consent_at: consent ? new Date().toISOString() : null,
       })
       .select()
       .single();
@@ -142,6 +147,59 @@ export async function POST(req: NextRequest) {
       });
     } catch (slackErr) {
       console.error("[Slack notification error]", slackErr);
+    }
+
+    // ── 서류접수 안내 자동 발송 (알림톡 ① / SMS 폴백) ──────
+    try {
+      const receivedAt = new Date().toLocaleString("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit",
+      });
+      const fallbackText = [
+        "[옹고잉 배송원 지원 접수 안내]",
+        "",
+        `${inserted.name}님, 안녕하세요.`,
+        "옹고잉 배송원 지원서가 정상 접수되었습니다.",
+        "",
+        `▶ 지원지점: ${inserted.branch}`,
+        `▶ 접수일시: ${receivedAt}`,
+        "",
+        "서류 검토 후 영업일 기준 1~2일 내",
+        "유선으로 연락드릴 예정입니다.",
+        "",
+        "문의사항은 본 메시지에 회신 주시면",
+        "빠르게 안내드리겠습니다.",
+      ].join("\n");
+
+      const notifyResult = await sendNotification(
+        inserted.phone,
+        "APPLY_RECEIVED",
+        {
+          "#{이름}": inserted.name,
+          "#{지점}": inserted.branch,
+          "#{접수일시}": receivedAt,
+        },
+        fallbackText
+      );
+
+      if (notifyResult.success) {
+        await supabase.from("messages").insert({
+          applicant_id: inserted.id,
+          applicant_phone: inserted.phone,
+          direction: "outbound",
+          body: fallbackText,
+          status: "sent",
+          sent_by: "system-auto",
+          solapi_msg_id: notifyResult.messageId || null,
+          message_type: notifyResult.via,
+          template_id: notifyResult.templateId || null,
+        });
+      } else {
+        console.error("[apply notify error]", notifyResult.error);
+      }
+    } catch (notifyErr) {
+      console.error("[apply notify exception]", notifyErr);
     }
 
     return NextResponse.json({

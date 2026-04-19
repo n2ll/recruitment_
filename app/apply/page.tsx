@@ -33,7 +33,11 @@ interface FormData {
   experience: string;
   availableDate: string;
   selfOwnership: string;
+  marketingConsent: boolean;
 }
+
+const KAKAO_CHANNEL_URL =
+  process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "https://pf.kakao.com/";
 
 function Dropdown({
   label, value, options, onChange, placeholder, required, exclude,
@@ -113,6 +117,7 @@ function ApplyPage() {
     branch1: branchParam, branch2: "",
     workHours: [], introduction: "", experience: "",
     availableDate: "", selfOwnership: "",
+    marketingConsent: false,
   });
 
   const [step, setStep] = useState<"form" | "done">("form");
@@ -190,6 +195,25 @@ function ApplyPage() {
               검토 후 빠른 시일 내에 연락드리겠습니다.<br />
               지원해주셔서 감사합니다.
             </p>
+
+            <div className="kakao-cta">
+              <p className="kakao-cta-title">📢 카카오톡 채널을 꼭 추가해주세요!</p>
+              <p className="kakao-cta-desc">
+                <strong>채널 추가 시 서류접수·확정 안내를 가장 빠르게</strong> 받아보실 수 있습니다.<br />
+                문자로도 함께 발송되지만, 카톡이 훨씬 빠르고 편리합니다.
+              </p>
+              <a
+                className="kakao-btn"
+                href={KAKAO_CHANNEL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 2C5.58 2 2 4.79 2 8.23c0 2.15 1.41 4.04 3.54 5.16l-.71 2.57c-.05.2.18.36.35.25L8.2 14.4c.59.08 1.18.13 1.8.13 4.42 0 8-2.79 8-6.23C18 4.79 14.42 2 10 2z" fill="#3D2B00"/>
+                </svg>
+                카카오톡 채널 추가하기
+              </a>
+            </div>
           </div>
         </div>
       </>
@@ -410,6 +434,25 @@ function ApplyPage() {
             </div>
           </section>
 
+          {/* 마케팅 수신 동의 (선택) */}
+          <div className="consent-wrap">
+            <label className="consent-row">
+              <input
+                type="checkbox"
+                checked={form.marketingConsent}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, marketingConsent: e.target.checked }))
+                }
+              />
+              <span className="consent-text">
+                <strong>[선택]</strong> 마케팅 정보 수신 동의
+                <span className="consent-sub">
+                  추후 모집 공고, 이벤트, 재컨택 등의 안내를 받을 수 있습니다.
+                </span>
+              </span>
+            </label>
+          </div>
+
           {/* 제출 버튼 */}
           <button className={`submit-btn ${submitting ? "submitting" : ""}`}
             onClick={handleSubmit} disabled={submitting}>
@@ -611,7 +654,7 @@ const css = `
   @keyframes spin { to { transform: rotate(360deg); } }
   .footer-note { text-align: center; font-size: 12px; color: #b0b0a8; margin-top: 14px; }
 
-  .done-wrap { max-width: 360px; margin: 100px auto; text-align: center; padding: 0 24px; }
+  .done-wrap { max-width: 420px; margin: 80px auto; text-align: center; padding: 0 24px; }
   .done-circle {
     width: 72px; height: 72px; background: #F5C518; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -620,6 +663,47 @@ const css = `
   }
   .done-title { font-size: 22px; font-weight: 700; color: #1a1a1a; margin-bottom: 12px; }
   .done-desc { font-size: 14px; color: #6b7280; line-height: 1.8; }
+
+  .kakao-cta {
+    margin-top: 36px; padding: 22px 20px;
+    background: #FEE500; border-radius: 14px; text-align: left;
+    box-shadow: 0 4px 16px rgba(254,229,0,0.4);
+  }
+  .kakao-cta-title {
+    font-size: 15px; font-weight: 700; color: #3D2B00;
+    margin-bottom: 10px; text-align: center;
+  }
+  .kakao-cta-desc {
+    font-size: 13px; color: #3D2B00; line-height: 1.7;
+    margin-bottom: 16px; text-align: center;
+  }
+  .kakao-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 14px;
+    background: #3D2B00; color: #FEE500; border-radius: 10px;
+    font-size: 15px; font-weight: 700; text-decoration: none;
+    transition: transform 0.1s;
+  }
+  .kakao-btn:hover { transform: scale(1.02); }
+  .kakao-btn svg path { fill: #FEE500; }
+
+  .consent-wrap {
+    margin-top: 20px; padding: 14px 16px;
+    background: #FAFAF7; border: 1.5px solid #E8E8E0; border-radius: 10px;
+  }
+  .consent-row {
+    display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .consent-row input[type="checkbox"] {
+    width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0;
+    accent-color: #B8860B; cursor: pointer;
+  }
+  .consent-text { font-size: 13px; color: #374151; line-height: 1.6; }
+  .consent-text strong { color: #B8860B; font-weight: 700; margin-right: 4px; }
+  .consent-sub {
+    display: block; font-size: 12px; color: #9ca3af; margin-top: 4px;
+  }
 
   @media (min-width: 480px) {
     .form-body { padding: 32px 24px 80px; }

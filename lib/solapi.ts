@@ -46,3 +46,80 @@ export async function sendSms(
 
   return { success: true, messageId };
 }
+
+export async function sendAlimtalk(
+  to: string,
+  templateId: string,
+  variables: Record<string, string>,
+  fallbackText?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const pfId = process.env.SOLAPI_PFID!;
+
+  const res = await fetch(SOLAPI_URL, {
+    method: "POST",
+    headers: {
+      Authorization: getAuthHeader(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messages: [
+        {
+          to,
+          from: FROM_NUMBER,
+          text: fallbackText,
+          kakaoOptions: {
+            pfId,
+            templateId,
+            variables,
+            disableSms: false,
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error("[SOLAPI alimtalk error]", body);
+    return { success: false, error: body };
+  }
+
+  const data = await res.json();
+  const messageId =
+    data?.groupInfo?.groupId ||
+    data?.messageList?.[Object.keys(data.messageList || {})[0]]?.messageId ||
+    undefined;
+
+  return { success: true, messageId };
+}
+
+export type TemplateKey =
+  | "APPLY_RECEIVED"
+  | "REMINDER"
+  | "CONFIRM"
+  | "WAIT"
+  | "ATTENDANCE"
+  | "GUIDE";
+
+export async function sendNotification(
+  to: string,
+  templateKey: TemplateKey,
+  variables: Record<string, string>,
+  fallbackText: string
+): Promise<{
+  success: boolean;
+  via: "alimtalk" | "sms";
+  messageId?: string;
+  templateId?: string;
+  error?: string;
+}> {
+  const templateId = process.env[`SOLAPI_TEMPLATE_${templateKey}`];
+
+  if (templateId) {
+    const result = await sendAlimtalk(to, templateId, variables, fallbackText);
+    return { ...result, via: "alimtalk", templateId };
+  }
+
+  const result = await sendSms(to, fallbackText);
+  return { ...result, via: "sms" };
+}
