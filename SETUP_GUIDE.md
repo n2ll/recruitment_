@@ -1,43 +1,62 @@
 # 구인 자동화 — 세팅 가이드
 
-> 최종 수정: 2026.04.19
-> v5 업데이트: 알림톡(SOLAPI) 전환 착수, 스키마 확장, 리마인더/출근확인 크론 추가 예정
+> 최종 수정: 2026.04.19 (v6)
+> 변경: 슬롯 매트릭스 뷰 + 지원자 인라인 편집 PATCH API + 슬랙 off + Vercel Hobby cron(일 1회)
 
 ## 프로젝트 구조
 
 ```
 app/
 ├── apply/
-│   └── page.tsx              ← 지원 폼 UI (마케팅 동의 + 채널 추가 유도 추가 예정)
+│   └── page.tsx              ← 지원 폼 UI (+ 마케팅 수신동의 + 카카오 채널 CTA)
 ├── admin/
-│   └── page.tsx              ← 관리자 대시보드 (지원자 목록 + 스크리닝 + 문자 대화)
+│   └── page.tsx              ← 관리자 대시보드 (6개 탭)
 ├── api/
 │   ├── apply/
-│   │   └── route.ts          ← 지원 API (Supabase 저장 + 알림톡 ① 자동 발송)
+│   │   └── route.ts          ← 지원 API: 저장 + 알림톡 ① 자동 발송 (슬랙 off)
 │   └── admin/
 │       ├── applicants/
-│       │   └── route.ts      ← 지원자 목록 조회
+│       │   ├── route.ts      ← GET 목록
+│       │   └── [id]/
+│       │       └── route.ts  ← PATCH 개별 필드 업데이트 (status/슬롯/지점/시작일/이탈)
 │       ├── screening/
-│       │   └── route.ts      ← 스크리닝 완료 + 가이드 알림톡(⑥) 발송
+│       │   └── route.ts      ← 스크리닝 완료 → 알림톡 ⑥ 가이드 발송
 │       ├── messages/
 │       │   ├── send/
-│       │   │   └── route.ts  ← 대화 메시지 발송 (알림톡/SMS) + messages 저장
+│       │   │   └── route.ts  ← 대화 메시지 발송 (SMS)
 │       │   └── [applicantId]/
-│       │       └── route.ts  ← 대화 내역 조회 + 안읽음 초기화
+│       │       └── route.ts  ← 대화 내역 조회
 │       ├── heartbeat/
-│       │   └── route.ts      ← 전용 폰 heartbeat 조회
-│       └── cron/             ← (예정)
-│           ├── reminder/     ← 24h 무응답 → 알림톡 ② 리마인더
-│           └── attendance/   ← 시작일 전날 18:00 → 알림톡 ⑤ 출근확인
+│       │   └── route.ts      ← 전용 폰 heartbeat
+│       └── cron/
+│           └── reminder/
+│               └── route.ts  ← 24h 무응답 리마인더 (알림톡 ②)
 ├── layout.tsx
-└── page.tsx                  ← / 접속 시 /apply로 리다이렉트
+└── page.tsx                  ← / → /apply 리다이렉트
 lib/
 ├── supabase.ts               ← Supabase 클라이언트
-├── solapi.ts                 ← SOLAPI 발송 유틸 (sendSms + sendAlimtalk)
+├── solapi.ts                 ← sendSms / sendAlimtalk / sendNotification(폴백 래퍼)
 ├── google-sheets.ts          ← 구글 시트 동기화
-└── slack.ts                  ← 슬랙 알림
-sms-gateway/                  ← Android SMS Gateway 앱 (전용 폰용)
+└── slack.ts                  ← 슬랙 웹훅 (현재 호출처 주석 처리됨)
+sms-gateway/                  ← Android SMS Gateway 앱
+vercel.json                   ← Vercel Cron 설정 (일 1회 UTC 10:00)
+supabase-schema.sql           ← 최초 applicants 생성
+supabase-migration-messages.sql  ← messages/heartbeat/트리거 추가
+supabase-migration-alimtalk.sql  ← 알림톡 전환용 컬럼 14개 + 인덱스 4개
 ```
+
+## 관리자 대시보드 탭
+
+| 탭 | 경로(UI) | 설명 |
+|--|--|--|
+| 대시보드 | 지표 + 지점별 현황 |
+| 지원자 목록 | 필터 + 상세 패널 (인라인 편집) |
+| 스크리닝 | 연락대기 → 온보딩 (알림톡 ⑥ 자동) |
+| **희망 슬롯** | 지점×슬롯 매트릭스 (work_hours 희망 분포) |
+| **확정 슬롯** | 지점×슬롯 매트릭스 (정원 대비 결원) |
+| 배송원 컨택 | 대화 관리 |
+
+---
 
 ## 기술 스택
 
@@ -45,15 +64,14 @@ sms-gateway/                  ← Android SMS Gateway 앱 (전용 폰용)
 |------|------|
 | 프레임워크 | Next.js 14 (App Router) |
 | DB | Supabase (PostgreSQL) |
-| 배포 | Vercel (+ Vercel Cron) |
+| 배포 | Vercel **Hobby** (+ Vercel Cron 일 1회) |
 | 발신 메시징 | SOLAPI 알림톡 + SMS 폴백 |
-| 문자 수신 | Android SMS Gateway → Supabase |
-| 대시보드 | 관리자 웹 (Next.js) + 구글 시트 |
-| 알림 | Slack Webhook |
+| 문자 수신 | Android SMS Gateway |
+| 알림 | Slack Webhook (**현재 off**) |
 
 ---
 
-## 환경변수 (.env.local)
+## 환경변수 (.env.local + Vercel)
 
 ```env
 # Supabase
@@ -67,118 +85,122 @@ GOOGLE_PRIVATE_KEY=<private key>
 GOOGLE_SHEET_ID=<sheet id>
 
 # Slack
-SLACK_WEBHOOK_URL=<slack webhook>
+SLACK_WEBHOOK_URL=<webhook>
 
-# SOLAPI
+# SOLAPI (알림톡 + SMS)
 SOLAPI_API_KEY=<api key>
 SOLAPI_API_SECRET=<api secret>
-SOLAPI_PFID=KA01PF260418064924102qnJOZkePrns        # 발신프로필 ID
+SOLAPI_PFID=KA01PF260418064924102qnJOZkePrns
 
-# 알림톡 템플릿 ID (심사 승인 후 입력)
-SOLAPI_TEMPLATE_APPLY_RECEIVED=                     # ① 서류접수 안내
-SOLAPI_TEMPLATE_REMINDER=                           # ② 지원 리마인더
-SOLAPI_TEMPLATE_CONFIRM=                            # ③ 근무 확정 공지
-SOLAPI_TEMPLATE_WAIT=                               # ④ 대기자 안내
-SOLAPI_TEMPLATE_ATTENDANCE=                         # ⑤ 출근 전날 확인
-SOLAPI_TEMPLATE_GUIDE=                              # ⑥ 업무 가이드 공유
+# 알림톡 템플릿 ID (심사 승인 후 입력 — 비어있으면 SMS 폴백)
+SOLAPI_TEMPLATE_APPLY_RECEIVED=   # ① 서류접수 안내
+SOLAPI_TEMPLATE_REMINDER=         # ② 24h 리마인더
+SOLAPI_TEMPLATE_CONFIRM=          # ③ 근무 확정 공지
+SOLAPI_TEMPLATE_WAIT=             # ④ 대기자 안내
+SOLAPI_TEMPLATE_ATTENDANCE=       # ⑤ 출근 전날 확인
+SOLAPI_TEMPLATE_GUIDE=            # ⑥ 업무 가이드 (스크리닝 완료 시)
+
+# 카카오톡 채널
+NEXT_PUBLIC_KAKAO_CHANNEL_URL=https://pf.kakao.com/_xnxaxaib
+
+# Cron 인증
+CRON_SECRET=<32자 이상 랜덤 문자열>
 ```
 
-Vercel 배포 시: Settings → Environment Variables에 동일하게 추가
+### Vercel에 반드시 등록해야 하는 변수 (All Environments)
+
+- `SOLAPI_PFID`
+- `NEXT_PUBLIC_KAKAO_CHANNEL_URL`
+- `CRON_SECRET`
+- (템플릿 심사 승인 후) `SOLAPI_TEMPLATE_*` 6개
 
 ---
 
-## Supabase 테이블
+## Supabase 테이블 요약
 
-### applicants
+### applicants (확장된 컬럼)
 
-기본 스키마: `supabase-schema.sql`
-메시지 관련 확장: `supabase-migration-messages.sql`
-알림톡 전환 확장: `supabase-migration-alimtalk.sql` ⭐ 신규
+기본: `supabase-schema.sql`
+메시지 확장: `supabase-migration-messages.sql`
+알림톡/슬롯 확장: `supabase-migration-alimtalk.sql`
 
-주요 컬럼:
+신규 컬럼 12개:
+- `reminder_sent_at` — 리마인더 중복 방지
+- `marketing_consent` / `marketing_consent_at` — 마케팅 동의
+- `kakao_channel_friend` — 친구톡 대상 여부
+- `start_date` — 확정 시작일
+- `confirmed_slot` — `평일오전`/`평일오후`/`주말오전`/`주말오후`
+- `confirmed_branch` — 확정 배치 지점
+- `current_branch` — 현재 근무 지점 (null=비근무)
+- `churned_at` / `churn_reason` — 이탈 추적
+- `attendance_response` / `attendance_response_at` — 출근 확인 응답 (향후)
 
-| 컬럼 | 설명 |
-|------|------|
-| name | 성함 |
-| birth_date | 생년월일 6자리 |
-| phone | 휴대폰 번호 (중복 체크 기준) |
-| location | 거주지 |
-| own_vehicle | 자기명의 차량 여부 |
-| license_type | 운전면허 종류 |
-| vehicle_type | 차종 |
-| branch1 / branch2 | 희망지점 1·2지망 |
-| work_hours | 희망 근무 시간대 |
-| introduction | 자기소개 및 지원동기 |
-| experience | 배달 업무 관련 경력 |
-| available_date | 업무 시작 가능일 (지원자 입력) |
-| self_ownership | 본인 명의 업무/정산 가능 여부 |
-| status | 진행상황 (기본: 서류심사) |
-| branch | 지점 태그 (URL 파라미터) |
-| source | 유입 채널 (URL 파라미터) |
-| note | 비고 (중복지원 등) |
-| last_message_at | 마지막 문자 시각 (트리거 자동 갱신) |
-| unread_count | 안읽은 수신 메시지 수 |
-| **reminder_sent_at** | 리마인더 중복 방지 (신규) |
-| **marketing_consent** | 마케팅 수신동의 (신규) |
-| **marketing_consent_at** | 동의 시각 (신규) |
-| **kakao_channel_friend** | 친구톡 대상 여부 (신규) |
-| **start_date** | 확정된 근무 시작일 (신규) |
-| **confirmed_slot** | 확정 슬롯 `평일오전`/`평일오후`/`주말오전`/`주말오후` (신규) |
-| **confirmed_branch** | 실제 배치 지점 (신규) |
-| **current_branch** | 현재 근무 중 지점 (null=비근무) (신규) |
-| **churned_at** | 이탈 시각 (신규) |
-| **churn_reason** | 이탈 사유 (신규) |
-| **attendance_response** | 출근확인 응답 `confirmed`/`declined` (신규) |
-| **attendance_response_at** | 응답 시각 (신규) |
+### messages 신규 컬럼
 
-### messages
-
-| 컬럼 | 설명 |
-|------|------|
-| id | uuid PK |
-| applicant_id | applicants FK (nullable, phone으로 자동 매칭) |
-| applicant_phone | 발신/수신 전화번호 |
-| direction | inbound (수신) / outbound (발신) |
-| body | 문자 내용 |
-| status | received / sent / synced / failed |
-| sent_by | 발송자 (outbound일 때 팀원 이름) |
-| solapi_msg_id | 솔라피 응답 messageId |
-| device_id | SMS Gateway 폰 ID |
-| **message_type** | `sms` / `alimtalk` / `friendtalk` (신규) |
-| **template_id** | 알림톡 템플릿 ID (신규) |
-| created_at | 메시지 시각 |
-
-### device_heartbeat
-
-| 컬럼 | 설명 |
-|------|------|
-| device_id | 전용 폰 고유 ID (PK) |
-| last_seen_at | 마지막 ping 시각 |
-| pending_count | 미전송 메시지 수 |
-| battery_level | 배터리 % |
-| app_version | 앱 버전 |
+- `message_type` — `sms` / `alimtalk` / `friendtalk`
+- `template_id` — 알림톡 템플릿 ID
 
 ---
 
 ## 마이그레이션 실행 순서
 
-Supabase SQL Editor에서 순서대로 붙여넣어 실행:
+Supabase SQL Editor에서 순서대로:
 
-1. `supabase-schema.sql` — 최초 applicants 테이블 생성
-2. `supabase-migration-messages.sql` — messages + device_heartbeat + 트리거
-3. `supabase-migration-alimtalk.sql` — 알림톡 전환용 컬럼 12개 추가 ⭐
+1. `supabase-schema.sql`
+2. `supabase-migration-messages.sql`
+3. `supabase-migration-alimtalk.sql` ⭐ v6 신규
 
-SQL Editor URL: https://supabase.com/dashboard/project/lrktxyfzxwwpjffzltnq/sql/new
+SQL Editor: https://supabase.com/dashboard/project/lrktxyfzxwwpjffzltnq/sql/new
+
+---
+
+## 진행 상태(status) 8종
+
+| 상태 | 의미 | 편집 방법 |
+|--|--|--|
+| 서류심사 | 제출 직후 기본값 | 자동 |
+| 연락대기 | 필터 통과, 전화 대기 | 자동 (filterPass=true 시) |
+| 부적합 | 필터 탈락 | 자동 |
+| 확정 | 슬롯 배치 확정 | 대시보드 상세 패널 드롭다운 |
+| 대기 | 슬롯 정원 대기 | 대시보드 상세 패널 드롭다운 |
+| 온보딩 | 가이드 발송 완료 | [스크리닝 완료] 버튼 |
+| 현장투입 | 실제 근무 중 | 대시보드 상세 패널 드롭다운 |
+| 이탈 | 근무 종료 | 상세 패널에서 '이탈' 선택 시 `churned_at` + `current_branch=null` 자동 |
+
+---
+
+## 인라인 편집 (PATCH API)
+
+- 엔드포인트: `PATCH /api/admin/applicants/{id}`
+- 허용 필드: `status`, `confirmed_slot`, `confirmed_branch`, `current_branch`, `start_date`, `churn_reason`, `screening`, `note`, `marketing_consent`, `kakao_channel_friend`
+- 검증: status 8종 / confirmed_slot 4종 화이트리스트
+- 대시보드 상세 패널에서 드롭다운/날짜 변경 시 **즉시 반영 (낙관적 업데이트)**
+- 30초 폴링으로 다른 관리자의 변경사항도 수렴
 
 ---
 
 ## 알림톡 템플릿 심사 (SOLAPI 콘솔)
 
-발신프로필: `KA01PF260418064924102qnJOZkePrns`
+발신프로필: `KA01PF260418064924102qnJOZkePrns` / 채널: `@nayil` (내이루리_배송&스케쥴)
 
-심사 제출할 템플릿 6종은 `recruitment_system_spec_v2.md`의 "8. 알림톡 템플릿" 섹션 참고.
+심사 제출할 템플릿 6종 본문은 `recruitment_system_spec_v2.md`의 "9. 알림톡 템플릿" 참고.
 
-심사 완료 후 발급되는 `templateId`를 `.env.local` + Vercel 환경변수에 등록.
+승인되면 각 `templateId`를 `.env.local` + Vercel `SOLAPI_TEMPLATE_*` 에 등록 → 자동으로 알림톡 전환됨.
+
+---
+
+## Vercel Cron (리마인더)
+
+- 설정: `vercel.json` → `"schedule": "0 10 * * *"` (UTC 10:00 = **KST 19:00**)
+- Hobby 플랜 제약상 **하루 1회**로 설정 (Pro 업그레이드 시 빈도 조정 가능)
+- 인증: `User-Agent: vercel-cron` 자동 통과 또는 `Authorization: Bearer $CRON_SECRET`
+- 발동 조건: `status ∈ {서류심사, 연락대기} AND filter_pass='Y' AND reminder_sent_at IS NULL AND created_at < now()-24h`
+
+수동 호출 (개발/검증):
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://recruitment-z9vp.vercel.app/api/admin/cron/reminder
+```
 
 ---
 
@@ -200,39 +222,34 @@ https://recruitment-sooty.vercel.app/apply?source=direct
 
 ### 완료
 - [x] Next.js 프로젝트 초기화
-- [x] Supabase 프로젝트 생성 + 테이블 생성
-- [x] Vercel 배포 + 환경변수 설정
-- [x] 폼 제출 → Supabase 저장 테스트 완료
-- [x] 구글 시트 연동 (Supabase → 시트 동기화)
-- [x] 슬랙 알림 (새 지원자 알림)
-- [x] 관리자 대시보드 (지원자 목록 + 스크리닝 + 대화)
-- [x] 스크리닝 완료 → SOLAPI SMS 자동 발송
-- [x] 문자 송수신 기능 (대화 화면 + 솔라피 발송)
-- [x] 전용 폰 상태 모니터링 (heartbeat)
-- [x] SMS Gateway Android 앱 (sms-gateway/)
-- [x] `lib/solapi.ts` 에 `sendAlimtalk` 함수 추가
-- [x] `.env.local` 에 `SOLAPI_PFID` 추가
+- [x] Supabase 테이블 3개 생성 + 마이그레이션 3개 적용
+- [x] Vercel 배포 + 환경변수 (SOLAPI_PFID, KAKAO_CHANNEL_URL 등)
+- [x] 지원 폼 + 마케팅 동의 + 완료 페이지 카톡 채널 CTA
+- [x] 관리자 대시보드 6개 탭 (대시보드/지원자/스크리닝/희망슬롯/확정슬롯/컨택)
+- [x] 지원자 인라인 편집 PATCH API
+- [x] 슬롯 매트릭스 뷰 2종 (희망/확정)
+- [x] 알림톡 폴백 래퍼 (`sendNotification`)
+- [x] 자동 발송 연결: 지원 직후 ①, 스크리닝 완료 ⑥
+- [x] 리마인더 크론 (일 1회, 알림톡 ②)
+- [x] 구글 시트 동기화
+- [x] SMS 송수신 + SMS Gateway + heartbeat
+- [x] 슬랙 알림 임시 off
 
 ### 진행 중 / 예정
-- [ ] **supabase-migration-alimtalk.sql 실행** (SQL Editor)
 - [ ] 알림톡 템플릿 6종 SOLAPI 콘솔 심사 제출
-- [ ] 승인된 templateId `.env` + Vercel 등록
-- [ ] `/api/apply` 에서 알림톡 ① 자동 발송 로직 추가
-- [ ] `/api/admin/screening` SMS → 알림톡 ⑥ 교체
-- [ ] 확정/대기 UI 버튼 → 알림톡 ③/④ 발송 연결
-- [ ] 완료 페이지에 마케팅 동의 체크박스 + 채널 추가 유도 추가
-- [ ] 리마인더 크론 (`/api/admin/cron/reminder`) + `vercel.json` 등록
-- [ ] 출근확인 크론 (`/api/admin/cron/attendance`) + 응답 웹훅 라우트
-- [ ] Supabase 마이그레이션 실행 (messages)
-- [ ] SMS Gateway APK 빌드 + 전용 폰 설치
-- [ ] 카카오 홍보봇
+- [ ] 승인된 templateId 환경변수 등록
+- [ ] 확정/대기 처리 시 알림톡 ③/④ 자동 발송 연결
+- [ ] 출근 전날 확인 크론 (템플릿 ⑤) + 응답 웹훅
+- [ ] 외부 채널 수동 입력 폼 (`/admin/manual-entry`)
+- [ ] 광고성 일괄 발송 UI (친구톡/SMS 분기)
+- [ ] 카카오 오픈채팅 홍보봇
 - [ ] 메타 광고 랜딩 URL 세팅
 
 ---
 
 ## SMS Gateway (전용 폰)
 
-`sms-gateway/` 디렉토리에 Android 프로젝트가 있음.
+`sms-gateway/` 디렉토리에 Android 프로젝트.
 
 ### 설정
 1. `sms-gateway/local.properties`에 Supabase URL/Key 설정
@@ -240,6 +257,6 @@ https://recruitment-sooty.vercel.app/apply?source=direct
 3. 전용 폰에 APK 설치 후 SMS 권한 허용
 
 ### 동작
-- 지원자가 전용 폰 번호로 문자 발송 → 앱이 수신 → Supabase messages 테이블에 저장
-- 관리자 대시보드에서 실시간 확인 + 답장 가능
-- 5분마다 heartbeat 전송 → 대시보드 상단에 폰 상태 표시
+- 지원자가 전용 폰 번호로 문자 발송 → 앱 수신 → Supabase messages 저장
+- 관리자 대시보드 실시간 확인 + 답장
+- 5분마다 heartbeat 전송 → 상태 바 표시
