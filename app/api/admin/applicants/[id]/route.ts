@@ -18,13 +18,10 @@ const ALLOWED_FIELDS = new Set([
 
 const VALID_STATUS = new Set([
   "서류심사",
-  "연락대기",
-  "부적합",
   "스크리닝 완료",
   "확정",
-  "대기",
-  "현장투입",
   "이탈",
+  "부적합",
 ]);
 
 const VALID_SLOT = new Set(["평일오전", "평일오후", "주말오전", "주말오후"]);

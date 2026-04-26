@@ -60,17 +60,14 @@ type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-sl
 
 const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
-  연락대기: "#2563eb",
-  부적합: "#ef4444",
   "스크리닝 완료": "#f59e0b",
-  확정: "#0ea5e9",
-  대기: "#8b5cf6",
-  현장투입: "#10b981",
+  확정: "#10b981",
   이탈: "#475569",
+  부적합: "#ef4444",
 };
 
 const ALL_STATUSES = [
-  "서류심사", "연락대기", "부적합", "스크리닝 완료", "확정", "대기", "현장투입", "이탈",
+  "서류심사", "스크리닝 완료", "확정", "이탈", "부적합",
 ];
 
 const BRANCHES = [
@@ -96,8 +93,8 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
-const ACTIVE_STATUSES = ["서류심사", "연락대기", "스크리닝 완료", "확정", "대기", "현장투입"];
-const CONFIRMED_STATUSES = ["확정", "스크리닝 완료", "현장투입"];
+const ACTIVE_STATUSES = ["서류심사", "스크리닝 완료", "확정"];
+const CONFIRMED_STATUSES = ["확정"];
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -324,7 +321,7 @@ export default function AdminPage() {
     return true;
   });
 
-  const screeningList = data.filter((a) => a.filter_pass === "Y" && a.status === "연락대기");
+  const screeningList = data.filter((a) => a.filter_pass === "Y" && a.status === "서류심사");
 
   const handleScreening = async (id: number) => {
     if (!confirm("스크리닝 완료 처리하고 문자를 발송하시겠습니까?")) return;
@@ -359,14 +356,14 @@ export default function AdminPage() {
     filterPass: data.filter((a) => a.filter_pass === "Y").length,
     screening: screeningList.length,
     onboarding: data.filter((a) => a.status === "스크리닝 완료").length,
-    deployed: data.filter((a) => a.status === "현장투입").length,
+    deployed: data.filter((a) => a.status === "확정").length,
   };
 
   const branchStats = BRANCHES.slice(1).map((b) => ({
     name: b,
     total: data.filter((a) => a.branch === b).length,
     pass: data.filter((a) => a.branch === b && a.filter_pass === "Y").length,
-    screening: data.filter((a) => a.branch === b && a.status === "연락대기").length,
+    screening: data.filter((a) => a.branch === b && a.status === "서류심사").length,
   }));
 
   const selected = data.find((a) => a.id === selectedId);
@@ -445,7 +442,7 @@ export default function AdminPage() {
                 <div className="stat-card"><div className="stat-num">{stats.filterPass}</div><div className="stat-label">필터 통과</div></div>
                 <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝 대기</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">스크리닝 완료</div></div>
-                <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">현장투입</div></div>
+                <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">확정</div></div>
               </div>
 
               <h3 className="section-title">지점별 현황</h3>
@@ -488,7 +485,7 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {filtered.map((a) => {
-                      const canScreen = a.filter_pass === "Y" && a.status === "연락대기";
+                      const canScreen = a.filter_pass === "Y" && a.status === "서류심사";
                       return (
                       <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
                         <td className="td-bold">
@@ -776,14 +773,13 @@ export default function AdminPage() {
             <div className="content">
               <h2 className="page-title">확정 슬롯 현황</h2>
               <p className="page-desc">
-                실제 <strong>확정된 배치</strong> 기준 현황입니다. 각 슬롯 정원: <strong>확정 2 · 대기 1</strong>.
+                <strong>status='확정'</strong> 지원자 기준 현황입니다. 각 슬롯 정원: <strong>2명</strong>.
                 셀을 클릭하면 배치된 인원이 표시됩니다.
               </p>
 
               <div className="matrix-legend">
-                <span className="lg-dot lg-full" /> 정원 충족 (2+1)
-                <span className="lg-dot lg-half" /> 확정만 충족 (2+0)
-                <span className="lg-dot lg-short" /> 확정 부족 (&lt;2)
+                <span className="lg-dot lg-full" /> 정원 충족 (2+)
+                <span className="lg-dot lg-half" /> 1명 (1/2)
                 <span className="lg-dot lg-zero" /> 빈 슬롯
               </div>
 
@@ -802,21 +798,14 @@ export default function AdminPage() {
                         {SLOTS.map((s) => {
                           const confirmed = data.filter(
                             (a) =>
-                              CONFIRMED_STATUSES.includes(a.status) &&
-                              a.confirmed_slot === s &&
-                              a.confirmed_branch === b
-                          ).length;
-                          const waiting = data.filter(
-                            (a) =>
-                              a.status === "대기" &&
+                              a.status === "확정" &&
                               a.confirmed_slot === s &&
                               a.confirmed_branch === b
                           ).length;
                           const cellClass =
-                            confirmed >= 2 && waiting >= 1 ? "cell-full"
-                            : confirmed >= 2 ? "cell-half"
-                            : confirmed === 0 && waiting === 0 ? "cell-zero"
-                            : "cell-short";
+                            confirmed >= 2 ? "cell-full"
+                            : confirmed === 1 ? "cell-half"
+                            : "cell-zero";
                           const active = slotCell?.branch === b && slotCell?.slot === s;
                           return (
                             <td
@@ -825,7 +814,6 @@ export default function AdminPage() {
                               onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
                             >
                               <div className="conf-main">{confirmed}/2</div>
-                              <div className="conf-sub">대기 {waiting}/1</div>
                             </td>
                           );
                         })}
@@ -840,7 +828,7 @@ export default function AdminPage() {
                   (a) =>
                     a.confirmed_slot === slotCell.slot &&
                     a.confirmed_branch === slotCell.branch &&
-                    [...CONFIRMED_STATUSES, "대기"].includes(a.status)
+                    a.status === "확정"
                 );
                 return (
                   <div className="slot-drill">

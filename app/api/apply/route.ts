@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       VALID_LICENSES.includes(licenseType) &&
       selfOwnership === "문제 없음";
 
-    const autoStatus = filterPass ? "연락대기" : "부적합";
+    const autoStatus = filterPass ? "서류심사" : "부적합";
 
     // ── Supabase에 저장 ─────────────────────────────────────
     const consent = marketingConsent === true;
