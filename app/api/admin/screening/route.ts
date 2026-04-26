@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "지원자를 찾을 수 없습니다." }, { status: 404 });
     }
 
-    if (["온보딩", "현장투입"].includes(applicant.status)) {
+    if (["스크리닝 완료", "현장투입"].includes(applicant.status)) {
       return NextResponse.json({ error: "이미 처리된 지원자입니다." }, { status: 400 });
     }
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const { error: updateErr } = await supabase
       .from("applicants")
-      .update({ status: "온보딩", screening: "완료" })
+      .update({ status: "스크리닝 완료", screening: "완료" })
       .eq("id", id);
 
     if (updateErr) {

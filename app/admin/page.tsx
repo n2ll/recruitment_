@@ -62,15 +62,15 @@ const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
   연락대기: "#2563eb",
   부적합: "#ef4444",
+  "스크리닝 완료": "#f59e0b",
   확정: "#0ea5e9",
   대기: "#8b5cf6",
-  온보딩: "#f59e0b",
   현장투입: "#10b981",
   이탈: "#475569",
 };
 
 const ALL_STATUSES = [
-  "서류심사", "연락대기", "부적합", "확정", "대기", "온보딩", "현장투입", "이탈",
+  "서류심사", "연락대기", "부적합", "스크리닝 완료", "확정", "대기", "현장투입", "이탈",
 ];
 
 const BRANCHES = [
@@ -96,8 +96,8 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
-const ACTIVE_STATUSES = ["서류심사", "연락대기", "확정", "대기", "온보딩", "현장투입"];
-const CONFIRMED_STATUSES = ["확정", "온보딩", "현장투입"];
+const ACTIVE_STATUSES = ["서류심사", "연락대기", "스크리닝 완료", "확정", "대기", "현장투입"];
+const CONFIRMED_STATUSES = ["확정", "스크리닝 완료", "현장투입"];
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -130,7 +130,7 @@ export default function AdminPage() {
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch("/api/admin/applicants");
+      const res = await fetch("/api/admin/applicants", { cache: "no-store" });
       const json = await res.json();
       setData(json.data || []);
     } catch {
@@ -142,7 +142,7 @@ export default function AdminPage() {
 
   const fetchHeartbeats = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/heartbeat");
+      const res = await fetch("/api/admin/heartbeat", { cache: "no-store" });
       const json = await res.json();
       setHeartbeats(json.data || []);
     } catch {
@@ -182,7 +182,7 @@ export default function AdminPage() {
     setChatApplicant(applicant);
     setChatLoading(true);
     try {
-      const res = await fetch(`/api/admin/messages/${applicant.id}`);
+      const res = await fetch(`/api/admin/messages/${applicant.id}`, { cache: "no-store" });
       const json = await res.json();
       setMessages(json.data || []);
       // unread_count 로컬 초기화
@@ -358,7 +358,7 @@ export default function AdminPage() {
     }).length,
     filterPass: data.filter((a) => a.filter_pass === "Y").length,
     screening: screeningList.length,
-    onboarding: data.filter((a) => a.status === "온보딩").length,
+    onboarding: data.filter((a) => a.status === "스크리닝 완료").length,
     deployed: data.filter((a) => a.status === "현장투입").length,
   };
 
@@ -444,7 +444,7 @@ export default function AdminPage() {
                 <div className="stat-card accent"><div className="stat-num">{stats.today}</div><div className="stat-label">오늘 지원</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.filterPass}</div><div className="stat-label">필터 통과</div></div>
                 <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝 대기</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">온보딩 중</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">스크리닝 완료</div></div>
                 <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">현장투입</div></div>
               </div>
 
