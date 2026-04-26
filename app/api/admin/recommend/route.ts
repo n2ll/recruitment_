@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
       .from("legacy_applicants")
       .select("id, name, phone, lat, lng, own_vehicle, submitted_at, imported_at, sigungu, location, promoted_applicant_id")
       .is("promoted_applicant_id", null)
+      .not("disqualified", "is", true)
       .not("lat", "is", null);
 
     if (lErr) {
