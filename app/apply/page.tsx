@@ -39,6 +39,61 @@ interface FormData {
 const KAKAO_CHANNEL_URL =
   process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "https://pf.kakao.com/";
 
+const MIN_INTRO_LEN = 30;
+
+function formatPhone(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.length < 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length < 11) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
+
+function parseBirth(raw: string): { ok: boolean; label: string } {
+  if (!/^\d{6}$/.test(raw)) return { ok: false, label: "" };
+  const yy = parseInt(raw.slice(0, 2), 10);
+  const mm = parseInt(raw.slice(2, 4), 10);
+  const dd = parseInt(raw.slice(4, 6), 10);
+  if (mm < 1 || mm > 12) return { ok: false, label: "월(MM)이 올바르지 않습니다" };
+  const daysInMonth = new Date(2000, mm, 0).getDate();
+  if (dd < 1 || dd > daysInMonth) return { ok: false, label: "일(DD)이 올바르지 않습니다" };
+  // 50~99 → 19xx, 00~49 → 20xx
+  const year = yy >= 50 ? 1900 + yy : 2000 + yy;
+  return { ok: true, label: `${year}년 ${mm}월 ${dd}일` };
+}
+
+declare global {
+  interface Window {
+    daum?: {
+      Postcode: new (config: {
+        oncomplete: (data: {
+          sido: string;
+          sigungu: string;
+          bname: string;
+          address: string;
+          roadAddress: string;
+        }) => void;
+      }) => { open: () => void };
+    };
+  }
+}
+
+let daumLoadPromise: Promise<void> | null = null;
+function loadDaumPostcode(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.daum?.Postcode) return Promise.resolve();
+  if (daumLoadPromise) return daumLoadPromise;
+  daumLoadPromise = new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("우편번호 스크립트 로딩 실패"));
+    document.body.appendChild(s);
+  });
+  return daumLoadPromise;
+}
+
 function Dropdown({
   label, value, options, onChange, placeholder, required, exclude,
 }: {
@@ -117,7 +172,7 @@ function ApplyPage() {
     branch1: branchParam, branch2: "",
     workHours: [], introduction: "", experience: "",
     availableDate: "", selfOwnership: "",
-    marketingConsent: false,
+    marketingConsent: true,
   });
 
   const [step, setStep] = useState<"form" | "done">("form");
@@ -139,17 +194,29 @@ function ApplyPage() {
   const validate = () => {
     const e: Partial<Record<string, string>> = {};
     if (!form.name.trim()) e.name = "성함을 입력해주세요";
-    if (!/^\d{6}$/.test(form.birthDate)) e.birthDate = "생년월일 6자리를 입력해주세요 (예: 901113)";
-    if (!/^\d{10,11}$/.test(form.phone)) e.phone = "휴대폰 번호를 '-' 없이 입력해주세요";
+    const birth = parseBirth(form.birthDate);
+    if (!/^\d{6}$/.test(form.birthDate)) {
+      e.birthDate = "생년월일 6자리를 입력해주세요 (예: 901113)";
+    } else if (!birth.ok) {
+      e.birthDate = birth.label || "생년월일이 올바르지 않습니다";
+    }
+    if (!/^\d{10,11}$/.test(form.phone)) e.phone = "올바른 휴대폰 번호를 입력해주세요";
     if (!form.location.trim()) e.location = "거주지를 입력해주세요";
     if (!form.ownVehicle) e.ownVehicle = "차량 여부를 선택해주세요";
     if (!form.licenseType) e.licenseType = "면허 종류를 선택해주세요";
     if (!form.vehicleType.trim()) e.vehicleType = "차종을 입력해주세요";
     if (!form.branch1) e.branch1 = "희망 근무 지점을 선택해주세요";
     if (form.workHours.length === 0) e.workHours = "희망 근무 시간대를 하나 이상 선택해주세요";
-    if (!form.introduction.trim()) e.introduction = "자기소개를 작성해주세요";
+    if (!form.introduction.trim()) {
+      e.introduction = "자기소개를 작성해주세요";
+    } else if (form.introduction.trim().length < MIN_INTRO_LEN) {
+      e.introduction = `자기소개는 최소 ${MIN_INTRO_LEN}자 이상 작성해주세요`;
+    }
     if (!form.availableDate) e.availableDate = "업무 시작 가능일을 선택해주세요";
     if (!form.selfOwnership) e.selfOwnership = "본인 명의 여부를 선택해주세요";
+    if (form.selfOwnership === "문제 있음 (지원불가)") {
+      e.selfOwnership = "본인 명의 업무가 불가하면 지원이 어렵습니다";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -252,26 +319,57 @@ function ApplyPage() {
             <div className="field-wrap">
               <label className="field-label">생년월일 6자리 <span className="req">*</span></label>
               <input className={`input ${errors.birthDate ? "input-err" : ""}`}
-                placeholder="예: 901113" maxLength={6} inputMode="numeric"
+                placeholder="예: 901113 (YYMMDD)" maxLength={6} inputMode="numeric"
                 value={form.birthDate}
                 onChange={(e) => set("birthDate")(e.target.value.replace(/\D/g, ""))} />
+              {(() => {
+                const parsed = parseBirth(form.birthDate);
+                if (form.birthDate.length === 6 && parsed.ok) {
+                  return <p className="hint-msg hint-ok">{parsed.label}</p>;
+                }
+                return null;
+              })()}
               {errors.birthDate && <p className="error-msg">{errors.birthDate}</p>}
             </div>
 
             <div className="field-wrap">
               <label className="field-label">휴대폰 번호 <span className="req">*</span></label>
               <input className={`input ${errors.phone ? "input-err" : ""}`}
-                placeholder="'-' 없이 숫자만 (예: 01012345678)"
-                inputMode="numeric" maxLength={11} value={form.phone}
-                onChange={(e) => set("phone")(e.target.value.replace(/\D/g, ""))} />
+                placeholder="010-1234-5678"
+                inputMode="numeric" maxLength={13}
+                value={formatPhone(form.phone)}
+                onChange={(e) => set("phone")(e.target.value.replace(/\D/g, "").slice(0, 11))} />
               {errors.phone && <p className="error-msg">{errors.phone}</p>}
             </div>
 
             <div className="field-wrap">
               <label className="field-label">거주지 (동 단위) <span className="req">*</span></label>
-              <input className={`input ${errors.location ? "input-err" : ""}`}
-                placeholder="예: 마포구 상암동" value={form.location}
-                onChange={(e) => set("location")(e.target.value)} />
+              <div className="addr-row">
+                <input className={`input ${errors.location ? "input-err" : ""}`}
+                  placeholder="주소 찾기 버튼을 눌러 검색하세요"
+                  value={form.location}
+                  onChange={(e) => set("location")(e.target.value)} />
+                <button
+                  type="button"
+                  className="addr-btn"
+                  onClick={async () => {
+                    try {
+                      await loadDaumPostcode();
+                      new window.daum!.Postcode({
+                        oncomplete: (data) => {
+                          const display = [data.sido, data.sigungu, data.bname]
+                            .filter(Boolean).join(" ").trim();
+                          set("location")(display || data.address);
+                        },
+                      }).open();
+                    } catch {
+                      alert("주소 검색을 불러오지 못했습니다. 직접 입력해주세요.");
+                    }
+                  }}
+                >
+                  주소 찾기
+                </button>
+              </div>
               {errors.location && <p className="error-msg">{errors.location}</p>}
             </div>
           </section>
@@ -379,11 +477,14 @@ function ApplyPage() {
               <span className="section-num">05</span>
               <h3 className="section-title">자기소개 및 지원동기 <span className="req">*</span></h3>
             </div>
-            <p className="section-desc">경력, 강점 등을 상세하게 작성해주세요.</p>
+            <p className="section-desc">경력, 강점 등을 상세하게 작성해주세요. 최소 {MIN_INTRO_LEN}자 이상.</p>
             <textarea className={`textarea ${errors.introduction ? "input-err" : ""}`}
               placeholder="자유롭게 작성해주세요." rows={5}
               value={form.introduction}
               onChange={(e) => set("introduction")(e.target.value)} />
+            <p className={`intro-counter ${form.introduction.trim().length < MIN_INTRO_LEN ? "intro-short" : "intro-ok"}`}>
+              {form.introduction.trim().length} / {MIN_INTRO_LEN}자
+            </p>
             {errors.introduction && <p className="error-msg">{errors.introduction}</p>}
           </section>
 
@@ -431,7 +532,15 @@ function ApplyPage() {
                 {["문제 없음", "문제 있음 (지원불가)"].map((opt) => (
                   <button key={opt} type="button"
                     className={`radio-btn ${form.selfOwnership === opt ? "radio-on" : ""}`}
-                    onClick={() => set("selfOwnership")(opt)}>
+                    onClick={() => {
+                      if (opt === "문제 있음 (지원불가)") {
+                        alert(
+                          "본인 명의로 업무 진행 및 정산이 어려운 경우 지원이 불가합니다.\n\n" +
+                          "본인 명의 차량·계좌·통신 등으로 업무가 가능하신 분만 지원해주세요."
+                        );
+                      }
+                      set("selfOwnership")(opt);
+                    }}>
                     {opt}
                   </button>
                 ))}
@@ -453,7 +562,7 @@ function ApplyPage() {
               <span className="consent-text">
                 <strong>[선택]</strong> 마케팅 정보 수신 동의
                 <span className="consent-sub">
-                  추후 모집 공고, 이벤트, 재컨택 등의 안내를 받을 수 있습니다.
+                  추후 추가 모집 공고 발생시 우선 안내드립니다.
                 </span>
               </span>
             </label>
@@ -543,6 +652,26 @@ const css = `
   .input-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
   .input-err { border-color: #ef4444 !important; }
   .error-msg { font-size: 12px; color: #ef4444; margin-top: 5px; font-weight: 500; }
+  .hint-msg { font-size: 12px; margin-top: 5px; font-weight: 500; }
+  .hint-ok { color: #10b981; }
+
+  .addr-row { display: flex; gap: 8px; }
+  .addr-row .input { flex: 1; }
+  .addr-btn {
+    flex-shrink: 0; padding: 0 16px;
+    border: 1.5px solid #1a1a1a; background: #1a1a1a; color: #fff;
+    border-radius: 10px; font-size: 13px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    transition: opacity 0.15s; -webkit-tap-highlight-color: transparent;
+  }
+  .addr-btn:hover { opacity: 0.85; }
+  .addr-btn:active { transform: scale(0.98); }
+
+  .intro-counter {
+    font-size: 12px; margin-top: 5px; text-align: right; font-weight: 500;
+  }
+  .intro-short { color: #ef4444; }
+  .intro-ok { color: #10b981; }
 
   .radio-group { display: flex; gap: 10px; }
   .radio-btn {
