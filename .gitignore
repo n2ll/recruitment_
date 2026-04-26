@@ -9,3 +9,10 @@ next-env.d.ts
 # Google Service Account key files (DO NOT COMMIT)
 ongmanagement-*.json
 *-service-account.json
+
+# 개인정보 포함된 원본 데이터 — 절대 커밋 금지
+옹고잉 이력서 제출 양식.csv
+*.csv
+
+# 로고 원본 (public/logo.png 으로 사본됨)
+옹고잉로고_기본.png
