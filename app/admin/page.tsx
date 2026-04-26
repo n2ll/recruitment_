@@ -55,7 +55,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "screening" | "contact" | "hope-slots" | "confirmed-slots";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots";
 
 const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
@@ -332,11 +332,6 @@ export default function AdminPage() {
             onClick={() => setTab("applicants")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 15v-1.5a3 3 0 00-3-3H8a3 3 0 00-3 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/></svg>
             지원자 목록
-          </button>
-          <button className={`nav-btn ${tab === "screening" ? "nav-active" : ""}`}
-            onClick={() => setTab("screening")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15 4.5L7 12.5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            1차 스크리닝
             {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
           </button>
           <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
@@ -431,10 +426,12 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th><th>액션</th></tr>
                   </thead>
                   <tbody>
-                    {filtered.map((a) => (
+                    {filtered.map((a) => {
+                      const canScreen = a.filter_pass === "Y" && a.status === "연락대기";
+                      return (
                       <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
                         <td className="td-bold">
                           <span className="name-link" onClick={(e) => { e.stopPropagation(); openChat(a); }}>{a.name}</span>
@@ -448,8 +445,20 @@ export default function AdminPage() {
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{a.source}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
+                        <td>
+                          {canScreen && (
+                            <button
+                              className={`row-action-btn ${sending === a.id ? "row-action-loading" : ""}`}
+                              onClick={(e) => { e.stopPropagation(); handleScreening(a.id); }}
+                              disabled={sending === a.id}
+                            >
+                              {sending === a.id ? "발송 중..." : "1차 스크리닝 완료"}
+                            </button>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -864,41 +873,7 @@ export default function AdminPage() {
                 })()}
               </div>
             </div>
-          ) : (
-            <div className="content">
-              <h2 className="page-title">1차 스크리닝 <span className="count">{screeningList.length}명 대기</span></h2>
-              <p className="page-desc">필터 통과 후 전화 스크리닝이 필요한 지원자입니다. 완료 버튼을 누르면 배민커넥트 가입 안내 문자가 자동 발송됩니다.</p>
-
-              {screeningList.length === 0 ? (
-                <div className="empty">스크리닝 대기 중인 지원자가 없습니다.</div>
-              ) : (
-                <div className="screening-list">
-                  {screeningList.map((a) => (
-                    <div key={a.id} className="screening-card">
-                      <div className="sc-top">
-                        <div>
-                          <div className="sc-name">{a.name}{a.note === "중복지원" && <span className="dup-tag">중복</span>}</div>
-                          <div className="sc-info">{a.phone} | {a.branch} | 시작: {a.available_date}</div>
-                        </div>
-                        <button
-                          className={`sc-btn ${sending === a.id ? "sc-btn-loading" : ""}`}
-                          onClick={() => handleScreening(a.id)}
-                          disabled={sending === a.id}
-                        >
-                          {sending === a.id ? "발송 중..." : "스크리닝 완료"}
-                        </button>
-                      </div>
-                      <div className="sc-details">
-                        <span>차량: {a.own_vehicle} | {a.license_type} | {a.vehicle_type}</span>
-                        <span>채널: {a.source}</span>
-                      </div>
-                      <div className="sc-intro">{a.introduction.slice(0, 100)}{a.introduction.length > 100 ? "..." : ""}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          ) : null}
           {/* 대화 패널 (카카오톡 스타일) */}
           {chatApplicant && (
             <div className="chat-overlay">
@@ -1180,6 +1155,16 @@ const css = `
   .sc-btn:hover { background: #E6B800; }
   .sc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .sc-btn-loading { background: #d4a50e; }
+
+  .row-action-btn {
+    padding: 5px 10px; background: #F5C518; color: #3D2B00;
+    border: none; border-radius: 6px; font-size: 11px; font-weight: 700;
+    font-family: inherit; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .row-action-btn:hover:not(:disabled) { background: #E6B800; }
+  .row-action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .row-action-loading { background: #d4a50e; }
 
   /* 전용 폰 상태 바 */
   .phone-bar {
