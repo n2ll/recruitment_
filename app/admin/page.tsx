@@ -121,6 +121,11 @@ export default function AdminPage() {
   // 슬롯 뷰 셀 선택 (drill-down 용)
   const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
 
+  // 상세 패널 임시 편집 상태 (명시적 저장)
+  const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  useEffect(() => { setEditDraft({}); }, [selectedId]);
+
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -315,7 +320,7 @@ export default function AdminPage() {
         {/* 사이드바 */}
         <nav className="sidebar">
           <div className="sidebar-logo">
-            <div className="logo-sm">G</div>
+            <img src="/logo.png" alt="옹고잉" className="logo-sm-img" />
             <span className="sidebar-title">옹고잉 관리자</span>
           </div>
           <button className={`nav-btn ${tab === "dashboard" ? "nav-active" : ""}`}
@@ -331,7 +336,7 @@ export default function AdminPage() {
           <button className={`nav-btn ${tab === "screening" ? "nav-active" : ""}`}
             onClick={() => setTab("screening")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15 4.5L7 12.5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            스크리닝
+            1차 스크리닝
             {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
           </button>
           <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
@@ -426,7 +431,7 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th><th>마지막 문자</th><th>안읽음</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
@@ -443,29 +448,62 @@ export default function AdminPage() {
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{a.source}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
-                        <td>{a.last_message_at ? new Date(a.last_message_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}</td>
-                        <td>{a.unread_count > 0 ? <span className="unread-badge">{a.unread_count}</span> : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
-              {selected && (
+              {selected && (() => {
+                const draftVal = <K extends keyof Applicant>(key: K): Applicant[K] =>
+                  (key in editDraft ? editDraft[key] : selected[key]) as Applicant[K];
+                const setDraft = <K extends keyof Applicant>(key: K, value: Applicant[K]) =>
+                  setEditDraft((prev) => ({ ...prev, [key]: value }));
+                const hasChanges = Object.keys(editDraft).length > 0;
+                const currentStatus = (draftVal("status") as string) || "";
+                const saveEdits = async () => {
+                  if (!hasChanges || savingEdit) return;
+                  setSavingEdit(true);
+                  const ok = await patchApplicant(selected.id, editDraft);
+                  setSavingEdit(false);
+                  if (ok) setEditDraft({});
+                };
+                const cancelEdits = () => setEditDraft({});
+
+                return (
                 <div className="detail-panel">
                   <div className="detail-header">
-                    <h3>{selected.name} 상세 정보</h3>
-                    <button className="close-btn" onClick={() => setSelectedId(null)}>X</button>
+                    <h3>
+                      {selected.name} 상세 정보
+                      {hasChanges && <span className="dirty-tag">변경됨</span>}
+                    </h3>
+                    <div className="detail-actions">
+                      <button
+                        className="cancel-btn"
+                        onClick={cancelEdits}
+                        disabled={!hasChanges || savingEdit}
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="save-btn"
+                        onClick={saveEdits}
+                        disabled={!hasChanges || savingEdit}
+                      >
+                        {savingEdit ? "저장 중..." : "저장"}
+                      </button>
+                      <button className="close-btn" onClick={() => setSelectedId(null)}>X</button>
+                    </div>
                   </div>
 
-                  {/* 편집 가능 영역 */}
+                  {/* 편집 가능 영역 (명시적 저장) */}
                   <div className="edit-grid">
                     <label className="edit-field">
                       <span className="dl">진행 상태</span>
                       <select
                         className="edit-select"
-                        value={selected.status}
-                        onChange={(e) => patchApplicant(selected.id, { status: e.target.value })}
+                        value={currentStatus}
+                        onChange={(e) => setDraft("status", e.target.value)}
                       >
                         {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -474,8 +512,8 @@ export default function AdminPage() {
                       <span className="dl">확정 슬롯</span>
                       <select
                         className="edit-select"
-                        value={selected.confirmed_slot || ""}
-                        onChange={(e) => patchApplicant(selected.id, { confirmed_slot: e.target.value || null })}
+                        value={(draftVal("confirmed_slot") as string) || ""}
+                        onChange={(e) => setDraft("confirmed_slot", e.target.value || null)}
                       >
                         <option value="">—</option>
                         {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -485,8 +523,8 @@ export default function AdminPage() {
                       <span className="dl">확정 지점</span>
                       <select
                         className="edit-select"
-                        value={selected.confirmed_branch || ""}
-                        onChange={(e) => patchApplicant(selected.id, { confirmed_branch: e.target.value || null })}
+                        value={(draftVal("confirmed_branch") as string) || ""}
+                        onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}
                       >
                         <option value="">—</option>
                         {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -496,8 +534,8 @@ export default function AdminPage() {
                       <span className="dl">현재 근무 지점</span>
                       <select
                         className="edit-select"
-                        value={selected.current_branch || ""}
-                        onChange={(e) => patchApplicant(selected.id, { current_branch: e.target.value || null })}
+                        value={(draftVal("current_branch") as string) || ""}
+                        onChange={(e) => setDraft("current_branch", e.target.value || null)}
                       >
                         <option value="">— (비근무)</option>
                         {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -507,25 +545,24 @@ export default function AdminPage() {
                       <span className="dl">시작일</span>
                       <input
                         type="date"
-                        className="edit-select"
-                        value={selected.start_date || ""}
-                        onChange={(e) => patchApplicant(selected.id, { start_date: e.target.value || null })}
+                        className="edit-select edit-date"
+                        value={(draftVal("start_date") as string) || ""}
+                        onChange={(e) => setDraft("start_date", e.target.value || null)}
+                        onClick={(e) => {
+                          const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                          try { el.showPicker?.(); } catch { /* unsupported */ }
+                        }}
                       />
                     </label>
-                    {selected.status === "이탈" && (
+                    {currentStatus === "이탈" && (
                       <label className="edit-field edit-field-wide">
                         <span className="dl">이탈 사유</span>
                         <input
                           type="text"
                           className="edit-select"
-                          placeholder="사유 입력 후 포커스 해제 시 저장"
-                          defaultValue={selected.churn_reason || ""}
-                          onBlur={(e) => {
-                            const v = e.target.value.trim();
-                            if (v !== (selected.churn_reason || "")) {
-                              patchApplicant(selected.id, { churn_reason: v || null });
-                            }
-                          }}
+                          placeholder="사유 입력"
+                          value={(draftVal("churn_reason") as string) || ""}
+                          onChange={(e) => setDraft("churn_reason", e.target.value || null)}
                         />
                       </label>
                     )}
@@ -550,7 +587,8 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
             </div>
           ) : tab === "hope-slots" ? (
             <div className="content">
@@ -828,7 +866,7 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="content">
-              <h2 className="page-title">스크리닝 관리 <span className="count">{screeningList.length}명 대기</span></h2>
+              <h2 className="page-title">1차 스크리닝 <span className="count">{screeningList.length}명 대기</span></h2>
               <p className="page-desc">필터 통과 후 전화 스크리닝이 필요한 지원자입니다. 완료 버튼을 누르면 배민커넥트 가입 안내 문자가 자동 발송됩니다.</p>
 
               {screeningList.length === 0 ? (
@@ -937,10 +975,10 @@ const css = `
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
   }
   .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 20px; }
-  .logo-sm {
-    width: 32px; height: 32px; background: #F5C518; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 16px; color: #5C4200; font-style: italic;
+  .logo-sm-img {
+    height: 28px; width: auto; max-width: 80px;
+    object-fit: contain;
+    background: #fff; border-radius: 6px; padding: 3px 6px;
   }
   .sidebar-title { font-size: 14px; font-weight: 700; }
   .nav-btn {
@@ -1016,11 +1054,32 @@ const css = `
     padding: 20px; margin-top: 16px;
   }
   .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .detail-header h3 { font-size: 15px; font-weight: 700; }
+  .detail-header h3 { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
   .close-btn {
     border: none; background: none; font-size: 16px; cursor: pointer;
     color: #9ca3af; font-weight: 700; padding: 4px 8px;
   }
+  .detail-actions { display: flex; gap: 8px; align-items: center; }
+  .save-btn {
+    padding: 7px 16px; background: #F5C518; color: #3D2B00;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 700;
+    font-family: inherit; cursor: pointer; transition: background 0.15s;
+  }
+  .save-btn:hover:not(:disabled) { background: #E6B800; }
+  .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .cancel-btn {
+    padding: 7px 14px; background: #fff; color: #6b7280;
+    border: 1.5px solid #E8E8E0; border-radius: 8px; font-size: 13px; font-weight: 600;
+    font-family: inherit; cursor: pointer; transition: background 0.15s;
+  }
+  .cancel-btn:hover:not(:disabled) { background: #f9fafb; }
+  .cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .dirty-tag {
+    background: #ef4444; color: #fff; font-size: 10px; font-weight: 700;
+    padding: 2px 7px; border-radius: 10px; letter-spacing: 0.02em;
+  }
+  .edit-date { cursor: pointer; }
+  .edit-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
   .dl { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 2px; font-weight: 600; }
   .detail-section { margin-bottom: 12px; }
