@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { appendToSheet, appendToScreeningSheet } from "@/lib/google-sheets";
 import { sendSlackNotification } from "@/lib/slack";
 import { sendNotification } from "@/lib/solapi";
+import { geocodeAddress } from "@/lib/kakao-geocode";
 
 export async function POST(req: NextRequest) {
   try {
@@ -68,6 +69,9 @@ export async function POST(req: NextRequest) {
 
     const autoStatus = filterPass ? "서류심사" : "부적합";
 
+    // ── 주소 지오코딩 (실패해도 저장 진행) ─────────────────
+    const geo = location?.trim() ? await geocodeAddress(location) : null;
+
     // ── Supabase에 저장 ─────────────────────────────────────
     const consent = marketingConsent === true;
     const { data: inserted, error } = await supabase
@@ -94,6 +98,12 @@ export async function POST(req: NextRequest) {
         note: isDuplicate ? "중복지원" : null,
         marketing_consent: consent,
         marketing_consent_at: consent ? new Date().toISOString() : null,
+        lat: geo?.lat ?? null,
+        lng: geo?.lng ?? null,
+        sido: geo?.sido ?? null,
+        sigungu: geo?.sigungu ?? null,
+        bname: geo?.bname ?? null,
+        road_address: geo?.road_address ?? null,
       })
       .select()
       .single();
