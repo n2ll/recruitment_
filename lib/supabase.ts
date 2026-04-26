@@ -1,10 +1,21 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // 서버용 (API route에서 사용 — service_role 키로 RLS 우회)
+// Next.js 14 Data Cache가 Supabase JS 내부 fetch를 캐싱하지 못하도록 강제 no-store
 export function createServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          fetch(input, { ...init, cache: "no-store" }),
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
   );
 }
 
