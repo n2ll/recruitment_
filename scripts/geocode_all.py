@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 import urllib.request
 import urllib.error
+import urllib.parse
 
 ROOT = Path(__file__).resolve().parent.parent
 SUPABASE_URL = "https://lrktxyfzxwwpjffzltnq.supabase.co"
@@ -33,50 +34,64 @@ def load_env() -> dict:
                 continue
             k, v = line.split("=", 1)
             env[k.strip()] = v.strip()
-    for k in ("SUPABASE_SERVICE_ROLE_KEY",):
+    for k in ("SUPABASE_SERVICE_ROLE_KEY", "NAVER_NCLOUD_KEY_ID", "NAVER_NCLOUD_KEY_SECRET"):
         if not env.get(k):
             env[k] = os.environ.get(k, "")
     if not env["SUPABASE_SERVICE_ROLE_KEY"]:
         sys.exit("SUPABASE_SERVICE_ROLE_KEY missing")
+    if not env.get("NAVER_NCLOUD_KEY_ID") or not env.get("NAVER_NCLOUD_KEY_SECRET"):
+        sys.exit("NAVER_NCLOUD_KEY_ID / NAVER_NCLOUD_KEY_SECRET missing")
     return env
 
 
+def _element_by_type(elements, type_name):
+    if not elements:
+        return None
+    for e in elements:
+        if type_name in (e.get("types") or []):
+            return e.get("longName")
+    return None
+
+
 def geocode(query: str, env: dict) -> dict | None:
-    """ OSM Nominatim — 가입 불필요, 1초/요청 제한 """
+    """ NCloud Maps Geocoding — 정확도 ↑, ~10 req/s """
     if not query or not query.strip():
         return None
-    url = (
-        "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1"
-        "&accept-language=ko&limit=1&q=" + urllib.request.quote(query.strip())
-    )
+    url = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=" + urllib.parse.quote(query.strip())
     req = urllib.request.Request(url, headers={
-        "User-Agent": "ongoing-recruitment/1.0 (info@naeyil.com)",
+        "x-ncp-apigw-api-key-id": env["NAVER_NCLOUD_KEY_ID"],
+        "x-ncp-apigw-api-key": env["NAVER_NCLOUD_KEY_SECRET"],
     })
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        print(f"  [geocode HTTP {e.code}] {query!r}")
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            body = ""
+        print(f"  [geocode HTTP {e.code}] {query!r} - {body}")
         return None
     except Exception as e:
         print(f"  [geocode err] {query!r} - {e}")
         return None
-    if not data:
+    addrs = data.get("addresses") or []
+    if not addrs:
         return None
-    r0 = data[0]
+    a = addrs[0]
     try:
-        lat = float(r0["lat"])
-        lng = float(r0["lon"])
+        lat = float(a["y"])
+        lng = float(a["x"])
     except (KeyError, ValueError):
         return None
-    a = r0.get("address") or {}
+    elems = a.get("addressElements")
     return {
         "lat": lat,
         "lng": lng,
-        "sido": a.get("state") or a.get("province") or a.get("region"),
-        "sigungu": a.get("city") or a.get("county") or a.get("borough"),
-        "bname": a.get("suburb") or a.get("neighbourhood") or a.get("quarter"),
-        "road_address": a.get("road") or r0.get("display_name"),
+        "sido": _element_by_type(elems, "SIDO"),
+        "sigungu": _element_by_type(elems, "SIGUGUN"),
+        "bname": _element_by_type(elems, "DONGMYUN") or _element_by_type(elems, "RI"),
+        "road_address": a.get("roadAddress") or a.get("jibunAddress"),
     }
 
 
@@ -128,7 +143,7 @@ def process_applicants(env: dict):
         success += 1
         if i % 20 == 0 or i == len(rows):
             print(f"  [{i}/{len(rows)}] 성공 누적 {success}")
-        time.sleep(1.05)  # OSM Nominatim policy: 1 req/sec
+        time.sleep(0.1)  # NCloud rate-friendly
     print(f"[applicants] 완료: {success}/{len(rows)}")
 
 
@@ -172,7 +187,7 @@ def process_legacy(env: dict):
         success += 1
         if i % 20 == 0 or i == len(rows):
             print(f"  [{i}/{len(rows)}] 성공 누적 {success}")
-        time.sleep(1.05)  # OSM Nominatim policy: 1 req/sec
+        time.sleep(0.1)  # NCloud rate-friendly
     print(f"[legacy] 완료: {success}/{len(rows)}")
 
 

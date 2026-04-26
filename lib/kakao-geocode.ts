@@ -80,7 +80,7 @@ async function geocodeNCloud(query: string): Promise<GeocodeResult | null> {
     lat,
     lng,
     sido: elementByType(addr.addressElements, "SIDO"),
-    sigungu: elementByType(addr.addressElements, "SIGUGU"),
+    sigungu: elementByType(addr.addressElements, "SIGUGUN"),
     bname:
       elementByType(addr.addressElements, "DONGMYUN") ||
       elementByType(addr.addressElements, "RI"),
