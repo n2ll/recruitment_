@@ -182,6 +182,7 @@ export default function AdminPage() {
           posting: recPosting,
           manualAddress: recManualAddr || undefined,
           manualVehicleRequired: recVehicleRequired,
+          topN: 10,
         }),
         cache: "no-store",
       });
@@ -192,6 +193,48 @@ export default function AdminPage() {
       }
       setRecResult(json);
       setRecSelected(new Set(json.candidates.map(candidateKey)));
+    } catch {
+      alert("네트워크 오류");
+    } finally {
+      setRecLoading(false);
+    }
+  };
+
+  const loadMoreRec = async () => {
+    if (!recResult || recLoading) return;
+    const currentCount = recResult.candidates.length;
+    const newTopN = currentCount + 10;
+    if (newTopN > 50) {
+      alert("최대 50명까지 표시 가능합니다.");
+      return;
+    }
+    setRecLoading(true);
+    try {
+      const res = await fetch("/api/admin/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          posting: recPosting,
+          manualAddress: recManualAddr || undefined,
+          manualVehicleRequired: recVehicleRequired,
+          topN: newTopN,
+        }),
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert("추가 추천 실패: " + (json.error || "알 수 없는 오류"));
+        return;
+      }
+      // 신규 후보만 디폴트 체크 (기존 선택 상태는 유지)
+      const previouslyShown = new Set(recResult.candidates.map(candidateKey));
+      const next = new Set(recSelected);
+      for (const c of json.candidates) {
+        const k = candidateKey(c);
+        if (!previouslyShown.has(k)) next.add(k);
+      }
+      setRecResult(json);
+      setRecSelected(next);
     } catch {
       alert("네트워크 오류");
     } finally {
@@ -1062,6 +1105,15 @@ export default function AdminPage() {
                       전체 해제
                     </button>
                     <span className="rec-count">{recSelected.size} / {recResult.candidates.length}명 선택됨</span>
+                    {recResult.candidates.length < 50 && (
+                      <button
+                        className="rec-btn-secondary"
+                        onClick={loadMoreRec}
+                        disabled={recLoading}
+                      >
+                        {recLoading ? "불러오는 중..." : "10명 더 받기"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="table-wrap">
