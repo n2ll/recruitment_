@@ -158,11 +158,11 @@ export default function AdminPage() {
   // 추천 받기 state
   const [recPosting, setRecPosting] = useState("");
   const [recManualAddr, setRecManualAddr] = useState("");
+  const [recVehicleRequired, setRecVehicleRequired] = useState(true);
   const [recLoading, setRecLoading] = useState(false);
   const [recResult, setRecResult] = useState<RecommendResponse | null>(null);
   const [recSelected, setRecSelected] = useState<Set<string>>(new Set());
   const [recSending, setRecSending] = useState(false);
-  const [recPreviewOpen, setRecPreviewOpen] = useState(false);
 
   const candidateKey = (c: { source: string; id: number }) => `${c.source}-${c.id}`;
 
@@ -181,6 +181,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           posting: recPosting,
           manualAddress: recManualAddr || undefined,
+          manualVehicleRequired: recVehicleRequired,
         }),
         cache: "no-store",
       });
@@ -232,7 +233,6 @@ export default function AdminPage() {
       const json = await res.json();
       if (json.success) {
         alert(`발송 완료: 성공 ${json.sent}건 / 실패 ${json.failed}건`);
-        setRecPreviewOpen(false);
       } else {
         alert("발송 실패: " + (json.error || ""));
       }
@@ -1004,8 +1004,27 @@ export default function AdminPage() {
                   onChange={(e) => setRecPosting(e.target.value)}
                 />
 
+                <div className="rec-row">
+                  <label className="rec-label">차량 필요 여부 <span className="req">*</span></label>
+                  <div className="radio-group">
+                    {[
+                      { v: true, label: "차량 필요" },
+                      { v: false, label: "차량 불필요" },
+                    ].map((opt) => (
+                      <button
+                        key={String(opt.v)}
+                        type="button"
+                        className={`radio-btn ${recVehicleRequired === opt.v ? "radio-on" : ""}`}
+                        onClick={() => setRecVehicleRequired(opt.v)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <details className="rec-advanced">
-                  <summary>주소 직접 입력 (Claude 자동 추출 건너뛰기)</summary>
+                  <summary>상차지 주소 (Claude 자동 추출 건너뛰기)</summary>
                   <input
                     className="rec-input"
                     placeholder="예) 서울 마포구 상암동"
@@ -1043,13 +1062,6 @@ export default function AdminPage() {
                       전체 해제
                     </button>
                     <span className="rec-count">{recSelected.size} / {recResult.candidates.length}명 선택됨</span>
-                    <button
-                      className="rec-btn-primary"
-                      onClick={() => setRecPreviewOpen(true)}
-                      disabled={recSelected.size === 0}
-                    >
-                      미리보기 + 발송
-                    </button>
                   </div>
 
                   <div className="table-wrap">
@@ -1102,38 +1114,42 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {recPreviewOpen && recResult && (
-                <div className="chat-overlay" onClick={(e) => { if (e.target === e.currentTarget) setRecPreviewOpen(false); }}>
-                  <div className="rec-preview-panel">
-                    <div className="rec-preview-header">
-                      <h3>발송 미리보기 — {recSelected.size}명</h3>
-                      <button className="close-btn" onClick={() => setRecPreviewOpen(false)}>✕</button>
-                    </div>
-                    <div className="rec-preview-body">
-                      <div className="rec-preview-meta">
-                        SMS로 일괄 발송됩니다. 한 번 발송된 메시지는 회수할 수 없습니다.
-                      </div>
-                      <div className="rec-message-preview">{recPosting}</div>
-                      <div className="rec-recipients-preview">
-                        <strong>수신자 ({recSelected.size}명):</strong>
-                        <div className="rec-recipients-list">
-                          {recResult.candidates
-                            .filter((c) => recSelected.has(candidateKey(c)))
-                            .map((c) => (
-                              <span key={candidateKey(c)} className="rec-recipient-chip">
-                                {c.name}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="rec-preview-footer">
-                      <button className="cancel-btn" onClick={() => setRecPreviewOpen(false)}>취소</button>
-                      <button className="rec-btn-primary" onClick={sendRecMessages} disabled={recSending}>
-                        {recSending ? "발송 중..." : `${recSelected.size}명에게 발송`}
-                      </button>
-                    </div>
+              {recResult && (
+                <div className="rec-preview-inline">
+                  <h3 className="section-title">📤 발송 미리보기</h3>
+                  <div className="rec-preview-meta">
+                    SMS로 발송됩니다. 한 번 발송된 메시지는 회수할 수 없습니다.
                   </div>
+                  <div className="rec-message-preview">{recPosting || "(공고 내용을 입력하세요)"}</div>
+
+                  {recSelected.size > 0 ? (
+                    <div className="rec-recipients-preview">
+                      <strong>수신자 ({recSelected.size}명):</strong>
+                      <div className="rec-recipients-list">
+                        {recResult.candidates
+                          .filter((c) => recSelected.has(candidateKey(c)))
+                          .map((c) => (
+                            <span key={candidateKey(c)} className="rec-recipient-chip">
+                              {c.name}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rec-empty-recipients">위 표에서 발송 대상을 체크해주세요.</div>
+                  )}
+
+                  <button
+                    className="rec-btn-primary rec-send-btn"
+                    onClick={sendRecMessages}
+                    disabled={recSending || recSelected.size === 0}
+                  >
+                    {recSending
+                      ? "발송 중..."
+                      : recSelected.size === 0
+                      ? "발송 대상 선택 필요"
+                      : `${recSelected.size}명에게 발송`}
+                  </button>
                 </div>
               )}
             </div>
@@ -1459,6 +1475,20 @@ const css = `
   /* 추천 받기 */
   .rec-input-wrap { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e8e8e0; margin-bottom: 20px; }
   .rec-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+  .rec-row { margin-top: 14px; }
+  .rec-row .radio-group { display: flex; gap: 10px; max-width: 400px; }
+  .rec-row .radio-btn {
+    flex: 1; padding: 10px;
+    border: 1.5px solid #E8E8E0; border-radius: 8px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    color: #6b7280; background: #fff; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .rec-row .radio-on {
+    border-color: #F5C518; background: #FFFBEB;
+    color: #92650A; font-weight: 700;
+    box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
+  }
   .rec-textarea {
     width: 100%; padding: 12px; border: 1.5px solid #e8e8e0; border-radius: 8px;
     font-family: inherit; font-size: 13px; line-height: 1.6; outline: none;
@@ -1506,17 +1536,11 @@ const css = `
   .src-legacy { background: #f3f4f6; color: #6b7280; }
   .td-meta { font-size: 11px; color: #9ca3af; }
 
-  .rec-preview-panel {
-    background: #fff; max-width: 540px; width: 92%; margin: 60px auto;
-    border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
-    display: flex; flex-direction: column; max-height: 80vh;
+  .rec-preview-inline {
+    margin-top: 24px; background: #fff; padding: 20px; border-radius: 12px;
+    border: 1px solid #e8e8e0;
   }
-  .rec-preview-header {
-    padding: 18px 20px; border-bottom: 1px solid #e8e8e0;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .rec-preview-header h3 { font-size: 15px; font-weight: 700; }
-  .rec-preview-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .rec-preview-inline .section-title { margin-bottom: 12px; }
   .rec-preview-meta {
     font-size: 12px; color: #ef4444; background: #fef2f2; padding: 8px 12px;
     border-radius: 6px; margin-bottom: 14px; font-weight: 500;
@@ -1525,16 +1549,21 @@ const css = `
     background: #FFFBEB; border: 1px solid #F5C518; border-radius: 10px;
     padding: 14px 16px; font-size: 13px; line-height: 1.7;
     white-space: pre-wrap; margin-bottom: 16px; max-height: 240px; overflow-y: auto;
+    color: #374151;
   }
-  .rec-recipients-preview { font-size: 13px; }
+  .rec-recipients-preview { font-size: 13px; margin-bottom: 16px; }
   .rec-recipients-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .rec-recipient-chip {
     display: inline-block; padding: 3px 10px;
     background: #f3f4f6; border-radius: 12px; font-size: 12px; color: #374151;
   }
-  .rec-preview-footer {
-    padding: 14px 20px; border-top: 1px solid #e8e8e0;
-    display: flex; gap: 8px; justify-content: flex-end;
+  .rec-empty-recipients {
+    font-size: 13px; color: #9ca3af; padding: 12px; background: #fafafa;
+    border-radius: 8px; margin-bottom: 16px; text-align: center;
+  }
+  .rec-send-btn {
+    margin-top: 0; width: 100%; padding: 14px;
+    font-size: 14px;
   }
 
   .screening-list { display: flex; flex-direction: column; gap: 12px; }

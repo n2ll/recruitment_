@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         );
       }
       address = extracted.address;
-      vehicleRequired = extracted.vehicle_required;
+      // vehicleRequired는 매니저가 직접 입력한 값 그대로 유지 (Claude 값 무시)
       schedule = extracted.schedule || "";
       summary = extracted.summary || "";
     }
