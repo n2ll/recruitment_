@@ -63,12 +63,11 @@ export async function POST(req: NextRequest) {
     // 3) 후보 풀: applicants(활성) + legacy_applicants
     const supabase = createServiceClient();
 
+    // applicants(B마트) 중 status가 '확정'/'부적합'이 아니면 모두 풀에 포함
     const { data: activeRows, error: aErr } = await supabase
       .from("applicants")
-      .select("id, name, phone, lat, lng, own_vehicle, created_at, sigungu, location, status, current_branch")
-      .eq("filter_pass", "Y")
-      .in("status", ["서류심사", "스크리닝 완료"])
-      .is("current_branch", null)
+      .select("id, name, phone, lat, lng, own_vehicle, created_at, sigungu, location, status")
+      .not("status", "in", "(확정,부적합)")
       .not("lat", "is", null);
 
     if (aErr) {
