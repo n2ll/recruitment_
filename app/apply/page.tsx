@@ -227,11 +227,9 @@ function ApplyPage() {
 
         {/* 헤더 */}
         <header className="header">
-          <div className="logo-circle">
-            <span className="logo-g">G</span>
-          </div>
+          <img src="/logo.png" alt="옹고잉" className="logo-img" />
           <h1 className="header-title">배송원 지원서</h1>
-          <p className="header-sub">B마트 배달 업무 · 옹고잉</p>
+          <p className="header-sub">B마트 배달 업무</p>
         </header>
 
         <main className="form-body">
@@ -413,9 +411,17 @@ function ApplyPage() {
 
             <div className="field-wrap">
               <label className="field-label">업무 시작 가능일 <span className="req">*</span></label>
-              <input type="date" className={`input ${errors.availableDate ? "input-err" : ""}`}
+              <input
+                type="date"
+                className={`input input-date ${errors.availableDate ? "input-err" : ""}`}
                 value={form.availableDate}
-                onChange={(e) => set("availableDate")(e.target.value)} />
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => set("availableDate")(e.target.value)}
+                onClick={(e) => {
+                  const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                  try { el.showPicker?.(); } catch { /* unsupported */ }
+                }}
+              />
               {errors.availableDate && <p className="error-msg">{errors.availableDate}</p>}
             </div>
 
@@ -480,47 +486,23 @@ const css = `
   .page { min-height: 100vh; }
 
   .header {
-    background: #1a1a1a;
-    padding: 44px 24px 36px;
+    background: #fff;
+    padding: 32px 24px 28px;
     text-align: center;
     position: relative;
-    overflow: hidden;
+    border-bottom: 3px solid #F5C518;
   }
-  .header::before {
-    content: '';
-    position: absolute; top: -60px; right: -60px;
-    width: 200px; height: 200px;
-    background: radial-gradient(circle, rgba(245,197,24,0.15) 0%, transparent 70%);
-    border-radius: 50%;
-  }
-  .header::after {
-    content: '';
-    position: absolute; bottom: -40px; left: -40px;
-    width: 150px; height: 150px;
-    background: radial-gradient(circle, rgba(245,197,24,0.1) 0%, transparent 70%);
-    border-radius: 50%;
-  }
-  .logo-circle {
-    width: 64px; height: 64px;
-    background: #F5C518;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    margin: 0 auto 18px;
-    box-shadow: 0 4px 20px rgba(245,197,24,0.4);
-    position: relative; z-index: 1;
-  }
-  .logo-g {
-    font-size: 28px; font-weight: 700;
-    color: #5C4200; font-style: italic; line-height: 1;
+  .logo-img {
+    height: 56px; width: auto; max-width: 180px;
+    display: block; margin: 0 auto 8px;
+    object-fit: contain;
   }
   .header-title {
-    color: #fff; font-size: 24px; font-weight: 700;
-    letter-spacing: -0.02em; margin-bottom: 6px;
-    position: relative; z-index: 1;
+    color: #1a1a1a; font-size: 22px; font-weight: 700;
+    letter-spacing: -0.02em; margin-bottom: 4px;
   }
   .header-sub {
-    color: rgba(255,255,255,0.5); font-size: 13px;
-    position: relative; z-index: 1;
+    color: #9ca3af; font-size: 12px; font-weight: 500;
   }
 
   .form-body { padding: 24px 16px 60px; max-width: 520px; margin: 0 auto; }
@@ -540,7 +522,7 @@ const css = `
 
   .field-wrap { margin-bottom: 16px; }
   .field-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 7px; }
-  .req { color: #B8860B; }
+  .req { color: #ef4444; font-weight: 700; }
 
   .input, .textarea {
     width: 100%; padding: 13px 14px;
@@ -557,6 +539,8 @@ const css = `
   .textarea { resize: vertical; line-height: 1.6; }
   input[type="date"] { color-scheme: light; }
   input[type="date"]:invalid, input[type="date"][value=""] { color: #b0b0a8; }
+  .input-date { cursor: pointer; }
+  .input-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
   .input-err { border-color: #ef4444 !important; }
   .error-msg { font-size: 12px; color: #ef4444; margin-top: 5px; font-weight: 500; }
 
@@ -707,7 +691,8 @@ const css = `
 
   @media (min-width: 480px) {
     .form-body { padding: 32px 24px 80px; }
-    .header { padding: 56px 24px 48px; }
-    .header-title { font-size: 28px; }
+    .header { padding: 40px 24px 32px; }
+    .logo-img { height: 64px; max-width: 200px; }
+    .header-title { font-size: 26px; }
   }
 `;
