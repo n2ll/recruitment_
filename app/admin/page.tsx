@@ -56,7 +56,38 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend";
+
+interface RecommendResponse {
+  success: boolean;
+  job: {
+    address: string;
+    lat: number;
+    lng: number;
+    sigungu?: string | null;
+    vehicle_required: boolean;
+    schedule?: string;
+    summary?: string;
+  };
+  poolSize: number;
+  candidates: Array<{
+    id: number;
+    source: "applicant" | "legacy";
+    name: string;
+    phone: string;
+    sigungu?: string | null;
+    location?: string | null;
+    own_vehicle?: string | null;
+    created_at: string;
+    score: {
+      total: number;
+      distance: number;
+      vehicle: number;
+      recency: number;
+      distanceKm: number;
+    };
+  }>;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   서류심사: "#6b7280",
@@ -123,6 +154,94 @@ export default function AdminPage() {
   const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   useEffect(() => { setEditDraft({}); }, [selectedId]);
+
+  // 추천 받기 state
+  const [recPosting, setRecPosting] = useState("");
+  const [recManualAddr, setRecManualAddr] = useState("");
+  const [recLoading, setRecLoading] = useState(false);
+  const [recResult, setRecResult] = useState<RecommendResponse | null>(null);
+  const [recSelected, setRecSelected] = useState<Set<string>>(new Set());
+  const [recSending, setRecSending] = useState(false);
+  const [recPreviewOpen, setRecPreviewOpen] = useState(false);
+
+  const candidateKey = (c: { source: string; id: number }) => `${c.source}-${c.id}`;
+
+  const runRecommend = async () => {
+    if (!recPosting.trim()) {
+      alert("공고 내용을 입력해주세요.");
+      return;
+    }
+    setRecLoading(true);
+    setRecResult(null);
+    setRecSelected(new Set());
+    try {
+      const res = await fetch("/api/admin/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          posting: recPosting,
+          manualAddress: recManualAddr || undefined,
+        }),
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert("추천 실패: " + (json.error || "알 수 없는 오류"));
+        return;
+      }
+      setRecResult(json);
+      setRecSelected(new Set(json.candidates.map(candidateKey)));
+    } catch {
+      alert("네트워크 오류");
+    } finally {
+      setRecLoading(false);
+    }
+  };
+
+  const toggleRecPick = (key: string) => {
+    setRecSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const sendRecMessages = async () => {
+    if (!recResult) return;
+    const picked = recResult.candidates.filter((c) => recSelected.has(candidateKey(c)));
+    if (picked.length === 0) {
+      alert("발송 대상을 선택해주세요.");
+      return;
+    }
+    if (!confirm(`${picked.length}명에게 SMS 발송하시겠습니까?`)) return;
+    setRecSending(true);
+    try {
+      const res = await fetch("/api/admin/messages/bulk-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: picked.map((c) => ({
+            phone: c.phone,
+            applicant_id: c.source === "applicant" ? c.id : null,
+          })),
+          body: recPosting,
+        }),
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`발송 완료: 성공 ${json.sent}건 / 실패 ${json.failed}건`);
+        setRecPreviewOpen(false);
+      } else {
+        alert("발송 실패: " + (json.error || ""));
+      }
+    } catch {
+      alert("네트워크 오류");
+    } finally {
+      setRecSending(false);
+    }
+  };
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -398,6 +517,11 @@ export default function AdminPage() {
             onClick={() => setTab("confirmed-slots")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
             확정 슬롯
+          </button>
+          <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
+            onClick={() => setTab("recommend")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            추천 받기
           </button>
           <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
             onClick={() => setTab("contact")}>
@@ -862,6 +986,157 @@ export default function AdminPage() {
                 );
               })()}
             </div>
+          ) : tab === "recommend" ? (
+            <div className="content">
+              <h2 className="page-title">배송원 추천</h2>
+              <p className="page-desc">
+                공고 내용을 붙여넣으면 Claude가 상차지 주소를 추출하고, 등록된 후보 풀에서 점수 상위 10명을 추천합니다.
+                선택 후 공고 내용을 그대로 SMS로 일괄 발송할 수 있습니다.
+              </p>
+
+              <div className="rec-input-wrap">
+                <label className="rec-label">공고 내용 <span className="req">*</span></label>
+                <textarea
+                  className="rec-textarea"
+                  placeholder="예) [내이루리] 마포구 상암동 평일 오전 자차 배송원 1명 급구 — 시급 25,000원..."
+                  rows={6}
+                  value={recPosting}
+                  onChange={(e) => setRecPosting(e.target.value)}
+                />
+
+                <details className="rec-advanced">
+                  <summary>주소 직접 입력 (Claude 자동 추출 건너뛰기)</summary>
+                  <input
+                    className="rec-input"
+                    placeholder="예) 서울 마포구 상암동"
+                    value={recManualAddr}
+                    onChange={(e) => setRecManualAddr(e.target.value)}
+                  />
+                </details>
+
+                <button className="rec-btn-primary" onClick={runRecommend} disabled={recLoading}>
+                  {recLoading ? "추천 중..." : "추천 받기"}
+                </button>
+              </div>
+
+              {recResult && (
+                <div className="rec-result">
+                  <div className="rec-job-info">
+                    <div><span className="dl">상차지 주소</span>{recResult.job.address}</div>
+                    <div><span className="dl">시군구</span>{recResult.job.sigungu || "-"}</div>
+                    <div><span className="dl">차량 필요</span>{recResult.job.vehicle_required ? "필요" : "불필요"}</div>
+                    {recResult.job.schedule && <div><span className="dl">시간대</span>{recResult.job.schedule}</div>}
+                    <div><span className="dl">전체 풀</span>{recResult.poolSize}명</div>
+                  </div>
+
+                  <div className="rec-actions">
+                    <button
+                      className="rec-btn-secondary"
+                      onClick={() => setRecSelected(new Set(recResult.candidates.map(candidateKey)))}
+                    >
+                      전체 선택
+                    </button>
+                    <button
+                      className="rec-btn-secondary"
+                      onClick={() => setRecSelected(new Set())}
+                    >
+                      전체 해제
+                    </button>
+                    <span className="rec-count">{recSelected.size} / {recResult.candidates.length}명 선택됨</span>
+                    <button
+                      className="rec-btn-primary"
+                      onClick={() => setRecPreviewOpen(true)}
+                      disabled={recSelected.size === 0}
+                    >
+                      미리보기 + 발송
+                    </button>
+                  </div>
+
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 40 }}></th>
+                          <th>순위</th>
+                          <th>이름</th>
+                          <th>출처</th>
+                          <th>거리</th>
+                          <th>차량</th>
+                          <th>시군구</th>
+                          <th>점수</th>
+                          <th>세부</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recResult.candidates.map((c, idx) => {
+                          const k = candidateKey(c);
+                          return (
+                            <tr key={k}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={recSelected.has(k)}
+                                  onChange={() => toggleRecPick(k)}
+                                />
+                              </td>
+                              <td className="td-bold">#{idx + 1}</td>
+                              <td>{c.name} <span className="td-meta">{c.phone}</span></td>
+                              <td>
+                                <span className={`source-badge ${c.source === "legacy" ? "src-legacy" : "src-active"}`}>
+                                  {c.source === "legacy" ? "레거시" : "신규"}
+                                </span>
+                              </td>
+                              <td>{c.score.distanceKm.toFixed(1)} km</td>
+                              <td>{c.own_vehicle || "-"}</td>
+                              <td>{c.sigungu || "-"}</td>
+                              <td className="td-bold rec-score-total">{c.score.total}</td>
+                              <td className="td-meta">
+                                거리 {c.score.distance} · 차량 {c.score.vehicle} · 최신성 {c.score.recency}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {recPreviewOpen && recResult && (
+                <div className="chat-overlay" onClick={(e) => { if (e.target === e.currentTarget) setRecPreviewOpen(false); }}>
+                  <div className="rec-preview-panel">
+                    <div className="rec-preview-header">
+                      <h3>발송 미리보기 — {recSelected.size}명</h3>
+                      <button className="close-btn" onClick={() => setRecPreviewOpen(false)}>✕</button>
+                    </div>
+                    <div className="rec-preview-body">
+                      <div className="rec-preview-meta">
+                        SMS로 일괄 발송됩니다. 한 번 발송된 메시지는 회수할 수 없습니다.
+                      </div>
+                      <div className="rec-message-preview">{recPosting}</div>
+                      <div className="rec-recipients-preview">
+                        <strong>수신자 ({recSelected.size}명):</strong>
+                        <div className="rec-recipients-list">
+                          {recResult.candidates
+                            .filter((c) => recSelected.has(candidateKey(c)))
+                            .map((c) => (
+                              <span key={candidateKey(c)} className="rec-recipient-chip">
+                                {c.name}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rec-preview-footer">
+                      <button className="cancel-btn" onClick={() => setRecPreviewOpen(false)}>취소</button>
+                      <button className="rec-btn-primary" onClick={sendRecMessages} disabled={recSending}>
+                        {recSending ? "발송 중..." : `${recSelected.size}명에게 발송`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
@@ -1180,6 +1455,87 @@ const css = `
   }
   .slot-drill-header h3 { font-size: 14px; font-weight: 700; }
   .td-slim { font-size: 11px; color: #6b7280; max-width: 280px; white-space: normal; }
+
+  /* 추천 받기 */
+  .rec-input-wrap { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e8e8e0; margin-bottom: 20px; }
+  .rec-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+  .rec-textarea {
+    width: 100%; padding: 12px; border: 1.5px solid #e8e8e0; border-radius: 8px;
+    font-family: inherit; font-size: 13px; line-height: 1.6; outline: none;
+    resize: vertical;
+  }
+  .rec-textarea:focus { border-color: #F5C518; }
+  .rec-input {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #e8e8e0; border-radius: 8px;
+    font-family: inherit; font-size: 13px; outline: none; margin-top: 8px;
+  }
+  .rec-input:focus { border-color: #F5C518; }
+  .rec-advanced { margin-top: 12px; }
+  .rec-advanced summary { font-size: 12px; color: #6b7280; cursor: pointer; padding: 4px 0; }
+  .rec-btn-primary {
+    margin-top: 14px; padding: 10px 24px;
+    background: #F5C518; color: #3D2B00; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .rec-btn-primary:hover:not(:disabled) { background: #E6B800; }
+  .rec-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rec-btn-secondary {
+    padding: 7px 14px; background: #fff; color: #374151;
+    border: 1.5px solid #E8E8E0; border-radius: 8px;
+    font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .rec-btn-secondary:hover { background: #f9fafb; }
+
+  .rec-result { margin-top: 12px; }
+  .rec-job-info {
+    background: #FFFBEB; padding: 14px 16px; border-radius: 10px; border: 1px solid #F5C518;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px;
+    margin-bottom: 16px; font-size: 13px;
+  }
+  .rec-actions {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .rec-count { font-size: 13px; color: #6b7280; margin-left: auto; }
+  .rec-score-total { color: #B8860B; font-size: 15px; }
+  .source-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: 10px; font-weight: 700;
+  }
+  .src-active { background: #dbeafe; color: #1e3a8a; }
+  .src-legacy { background: #f3f4f6; color: #6b7280; }
+  .td-meta { font-size: 11px; color: #9ca3af; }
+
+  .rec-preview-panel {
+    background: #fff; max-width: 540px; width: 92%; margin: 60px auto;
+    border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; max-height: 80vh;
+  }
+  .rec-preview-header {
+    padding: 18px 20px; border-bottom: 1px solid #e8e8e0;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rec-preview-header h3 { font-size: 15px; font-weight: 700; }
+  .rec-preview-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .rec-preview-meta {
+    font-size: 12px; color: #ef4444; background: #fef2f2; padding: 8px 12px;
+    border-radius: 6px; margin-bottom: 14px; font-weight: 500;
+  }
+  .rec-message-preview {
+    background: #FFFBEB; border: 1px solid #F5C518; border-radius: 10px;
+    padding: 14px 16px; font-size: 13px; line-height: 1.7;
+    white-space: pre-wrap; margin-bottom: 16px; max-height: 240px; overflow-y: auto;
+  }
+  .rec-recipients-preview { font-size: 13px; }
+  .rec-recipients-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .rec-recipient-chip {
+    display: inline-block; padding: 3px 10px;
+    background: #f3f4f6; border-radius: 12px; font-size: 12px; color: #374151;
+  }
+  .rec-preview-footer {
+    padding: 14px 20px; border-top: 1px solid #e8e8e0;
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
 
   .screening-list { display: flex; flex-direction: column; gap: 12px; }
   .screening-card {
