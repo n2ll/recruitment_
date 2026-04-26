@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getBrowserClient } from "@/lib/supabase";
 
 interface Applicant {
   id: number;
@@ -229,26 +230,83 @@ export default function AdminPage() {
     }
   };
 
-  // Realtime 구독 (대화 화면이 열려있을 때)
-  useEffect(() => {
-    if (!chatApplicant) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/admin/messages/${chatApplicant.id}`);
-        const json = await res.json();
-        setMessages(json.data || []);
-      } catch { /* ignore */ }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [chatApplicant]);
+  // 현재 열려있는 chat applicant 참조 — Realtime 핸들러 안에서 최신 값 접근용
+  const chatApplicantRef = useRef<Applicant | null>(null);
+  useEffect(() => { chatApplicantRef.current = chatApplicant; }, [chatApplicant]);
 
   useEffect(() => {
     fetchData();
     fetchHeartbeats();
-    const dataInterval = setInterval(() => fetchData(true), 30000);
-    const hbInterval = setInterval(fetchHeartbeats, 30000);
+    // 폴링은 Realtime 끊김 시 fallback (60초)
+    const dataInterval = setInterval(() => fetchData(true), 60000);
+    const hbInterval = setInterval(fetchHeartbeats, 60000);
     return () => { clearInterval(dataInterval); clearInterval(hbInterval); };
   }, [fetchData, fetchHeartbeats]);
+
+  // ── Realtime 구독: applicants / messages / device_heartbeat ──
+  useEffect(() => {
+    const supabase = getBrowserClient();
+
+    const channel = supabase
+      .channel("admin-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "applicants" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newRow = payload.new as Applicant;
+            setData((prev) =>
+              prev.some((a) => a.id === newRow.id) ? prev : [newRow, ...prev]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            const newRow = payload.new as Applicant;
+            setData((prev) =>
+              prev.map((a) => (a.id === newRow.id ? { ...a, ...newRow } : a))
+            );
+          } else if (payload.eventType === "DELETE") {
+            const oldRow = payload.old as Applicant;
+            setData((prev) => prev.filter((a) => a.id !== oldRow.id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new as Message;
+          const current = chatApplicantRef.current;
+          if (
+            current &&
+            (msg.applicant_id === current.id || msg.applicant_phone === current.phone)
+          ) {
+            setMessages((prev) =>
+              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "device_heartbeat" },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldHb = payload.old as Heartbeat;
+            setHeartbeats((prev) => prev.filter((h) => h.device_id !== oldHb.device_id));
+          } else {
+            const newHb = payload.new as Heartbeat;
+            setHeartbeats((prev) => {
+              const without = prev.filter((h) => h.device_id !== newHb.device_id);
+              return [newHb, ...without];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // 전용 폰 상태 판별
   const phoneStatus = (() => {
