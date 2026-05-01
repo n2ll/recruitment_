@@ -164,8 +164,39 @@ export default function AdminPage() {
   const [recResult, setRecResult] = useState<RecommendResponse | null>(null);
   const [recSelected, setRecSelected] = useState<Set<string>>(new Set());
   const [recSending, setRecSending] = useState(false);
+  const [recRough, setRecRough] = useState("");
+  const [recGenerating, setRecGenerating] = useState(false);
+  const [recGenMissing, setRecGenMissing] = useState<string[]>([]);
 
   const candidateKey = (c: { source: string; id: number }) => `${c.source}-${c.id}`;
+
+  const generateRecPosting = async () => {
+    if (!recRough.trim()) {
+      alert("간단한 메모를 입력해주세요.");
+      return;
+    }
+    setRecGenerating(true);
+    setRecGenMissing([]);
+    try {
+      const res = await fetch("/api/admin/recommend/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rough: recRough }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "공고 생성 실패");
+        return;
+      }
+      setRecPosting(json.posting || "");
+      setRecGenMissing(Array.isArray(json.missing) ? json.missing : []);
+    } catch (e) {
+      console.error(e);
+      alert("공고 생성 중 오류가 발생했습니다.");
+    } finally {
+      setRecGenerating(false);
+    }
+  };
 
   const ageFromBirthDate = (birth: string | null | undefined): number | null => {
     if (!birth) return null;
@@ -1058,11 +1089,39 @@ export default function AdminPage() {
               </p>
 
               <div className="rec-input-wrap">
+                <details className="rec-generate" open={!recPosting}>
+                  <summary>✨ 공고 자동 생성 (대충 입력하면 Claude가 다듬어줍니다)</summary>
+                  <div className="rec-generate-body">
+                    <textarea
+                      className="rec-input"
+                      placeholder="예) 강북미아 토일 장보기 자차, 시급 1.5~2만, 픽업 도봉로 34"
+                      rows={3}
+                      value={recRough}
+                      onChange={(e) => setRecRough(e.target.value)}
+                    />
+                    <button
+                      className="rec-btn-secondary rec-gen-btn"
+                      onClick={generateRecPosting}
+                      disabled={recGenerating}
+                    >
+                      {recGenerating ? "생성 중..." : "공고 생성하기"}
+                    </button>
+                    {recGenMissing.length > 0 && (
+                      <div className="rec-gen-missing">
+                        ⚠️ 메모에 빠진 항목이 있어 <code>[?]</code>로 표시했습니다 — 직접 채워주세요:&nbsp;
+                        {recGenMissing.map((m) => (
+                          <span key={m} className="rec-missing-chip">{m}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+
                 <label className="rec-label">공고 내용 <span className="req">*</span></label>
                 <textarea
                   className="rec-textarea"
                   placeholder="예) [내이루리] 마포구 상암동 평일 오전 자차 배송원 1명 급구 — 시급 25,000원..."
-                  rows={6}
+                  rows={10}
                   value={recPosting}
                   onChange={(e) => setRecPosting(e.target.value)}
                 />
@@ -1591,6 +1650,31 @@ const css = `
     font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
   }
   .rec-btn-secondary:hover { background: #f9fafb; }
+  .rec-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .rec-generate {
+    margin-bottom: 16px; padding: 12px 14px;
+    background: #FAF7F0; border: 1px dashed #E8DDB8; border-radius: 10px;
+  }
+  .rec-generate summary {
+    font-size: 13px; font-weight: 600; color: #3D2B00;
+    cursor: pointer; padding: 2px 0; outline: none;
+  }
+  .rec-generate-body { margin-top: 10px; }
+  .rec-gen-btn { margin-top: 10px; }
+  .rec-gen-missing {
+    margin-top: 10px; padding: 8px 10px;
+    background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 6px;
+    font-size: 12px; color: #78350F; line-height: 1.6;
+  }
+  .rec-gen-missing code {
+    background: #fff; padding: 1px 5px; border-radius: 3px; font-size: 11px;
+  }
+  .rec-missing-chip {
+    display: inline-block; margin: 2px 4px 2px 0; padding: 1px 8px;
+    background: #fff; border: 1px solid #FCD34D; border-radius: 10px;
+    font-size: 11px; color: #78350F; font-weight: 600;
+  }
 
   .rec-result { margin-top: 12px; }
   .rec-job-info {
