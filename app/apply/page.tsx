@@ -39,8 +39,6 @@ interface FormData {
 const KAKAO_CHANNEL_URL =
   process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "https://pf.kakao.com/";
 
-const MIN_INTRO_LEN = 30;
-
 function formatPhone(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
   if (d.length < 4) return d;
@@ -209,8 +207,6 @@ function ApplyPage() {
     if (form.workHours.length === 0) e.workHours = "희망 근무 시간대를 하나 이상 선택해주세요";
     if (!form.introduction.trim()) {
       e.introduction = "자기소개를 작성해주세요";
-    } else if (form.introduction.trim().length < MIN_INTRO_LEN) {
-      e.introduction = `자기소개는 최소 ${MIN_INTRO_LEN}자 이상 작성해주세요`;
     }
     if (!form.availableDate) e.availableDate = "업무 시작 가능일을 선택해주세요";
     if (!form.selfOwnership) e.selfOwnership = "본인 명의 여부를 선택해주세요";
@@ -477,14 +473,11 @@ function ApplyPage() {
               <span className="section-num">05</span>
               <h3 className="section-title">자기소개 및 지원동기 <span className="req">*</span></h3>
             </div>
-            <p className="section-desc">경력, 강점 등을 상세하게 작성해주세요. 최소 {MIN_INTRO_LEN}자 이상.</p>
+            <p className="section-desc">경력, 강점 등을 상세하게 작성해주세요.</p>
             <textarea className={`textarea ${errors.introduction ? "input-err" : ""}`}
               placeholder="자유롭게 작성해주세요." rows={5}
               value={form.introduction}
               onChange={(e) => set("introduction")(e.target.value)} />
-            <p className={`intro-counter ${form.introduction.trim().length < MIN_INTRO_LEN ? "intro-short" : "intro-ok"}`}>
-              {form.introduction.trim().length} / {MIN_INTRO_LEN}자
-            </p>
             {errors.introduction && <p className="error-msg">{errors.introduction}</p>}
           </section>
 
@@ -666,12 +659,6 @@ const css = `
   }
   .addr-btn:hover { opacity: 0.85; }
   .addr-btn:active { transform: scale(0.98); }
-
-  .intro-counter {
-    font-size: 12px; margin-top: 5px; text-align: right; font-weight: 500;
-  }
-  .intro-short { color: #ef4444; }
-  .intro-ok { color: #10b981; }
 
   .radio-group { display: flex; gap: 10px; }
   .radio-btn {

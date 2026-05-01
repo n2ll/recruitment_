@@ -79,6 +79,7 @@ interface RecommendResponse {
     location?: string | null;
     own_vehicle?: string | null;
     created_at: string;
+    birth_date?: string | null;
     score: {
       total: number;
       distance: number;
@@ -165,6 +166,25 @@ export default function AdminPage() {
   const [recSending, setRecSending] = useState(false);
 
   const candidateKey = (c: { source: string; id: number }) => `${c.source}-${c.id}`;
+
+  const ageFromBirthDate = (birth: string | null | undefined): number | null => {
+    if (!birth) return null;
+    const d = birth.replace(/\D/g, "");
+    if (d.length !== 6) return null;
+    const yy = parseInt(d.slice(0, 2), 10);
+    const mm = parseInt(d.slice(2, 4), 10);
+    const dd = parseInt(d.slice(4, 6), 10);
+    if (isNaN(yy) || isNaN(mm) || isNaN(dd)) return null;
+    const now = new Date();
+    const currentYY = now.getFullYear() % 100;
+    const fullYear = yy <= currentYY ? 2000 + yy : 1900 + yy;
+    let age = now.getFullYear() - fullYear;
+    const beforeBirthday =
+      now.getMonth() + 1 < mm ||
+      (now.getMonth() + 1 === mm && now.getDate() < dd);
+    if (beforeBirthday) age -= 1;
+    return age >= 0 && age < 120 ? age : null;
+  };
 
   const runRecommend = async () => {
     if (!recPosting.trim()) {
@@ -1123,6 +1143,7 @@ export default function AdminPage() {
                           <th style={{ width: 40 }}></th>
                           <th>순위</th>
                           <th>이름</th>
+                          <th>나이</th>
                           <th>출처</th>
                           <th>거리</th>
                           <th>차량</th>
@@ -1134,6 +1155,7 @@ export default function AdminPage() {
                       <tbody>
                         {recResult.candidates.map((c, idx) => {
                           const k = candidateKey(c);
+                          const age = ageFromBirthDate(c.birth_date);
                           return (
                             <tr key={k}>
                               <td>
@@ -1145,6 +1167,7 @@ export default function AdminPage() {
                               </td>
                               <td className="td-bold">#{idx + 1}</td>
                               <td>{c.name} <span className="td-meta">{c.phone}</span></td>
+                              <td>{age !== null ? `${age}세` : "-"}</td>
                               <td>
                                 <span className={`source-badge ${c.source === "legacy" ? "src-legacy" : "src-active"}`}>
                                   {c.source === "legacy" ? "레거시" : "신규"}

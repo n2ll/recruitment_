@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     // applicants(B마트) 중 status가 '확정'/'부적합'이 아니면 모두 풀에 포함
     const { data: activeRows, error: aErr } = await supabase
       .from("applicants")
-      .select("id, name, phone, lat, lng, own_vehicle, created_at, sigungu, location, status")
+      .select("id, name, phone, lat, lng, own_vehicle, created_at, sigungu, location, status, birth_date")
       .not("status", "in", "(확정,부적합)")
       .not("lat", "is", null);
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     const { data: legacyRows, error: lErr } = await supabase
       .from("legacy_applicants")
-      .select("id, name, phone, lat, lng, own_vehicle, submitted_at, imported_at, sigungu, location, promoted_applicant_id")
+      .select("id, name, phone, lat, lng, own_vehicle, submitted_at, imported_at, sigungu, location, promoted_applicant_id, birth_date")
       .is("promoted_applicant_id", null)
       .not("disqualified", "is", true)
       .not("lat", "is", null);
@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
         created_at: r.created_at as string,
         sigungu: r.sigungu as string | null,
         location: r.location as string | null,
+        birth_date: r.birth_date as string | null,
       })),
       ...(legacyRows || []).map((r) => ({
         id: r.id as number,
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
         created_at: (r.submitted_at || r.imported_at) as string,
         sigungu: r.sigungu as string | null,
         location: r.location as string | null,
+        birth_date: r.birth_date as string | null,
       })),
     ];
 

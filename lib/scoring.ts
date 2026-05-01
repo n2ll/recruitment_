@@ -20,6 +20,7 @@ export interface CandidateForScoring {
   created_at: string;
   sigungu?: string | null;
   location?: string | null;
+  birth_date?: string | null;
 }
 
 export interface ScoreBreakdown {
