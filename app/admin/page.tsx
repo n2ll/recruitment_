@@ -154,56 +154,68 @@ export default function AdminPage() {
   } | null>(null);
   const [draftEdited, setDraftEdited] = useState(false);
 
-  // 구인 에이전트 테스트 탭
+  // 구인 에이전트 테스트 탭 (세션 기반 — 한 번 시작하면 자동 누적)
+  type AgentSessionTurn = {
+    direction: "inbound" | "outbound";
+    body: string;
+    status?: "reply" | "need_info";
+    reasoning?: string;
+    missing_info?: string;
+  };
+
   const [agentApplicantId, setAgentApplicantId] = useState<number | "manual">("manual");
   const [agentSearch, setAgentSearch] = useState("");
-  const [agentInbound, setAgentInbound] = useState("");
+  const [agentNextInbound, setAgentNextInbound] = useState("");
   const [agentManualName, setAgentManualName] = useState("");
   const [agentManualBranch, setAgentManualBranch] = useState("");
   const [agentManualWorkHours, setAgentManualWorkHours] = useState("");
   const [agentUseRealHistory, setAgentUseRealHistory] = useState(true);
-  const [agentExtraHistory, setAgentExtraHistory] = useState("");
   const [agentLoading, setAgentLoading] = useState(false);
-  const [agentResult, setAgentResult] = useState<{
-    status: "reply" | "need_info";
-    draft_text: string | null;
-    reasoning: string;
-    missing_info?: string;
-    history_turn_count: number;
-  } | null>(null);
+  const [agentSession, setAgentSession] = useState<AgentSessionTurn[]>([]);
+  const [agentRealHistoryCount, setAgentRealHistoryCount] = useState<number | null>(null);
+
+  const resetAgentSession = () => {
+    setAgentSession([]);
+    setAgentNextInbound("");
+    setAgentRealHistoryCount(null);
+  };
+
+  // 컨텍스트 변경 시 세션 자동 초기화
+  const setAgentContext = (next: number | "manual") => {
+    if (agentSession.length > 0) {
+      if (!confirm("컨텍스트를 바꾸면 현재 대화가 초기화됩니다. 계속할까요?")) return;
+    }
+    setAgentApplicantId(next);
+    resetAgentSession();
+  };
 
   const runAgentTest = async () => {
-    if (!agentInbound.trim()) {
+    const inbound = agentNextInbound.trim();
+    if (!inbound) {
       alert("인입 메시지를 입력해주세요.");
       return;
     }
     setAgentLoading(true);
-    setAgentResult(null);
+
+    // 즉시 inbound bubble 추가 (낙관적 업데이트)
+    const newInbound: AgentSessionTurn = { direction: "inbound", body: inbound };
+    const sessionWithInbound = [...agentSession, newInbound];
+    setAgentSession(sessionWithInbound);
+    setAgentNextInbound("");
+
     try {
-      const manualHistory = agentExtraHistory
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          // "구직자: ..." or "에이전트: ..." 또는 "에:" / "구:" 약어
-          const m = line.match(/^(구직자|구|에이전트|에|매니저|관리자):\s*(.*)$/);
-          if (!m) return null;
-          const direction =
-            m[1] === "구직자" || m[1] === "구" ? "inbound" : "outbound";
-          return {
-            direction: direction as "inbound" | "outbound",
-            body: m[2],
-            created_at: new Date().toISOString(),
-          };
-        })
-        .filter((x): x is { direction: "inbound" | "outbound"; body: string; created_at: string } => x !== null);
+      const manualHistory = agentSession.map((t) => ({
+        direction: t.direction,
+        body: t.body,
+        created_at: new Date().toISOString(),
+      }));
 
       const res = await fetch("/api/admin/agent/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           applicant_id: agentApplicantId === "manual" ? null : agentApplicantId,
-          inbound_text: agentInbound,
+          inbound_text: inbound,
           use_real_history: agentApplicantId !== "manual" && agentUseRealHistory,
           manual: agentApplicantId === "manual" ? {
             name: agentManualName || null,
@@ -216,18 +228,55 @@ export default function AdminPage() {
       const json = await res.json();
       if (!res.ok) {
         alert(json.error || "테스트 실패");
+        // 실패 시 inbound는 남겨두되 에러 표시
+        setAgentSession([
+          ...sessionWithInbound,
+          {
+            direction: "outbound",
+            body: `[에러: ${json.error || "실패"}]`,
+            status: "need_info",
+            reasoning: "API 호출 실패",
+          },
+        ]);
         return;
       }
-      setAgentResult({
-        ...json.draft,
-        history_turn_count: json.context?.history_turn_count ?? 0,
-      });
+
+      const realCount =
+        (json.context?.history_turn_count ?? 0) - agentSession.length;
+      setAgentRealHistoryCount(Math.max(0, realCount));
+
+      const draft = json.draft;
+      const outboundBody =
+        draft.status === "reply"
+          ? draft.draft_text || "(빈 답변)"
+          : `(need_info — 모자란 정보: ${draft.missing_info || "?"})`;
+
+      setAgentSession([
+        ...sessionWithInbound,
+        {
+          direction: "outbound",
+          body: outboundBody,
+          status: draft.status,
+          reasoning: draft.reasoning,
+          missing_info: draft.missing_info,
+        },
+      ]);
     } catch (e) {
       console.error(e);
       alert("테스트 중 오류");
     } finally {
       setAgentLoading(false);
     }
+  };
+
+  const editAgentTurn = (idx: number, newBody: string) => {
+    setAgentSession((prev) =>
+      prev.map((t, i) => (i === idx ? { ...t, body: newBody } : t))
+    );
+  };
+
+  const deleteAgentTurnsFrom = (idx: number) => {
+    setAgentSession((prev) => prev.slice(0, idx));
   };
 
   // 전용 폰 heartbeat
@@ -1803,8 +1852,8 @@ export default function AdminPage() {
             <div className="content">
               <h2 className="page-title">🤖 구인 에이전트 테스트</h2>
               <p className="page-desc">
-                가짜 인입 메시지를 입력하고 Claude가 어떤 답변 초안을 만드는지 즉시 확인합니다.
-                실제 SMS 발송 X · DB 저장 X. 톤·예시 튜닝은 <code>prompts/conversation-examples.txt</code> 파일을 수정 후 재배포.
+                구직자처럼 메시지를 보내면 Claude가 답변 초안을 즉시 만들어 대화가 이어집니다.
+                실제 SMS 발송 X · DB 저장 X. 톤·예시 튜닝은 <code>prompts/conversation-examples.txt</code> 수정 후 재배포.
               </p>
 
               <div className="agent-test-grid">
@@ -1814,16 +1863,14 @@ export default function AdminPage() {
                     <div className="agent-radio-row">
                       <button
                         className={`radio-btn ${agentApplicantId === "manual" ? "radio-on" : ""}`}
-                        onClick={() => setAgentApplicantId("manual")}
+                        onClick={() => setAgentContext("manual")}
                       >
                         신규/모르는 번호
                       </button>
                       <button
                         className={`radio-btn ${agentApplicantId !== "manual" ? "radio-on" : ""}`}
                         onClick={() => {
-                          if (data.length > 0) {
-                            setAgentApplicantId(data[0].id);
-                          }
+                          if (data.length > 0) setAgentContext(data[0].id);
                         }}
                       >
                         기존 지원자 선택
@@ -1863,16 +1910,20 @@ export default function AdminPage() {
                           className="filter-select"
                           style={{ width: "100%", marginTop: 6 }}
                           value={agentApplicantId}
-                          onChange={(e) => setAgentApplicantId(Number(e.target.value))}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            if (agentSession.length > 0) {
+                              if (!confirm("컨텍스트를 바꾸면 현재 대화가 초기화됩니다.")) return;
+                            }
+                            setAgentApplicantId(v);
+                            resetAgentSession();
+                          }}
                         >
                           {data
                             .filter((a) => {
                               if (!agentSearch) return true;
                               const s = agentSearch.toLowerCase();
-                              return (
-                                a.name.toLowerCase().includes(s) ||
-                                a.phone.includes(s)
-                              );
+                              return a.name.toLowerCase().includes(s) || a.phone.includes(s);
                             })
                             .slice(0, 100)
                             .map((a) => (
@@ -1887,77 +1938,109 @@ export default function AdminPage() {
                             checked={agentUseRealHistory}
                             onChange={(e) => setAgentUseRealHistory(e.target.checked)}
                           />
-                          이 지원자의 실제 대화 히스토리 함께 사용
+                          이 지원자의 실제 messages 히스토리 함께 사용
                         </label>
                       </div>
                     )}
                   </div>
 
-                  <div className="agent-section">
-                    <label className="rec-label">추가 히스토리 (선택)</label>
-                    <textarea
-                      className="rec-textarea"
-                      rows={4}
-                      placeholder={`각 줄: "구직자: ..." 또는 "에이전트: ..."\n예) 에이전트: 안녕하세요 티오 생겼어요\n구직자: 시급은요?`}
-                      value={agentExtraHistory}
-                      onChange={(e) => setAgentExtraHistory(e.target.value)}
-                    />
+                  <div className="agent-section agent-stats">
+                    <div className="agent-stat-row">
+                      <span>세션 턴</span><strong>{agentSession.length}</strong>
+                    </div>
+                    {agentRealHistoryCount !== null && (
+                      <div className="agent-stat-row">
+                        <span>실제 히스토리 추가</span><strong>{agentRealHistoryCount}턴</strong>
+                      </div>
+                    )}
+                    <button
+                      className="rec-btn-secondary"
+                      style={{ width: "100%", marginTop: 10 }}
+                      onClick={() => {
+                        if (agentSession.length === 0 || confirm("대화를 초기화할까요?")) {
+                          resetAgentSession();
+                        }
+                      }}
+                      disabled={agentSession.length === 0}
+                    >
+                      🔄 대화 초기화
+                    </button>
                   </div>
-
-                  <div className="agent-section">
-                    <label className="rec-label">방금 받은 인입 메시지 <span className="req">*</span></label>
-                    <textarea
-                      className="rec-textarea"
-                      rows={3}
-                      placeholder="예: 안녕하세요 비마트 지원하고 싶어요"
-                      value={agentInbound}
-                      onChange={(e) => setAgentInbound(e.target.value)}
-                    />
-                  </div>
-
-                  <button
-                    className="rec-btn-primary"
-                    style={{ width: "100%" }}
-                    onClick={runAgentTest}
-                    disabled={agentLoading}
-                  >
-                    {agentLoading ? "Claude 호출 중..." : "초안 생성"}
-                  </button>
                 </div>
 
-                <div className="agent-output-col">
-                  <label className="rec-label">생성 결과</label>
-                  {!agentResult && !agentLoading && (
-                    <div className="agent-empty">왼쪽에 메시지 입력 후 [초안 생성] 클릭</div>
-                  )}
-                  {agentLoading && (
-                    <div className="agent-empty">⏳ Claude 호출 중...</div>
-                  )}
-                  {agentResult && (
-                    <div className={`agent-result ${agentResult.status === "need_info" ? "agent-result-warn" : "agent-result-ok"}`}>
-                      <div className="agent-result-header">
-                        <span className="agent-status-badge">
-                          {agentResult.status === "need_info" ? "⚠️ need_info" : "✅ reply"}
-                        </span>
-                        <span className="agent-history-count">
-                          히스토리 {agentResult.history_turn_count}턴 참조
-                        </span>
+                <div className="agent-output-col agent-chat-col">
+                  <div className="agent-chat-area">
+                    {agentSession.length === 0 ? (
+                      <div className="agent-empty">
+                        아래 입력창에 구직자가 보낼 메시지를 입력하면<br/>Claude 답변과 함께 대화가 시작됩니다.
                       </div>
-                      {agentResult.draft_text && (
-                        <div className="agent-bubble">
-                          {agentResult.draft_text}
-                        </div>
-                      )}
-                      {agentResult.missing_info && (
-                        <div className="agent-missing">
-                          <strong>모자란 정보:</strong> {agentResult.missing_info}
-                        </div>
-                      )}
-                      <div className="agent-reasoning">
-                        <strong>판단 근거:</strong> {agentResult.reasoning}
+                    ) : (
+                      <div className="agent-chat-list">
+                        {agentSession.map((turn, idx) => (
+                          <div
+                            key={idx}
+                            className={`agent-turn ${turn.direction === "inbound" ? "agent-turn-in" : "agent-turn-out"}`}
+                          >
+                            <div className="agent-turn-label">
+                              {turn.direction === "inbound" ? "구직자" : "🤖 에이전트"}
+                              {turn.status === "need_info" && (
+                                <span className="agent-need-badge">need_info</span>
+                              )}
+                              <button
+                                className="agent-turn-del"
+                                title="이 턴부터 삭제"
+                                onClick={() => deleteAgentTurnsFrom(idx)}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <textarea
+                              className="agent-turn-body"
+                              value={turn.body}
+                              onChange={(e) => editAgentTurn(idx, e.target.value)}
+                              rows={Math.max(1, Math.min(6, turn.body.split("\n").length + 1))}
+                            />
+                            {turn.reasoning && (
+                              <div className="agent-turn-reason">
+                                <strong>판단:</strong> {turn.reasoning}
+                                {turn.missing_info && <> · <strong>모자란 정보:</strong> {turn.missing_info}</>}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {agentLoading && (
+                          <div className="agent-turn agent-turn-out">
+                            <div className="agent-turn-label">🤖 에이전트</div>
+                            <div className="agent-typing">⏳ Claude 호출 중...</div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+
+                  <div className="agent-input-row">
+                    <textarea
+                      className="rec-textarea"
+                      rows={2}
+                      placeholder='구직자가 보낼 메시지를 입력 (Enter로 전송, Shift+Enter 줄바꿈)'
+                      value={agentNextInbound}
+                      onChange={(e) => setAgentNextInbound(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          runAgentTest();
+                        }
+                      }}
+                      disabled={agentLoading}
+                    />
+                    <button
+                      className="rec-btn-primary agent-send-btn"
+                      onClick={runAgentTest}
+                      disabled={agentLoading || !agentNextInbound.trim()}
+                    >
+                      {agentLoading ? "..." : "전송"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2626,10 +2709,11 @@ const css = `
   }
 
   .agent-test-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    display: grid; grid-template-columns: 280px 1fr; gap: 16px;
+    height: calc(100vh - 200px); min-height: 500px;
   }
-  @media (max-width: 1100px) {
-    .agent-test-grid { grid-template-columns: 1fr; }
+  @media (max-width: 900px) {
+    .agent-test-grid { grid-template-columns: 1fr; height: auto; }
   }
   .agent-input-col, .agent-output-col {
     background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e8e8e0;
@@ -2653,38 +2737,75 @@ const css = `
     display: flex; align-items: center; gap: 6px;
     margin-top: 10px; font-size: 12px; color: #4b5563; cursor: pointer;
   }
+  .agent-stats {
+    background: #f9fafb; padding: 10px; border-radius: 8px;
+  }
+  .agent-stat-row {
+    display: flex; justify-content: space-between;
+    font-size: 12px; padding: 3px 0; color: #4b5563;
+  }
+  .agent-stat-row strong { color: #111827; }
+
   .agent-empty {
     padding: 40px 20px; text-align: center; color: #9ca3af;
-    font-size: 13px; background: #f9fafb; border-radius: 8px;
+    font-size: 13px; line-height: 1.7;
   }
-  .agent-result {
-    padding: 14px; border-radius: 10px;
-    border: 1.5px solid; background: #fff;
+
+  .agent-chat-col {
+    display: flex; flex-direction: column; padding: 0; overflow: hidden;
   }
-  .agent-result-ok { border-color: #10b981; background: #ECFDF5; }
-  .agent-result-warn { border-color: #FCD34D; background: #FEF3C7; }
-  .agent-result-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 10px;
+  .agent-chat-area {
+    flex: 1; overflow-y: auto; padding: 16px;
+    background: #FAFAF7;
   }
-  .agent-status-badge {
-    font-size: 12px; font-weight: 700; padding: 3px 8px;
-    background: #fff; border-radius: 12px;
+  .agent-chat-list {
+    display: flex; flex-direction: column; gap: 10px;
   }
-  .agent-history-count { font-size: 11px; color: #6b7280; }
-  .agent-bubble {
-    padding: 12px 14px; background: #fff; border-radius: 10px;
-    line-height: 1.65; white-space: pre-wrap; word-break: break-word;
-    margin-bottom: 10px; font-size: 14px;
+  .agent-turn {
+    background: #fff; border-radius: 10px; padding: 10px 12px;
+    border: 1px solid #e8e8e0; max-width: 78%;
   }
-  .agent-missing {
-    padding: 8px 10px; background: #fff7ed; border: 1px solid #FDBA74;
-    border-radius: 6px; font-size: 12px; color: #7c2d12; margin-bottom: 8px;
-    line-height: 1.6;
+  .agent-turn-in {
+    align-self: flex-start; background: #fff; border-color: #e8e8e0;
   }
-  .agent-reasoning {
-    padding: 8px 10px; background: #f3f4f6; border-radius: 6px;
-    font-size: 12px; color: #4b5563; line-height: 1.6;
+  .agent-turn-out {
+    align-self: flex-end; background: #FFFBEB; border-color: #FCD34D;
+  }
+  .agent-turn-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .agent-turn-out .agent-turn-label { color: #92650A; }
+  .agent-need-badge {
+    background: #FEE2E2; color: #991B1B; padding: 1px 6px;
+    border-radius: 10px; font-size: 10px; font-weight: 700;
+  }
+  .agent-turn-del {
+    margin-left: auto; padding: 0 4px; background: transparent;
+    border: none; color: #9ca3af; cursor: pointer; font-size: 12px;
+  }
+  .agent-turn-del:hover { color: #ef4444; }
+  .agent-turn-body {
+    width: 100%; border: none; padding: 4px 0; background: transparent;
+    font-family: inherit; font-size: 13px; line-height: 1.55;
+    resize: none; outline: none; color: #111827;
+  }
+  .agent-turn-reason {
+    margin-top: 6px; padding: 6px 8px;
+    background: rgba(0,0,0,0.04); border-radius: 6px;
+    font-size: 11px; color: #6b7280; line-height: 1.5;
+  }
+  .agent-typing {
+    color: #9ca3af; font-size: 13px; padding: 4px 0;
+  }
+  .agent-input-row {
+    display: flex; gap: 8px; padding: 12px;
+    border-top: 1px solid #e8e8e0; background: #fff;
+  }
+  .agent-input-row .rec-textarea { flex: 1; margin: 0; }
+  .agent-send-btn {
+    margin-top: 0 !important; padding: 0 20px; min-width: 70px;
   }
 
   .ai-draft {
