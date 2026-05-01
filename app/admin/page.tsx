@@ -356,34 +356,36 @@ export default function AdminPage() {
   const [localBranches, setLocalBranches] = useState<Branch[]>([]);
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const userEditedRef = useRef(false);
 
-  // 서버 상태 변경 시 로컬 작업본 동기화 (저장되지 않은 변경이 없을 때만)
-  const branchesDirty = (() => {
-    if (localBranches.length !== branches.length) return true;
-    const byId = new Map(branches.map((b) => [b.id, b]));
-    for (let i = 0; i < localBranches.length; i++) {
-      const lb = localBranches[i];
-      const sb = byId.get(lb.id);
-      if (!sb) return true;
-      if (lb.name !== sb.name || lb.active !== sb.active) return true;
-      // 순서: 로컬 인덱스 vs 서버 sort_order 정렬 인덱스
+  // 사용자가 편집 중이면 서버 동기화로 덮어쓰지 않음
+  useEffect(() => {
+    if (!userEditedRef.current) {
+      const sorted = [...branches].sort((a, b) => a.sort_order - b.sort_order);
+      setLocalBranches(sorted);
     }
+  }, [branches]);
+
+  // 변경 여부 계산 (UI 표시용)
+  const branchesDirty = (() => {
+    if (localBranches.length !== branches.length) return false; // 길이 다르면 아직 sync 안 된 것
     const serverOrdered = [...branches].sort((a, b) => a.sort_order - b.sort_order);
     for (let i = 0; i < localBranches.length; i++) {
-      if (localBranches[i].id !== serverOrdered[i]?.id) return true;
+      const lb = localBranches[i];
+      const sb = serverOrdered[i];
+      if (!sb) return true;
+      if (lb.id !== sb.id) return true;
+      if (lb.name !== sb.name || lb.active !== sb.active) return true;
     }
     return false;
   })();
 
-  useEffect(() => {
-    if (!branchesDirty) {
-      const sorted = [...branches].sort((a, b) => a.sort_order - b.sort_order);
-      setLocalBranches(sorted);
-    }
-    // branchesDirty가 true면 사용자가 작업 중 — 덮어쓰지 않음
-  }, [branches]); // eslint-disable-line react-hooks/exhaustive-deps
+  const markEdited = () => {
+    userEditedRef.current = true;
+  };
 
   const updateLocalBranch = (id: number, updates: Partial<Branch>) => {
+    markEdited();
     setLocalBranches((prev) =>
       prev.map((b) => (b.id === id ? { ...b, ...updates } : b))
     );
@@ -400,6 +402,7 @@ export default function AdminPage() {
       setDragOverId(null);
       return;
     }
+    markEdited();
     setLocalBranches((prev) => {
       const fromIdx = prev.findIndex((b) => b.id === dragId);
       const toIdx = prev.findIndex((b) => b.id === targetId);
@@ -414,6 +417,7 @@ export default function AdminPage() {
   };
 
   const resetBranchChanges = () => {
+    userEditedRef.current = false;
     const sorted = [...branches].sort((a, b) => a.sort_order - b.sort_order);
     setLocalBranches(sorted);
   };
@@ -476,6 +480,7 @@ export default function AdminPage() {
       if (fails.length > 0) {
         alert(`${fails.length}건 저장 실패: ${fails[0].error || "오류"}`);
       }
+      userEditedRef.current = false;
       await fetchBranchesRef.current?.();
     } catch (e) {
       console.error(e);
@@ -504,6 +509,7 @@ export default function AdminPage() {
         return;
       }
       setNewBranchName("");
+      userEditedRef.current = false;
       await fetchBranchesRef.current?.();
     } catch (e) {
       console.error(e);
@@ -526,6 +532,7 @@ export default function AdminPage() {
       if (json.soft) {
         alert(json.message || "지원자가 있어 비활성화 처리했습니다.");
       }
+      userEditedRef.current = false;
       await fetchBranchesRef.current?.();
     } catch (e) {
       console.error(e);
