@@ -61,7 +61,17 @@ export async function GET(
       .update({ unread_count: 0 })
       .eq("id", applicantId);
 
-    return NextResponse.json({ data: messages || [] });
+    // 가장 최근 pending/need_info 초안 1건
+    const { data: latestDraft } = await supabase
+      .from("message_drafts")
+      .select("id, inbound_message_id, draft_text, reasoning, missing_info, status, created_at")
+      .eq("applicant_id", applicantId)
+      .in("status", ["pending", "need_info"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return NextResponse.json({ data: messages || [], draft: latestDraft || null });
   } catch (err) {
     console.error("[messages API error]", err);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });

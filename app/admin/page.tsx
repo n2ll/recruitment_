@@ -145,6 +145,14 @@ export default function AdminPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [msgInput, setMsgInput] = useState("");
   const [msgSending, setMsgSending] = useState(false);
+  const [draft, setDraft] = useState<{
+    id: string;
+    draft_text: string | null;
+    reasoning: string | null;
+    missing_info: string | null;
+    status: "pending" | "need_info";
+  } | null>(null);
+  const [draftEdited, setDraftEdited] = useState(false);
 
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
@@ -601,10 +609,13 @@ export default function AdminPage() {
   const openChat = async (applicant: Applicant) => {
     setChatApplicant(applicant);
     setChatLoading(true);
+    setDraft(null);
+    setDraftEdited(false);
     try {
       const res = await fetch(`/api/admin/messages/${applicant.id}`, { cache: "no-store" });
       const json = await res.json();
       setMessages(json.data || []);
+      setDraft(json.draft || null);
       // unread_count 로컬 초기화
       setData((prev) =>
         prev.map((a) => (a.id === applicant.id ? { ...a, unread_count: 0 } : a))
@@ -620,10 +631,33 @@ export default function AdminPage() {
     setChatApplicant(null);
     setMessages([]);
     setMsgInput("");
+    setDraft(null);
+    setDraftEdited(false);
   };
 
-  const sendMessage = async () => {
-    if (!chatApplicant || !msgInput.trim() || msgSending) return;
+  const useDraftAsInput = () => {
+    if (!draft?.draft_text) return;
+    setMsgInput(draft.draft_text);
+    setDraftEdited(false);
+  };
+
+  const ignoreDraft = async () => {
+    if (!draft) return;
+    const id = draft.id;
+    setDraft(null);
+    try {
+      await fetch(`/api/admin/drafts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ignored" }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const sendBody = async (text: string, opts: { draftId?: string; edited?: boolean }) => {
+    if (!chatApplicant || !text.trim() || msgSending) return;
     setMsgSending(true);
     try {
       const res = await fetch("/api/admin/messages/send", {
@@ -632,14 +666,18 @@ export default function AdminPage() {
         body: JSON.stringify({
           applicant_id: chatApplicant.id,
           phone: chatApplicant.phone,
-          body: msgInput.trim(),
+          body: text.trim(),
           sent_by: "관리자",
+          draft_id: opts.draftId,
+          draft_was_edited: !!opts.edited,
         }),
       });
       const json = await res.json();
       if (json.success) {
         setMessages((prev) => [...prev, json.message]);
         setMsgInput("");
+        setDraft(null);
+        setDraftEdited(false);
       } else {
         alert("발송 실패: " + (json.error || "알 수 없는 오류"));
       }
@@ -648,6 +686,22 @@ export default function AdminPage() {
     } finally {
       setMsgSending(false);
     }
+  };
+
+  const sendMessage = () => {
+    if (!msgInput.trim()) return;
+    const text = msgInput.trim();
+    const usingDraft = !!draft?.draft_text && draft.draft_text === text;
+    const editedDraft = !!draft?.draft_text && draft.draft_text !== text && draftEdited;
+    sendBody(text, {
+      draftId: usingDraft || editedDraft ? draft?.id : undefined,
+      edited: editedDraft,
+    });
+  };
+
+  const sendDraftDirect = () => {
+    if (!draft?.draft_text) return;
+    sendBody(draft.draft_text, { draftId: draft.id, edited: false });
   };
 
   // 현재 열려있는 chat applicant 참조 — Realtime 핸들러 안에서 최신 값 접근용
@@ -703,6 +757,36 @@ export default function AdminPage() {
             setMessages((prev) =>
               prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
             );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_drafts" },
+        (payload) => {
+          const d = payload.new as {
+            id: string;
+            applicant_id: number | null;
+            applicant_phone: string;
+            draft_text: string | null;
+            reasoning: string | null;
+            missing_info: string | null;
+            status: string;
+          };
+          if (d.status !== "pending" && d.status !== "need_info") return;
+          const current = chatApplicantRef.current;
+          if (
+            current &&
+            (d.applicant_id === current.id || d.applicant_phone === current.phone)
+          ) {
+            setDraft({
+              id: d.id,
+              draft_text: d.draft_text,
+              reasoning: d.reasoning,
+              missing_info: d.missing_info,
+              status: d.status as "pending" | "need_info",
+            });
+            setDraftEdited(false);
           }
         }
       )
@@ -1724,12 +1808,68 @@ export default function AdminPage() {
                   )}
                 </div>
 
+                {draft && (
+                  <div className={`ai-draft ${draft.status === "need_info" ? "ai-draft-warn" : ""}`}>
+                    <div className="ai-draft-header">
+                      <span className="ai-draft-label">
+                        {draft.status === "need_info" ? "⚠️ AI 응대 불가" : "🤖 AI 제안"}
+                      </span>
+                      {draft.reasoning && (
+                        <span className="ai-draft-reason">{draft.reasoning}</span>
+                      )}
+                    </div>
+                    {draft.status === "need_info" ? (
+                      <div className="ai-draft-body">
+                        <p className="ai-draft-need">
+                          모자란 정보: <strong>{draft.missing_info}</strong>
+                        </p>
+                        <p className="ai-draft-need-sub">슬랙으로 알림 보냄. 매니저가 직접 답변하세요.</p>
+                        <div className="ai-draft-actions">
+                          <button className="ai-draft-btn-secondary" onClick={ignoreDraft}>닫기</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ai-draft-body">
+                        <p className="ai-draft-text">{draft.draft_text}</p>
+                        <div className="ai-draft-actions">
+                          <button
+                            className="ai-draft-btn-primary"
+                            onClick={sendDraftDirect}
+                            disabled={msgSending}
+                          >
+                            그대로 보내기
+                          </button>
+                          <button
+                            className="ai-draft-btn-secondary"
+                            onClick={useDraftAsInput}
+                            disabled={msgSending}
+                          >
+                            수정해서 보내기
+                          </button>
+                          <button
+                            className="ai-draft-btn-ghost"
+                            onClick={ignoreDraft}
+                            disabled={msgSending}
+                          >
+                            무시
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="chat-input-area">
                   <textarea
                     className="chat-input"
                     placeholder="메시지를 입력하세요..."
                     value={msgInput}
-                    onChange={(e) => setMsgInput(e.target.value)}
+                    onChange={(e) => {
+                      setMsgInput(e.target.value);
+                      if (draft?.draft_text && e.target.value !== draft.draft_text) {
+                        setDraftEdited(true);
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -2241,6 +2381,55 @@ const css = `
     display: flex; gap: 8px; justify-content: flex-end;
     font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 4px;
   }
+
+  .ai-draft {
+    margin: 0 16px 0;
+    padding: 10px 12px;
+    background: #F0F9FF;
+    border: 1px solid #BAE6FD;
+    border-radius: 10px 10px 0 0;
+    border-bottom: none;
+    font-size: 13px;
+  }
+  .ai-draft-warn {
+    background: #FEF3C7; border-color: #FCD34D;
+  }
+  .ai-draft-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+  }
+  .ai-draft-label { font-weight: 700; color: #075985; font-size: 12px; }
+  .ai-draft-warn .ai-draft-label { color: #78350F; }
+  .ai-draft-reason {
+    font-size: 11px; color: #6b7280; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ai-draft-text {
+    margin: 0 0 8px; padding: 8px 10px;
+    background: #fff; border-radius: 6px;
+    line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  }
+  .ai-draft-need { margin: 0 0 4px; font-size: 13px; color: #78350F; }
+  .ai-draft-need-sub { margin: 0 0 8px; font-size: 12px; color: #92400e; }
+  .ai-draft-actions { display: flex; gap: 6px; }
+  .ai-draft-btn-primary {
+    padding: 6px 12px; background: #0EA5E9; color: #fff;
+    border: none; border-radius: 6px; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .ai-draft-btn-primary:hover:not(:disabled) { background: #0284C7; }
+  .ai-draft-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .ai-draft-btn-secondary {
+    padding: 6px 12px; background: #fff; color: #075985;
+    border: 1px solid #BAE6FD; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .ai-draft-btn-secondary:hover:not(:disabled) { background: #f9fafb; }
+  .ai-draft-btn-ghost {
+    padding: 6px 12px; background: transparent; color: #6b7280;
+    border: none; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .ai-draft-btn-ghost:hover { color: #374151; }
 
   .chat-input-area {
     display: flex; gap: 8px; padding: 12px 16px;

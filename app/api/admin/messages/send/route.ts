@@ -4,7 +4,7 @@ import { sendSms } from "@/lib/solapi";
 
 export async function POST(req: NextRequest) {
   try {
-    const { applicant_id, phone, body, sent_by } = await req.json();
+    const { applicant_id, phone, body, sent_by, draft_id, draft_was_edited } = await req.json();
 
     if (!phone || !body) {
       return NextResponse.json(
@@ -44,6 +44,28 @@ export async function POST(req: NextRequest) {
         { error: "메시지 저장 실패" },
         { status: 500 }
       );
+    }
+
+    // 사용된 draft 표시
+    if (draft_id) {
+      await supabase
+        .from("message_drafts")
+        .update({
+          status: draft_was_edited ? "edited" : "used",
+          used_message_id: data.id,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", draft_id);
+    } else if (applicant_id) {
+      // draft_id 없이 매니저가 직접 입력한 경우 — 해당 지원자의 pending draft를 ignored 처리
+      await supabase
+        .from("message_drafts")
+        .update({
+          status: "ignored",
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("applicant_id", applicant_id)
+        .in("status", ["pending", "need_info"]);
     }
 
     return NextResponse.json({ success: true, message: data });
