@@ -3,9 +3,28 @@
  *
  * 인입 SMS마다 Claude로 답변 초안을 만들어 message_drafts에 저장한다.
  * 자동 발송하지 않음 — 매니저가 admin UI에서 검토 후 발송.
+ *
+ * 대화 톤 reference: prompts/conversation-examples.txt
+ *   매니저가 직접 .txt 파일을 수정하면 다음 배포부터 반영됨.
  */
 
+import fs from "fs";
+import path from "path";
+
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+
+let cachedExamples: string | null = null;
+function loadConversationExamples(): string {
+  if (cachedExamples !== null) return cachedExamples;
+  try {
+    const filePath = path.join(process.cwd(), "prompts", "conversation-examples.txt");
+    cachedExamples = fs.readFileSync(filePath, "utf-8");
+  } catch (e) {
+    console.error("[agent] failed to load conversation-examples.txt", e);
+    cachedExamples = "";
+  }
+  return cachedExamples;
+}
 
 export interface AgentApplicantContext {
   id: number | null;
@@ -40,36 +59,15 @@ const KAKAO_CHANNEL_URL =
   process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "http://pf.kakao.com/_xnxaxaib";
 const APPLY_URL = process.env.AGENT_APPLY_URL || "";
 
-const FEW_SHOT_EXAMPLES = `
-## 실제 대화 예시 (톤·길이·스타일 참고용)
+function buildSystemPrompt(): string {
+  const examples = loadConversationExamples();
+  const examplesSection = examples
+    ? `\n## 실제 대화 예시 (톤·길이·스타일 참고용 — 무조건 이 톤 따라가)\n\n${examples}`
+    : "";
+  return SYSTEM_PROMPT_BODY + examplesSection;
+}
 
-### 예시 1 — 지원 직후 안내
-구직자: 비마트 지원서입니다. 감사합니다.
-구직자: 네 감사합니다. 바로 지원했습니다. 다음은 전화를 기다리면 되는건가요?
-에이전트: 네 선생님! 티오 생기면 바로 연락 드릴게요. 감사합니다.
-
-### 예시 2 — 티오 안내 (지점·시간 정확히)
-에이전트: 안녕하세요 [이름]님. 비마트 [지점] 배송 담당 매니저 ${MANAGER_NAME}입니다.
-에이전트: 평일 오전 티오가 나서 연락 드립니다.
-구직자: 안녕하세요 매니저님 지원희망합니다
-에이전트: [이름]님 안녕하세요! ㅠㅠ 저희가 여러명에게 문자를 보냈는데 먼저 회신 주신 분이 계셔서 그분 먼저 진행 예정입니다. 티오 추가되면 1순위로 연락드릴게요. 번거롭게 해서 죄송합니다.
-
-### 예시 3 — 시간 협의
-구직자: 혹시 몇시부터 몇시일까요??
-에이전트: 08시~13시입니다
-구직자: 제가 오후 일정이랑 겹쳐서 못갈 것 같아요ㅠㅠ
-에이전트: 앗 그러신가요ㅠ 알겠습니다. 12시까지도 가능은 합니다~
-
-### 예시 4 — 통화 전환
-구직자: 안녕하세요!! 통화 가능 하신가요?
-에이전트: 네 통화 가능하실까요? (매니저가 직접 콜백)
-
-### 예시 5 — 카카오 채널 안내
-에이전트: 안녕하세요 [이름]님. 비마트 [지점] 담당자 ${MANAGER_NAME}입니다. [요일/시간] 자리가 생겨서 연락 드렸습니다. 시간 되실 때 전화 주세요:)
-에이전트: ${KAKAO_CHANNEL_URL} (내이루리_배송&스케줄 채널 링크)
-`;
-
-const SYSTEM_PROMPT = `너는 옹고잉(내이루리) 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대를 돕는 에이전트다.
+const SYSTEM_PROMPT_BODY = `너는 옹고잉(내이루리) 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대를 돕는 에이전트다.
 구직자가 보낸 문자에 대한 답변 초안을 생성한다. 자동 발송되지 않으니 자연스럽고 정확하게.
 
 ## 톤·스타일
@@ -108,9 +106,7 @@ draft_reply tool로만 응답:
 - status: "reply" — 정상 답변 가능 → draft_text에 답변
 - status: "need_info" — 컨텍스트에 없는 사실관계 질문 → draft_text는 null, missing_info에 무엇이 모자란지 한국어로 (예: "시급, 인근 지하철역")
 
-reasoning에는 왜 그렇게 답변했는지 한 줄로 설명 (예: "이미 자기소개 끝남, 시간 질문에 work_hours로 답변").
-
-${FEW_SHOT_EXAMPLES}`;
+reasoning에는 왜 그렇게 답변했는지 한 줄로 설명 (예: "이미 자기소개 끝남, 시간 질문에 work_hours로 답변").`;
 
 function formatApplicant(a: AgentApplicantContext): string {
   const parts: string[] = [];
@@ -162,7 +158,7 @@ ${input.latestInbound}
   const body = {
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(),
     tools: [
       {
         name: "draft_reply",

@@ -100,8 +100,8 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  // 최근 대화 (최대 20턴, 시간순) — 방금 받은 inbound 포함되므로 그 직전까지만
-  const { data: msgs } = await supabase
+  // 최근 대화 — 가장 최근 30턴을 가져오고, 시간순(오래된 → 최근)으로 재정렬해서 Claude에 전달
+  const { data: recentMsgs } = await supabase
     .from("messages")
     .select("direction, body, created_at")
     .or(
@@ -110,17 +110,20 @@ export async function POST(req: NextRequest) {
         : `applicant_phone.eq.${rec.applicant_phone}`
     )
     .lt("created_at", rec.created_at)
-    .order("created_at", { ascending: true })
-    .limit(20);
+    .order("created_at", { ascending: false })
+    .limit(30);
 
   const stripPrefix = (body: string) =>
     body.replace(/^\s*\[(?:Web발신|국제발신|광고)\]\s*/i, "").trim();
 
-  const history: AgentTurn[] = (msgs || []).map((m) => ({
-    direction: m.direction as "inbound" | "outbound",
-    body: stripPrefix(m.body as string),
-    created_at: m.created_at as string,
-  }));
+  const history: AgentTurn[] = (recentMsgs || [])
+    .slice()
+    .reverse() // 시간순으로 다시 정렬 (오래된 → 최근)
+    .map((m) => ({
+      direction: m.direction as "inbound" | "outbound",
+      body: stripPrefix(m.body as string),
+      created_at: m.created_at as string,
+    }));
 
   // 한국 통신사가 붙이는 [Web발신] 같은 prefix 제거
   const cleanInbound = rec.body
