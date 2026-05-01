@@ -113,17 +113,25 @@ export async function POST(req: NextRequest) {
     .order("created_at", { ascending: true })
     .limit(20);
 
+  const stripPrefix = (body: string) =>
+    body.replace(/^\s*\[(?:Web발신|국제발신|광고)\]\s*/i, "").trim();
+
   const history: AgentTurn[] = (msgs || []).map((m) => ({
     direction: m.direction as "inbound" | "outbound",
-    body: m.body as string,
+    body: stripPrefix(m.body as string),
     created_at: m.created_at as string,
   }));
+
+  // 한국 통신사가 붙이는 [Web발신] 같은 prefix 제거
+  const cleanInbound = rec.body
+    .replace(/^\s*\[(?:Web발신|국제발신|광고)\]\s*/i, "")
+    .trim();
 
   // Claude 호출
   const draft = await generateDraftReply({
     applicant,
     history,
-    latestInbound: rec.body,
+    latestInbound: cleanInbound,
   });
 
   if (!draft) {
