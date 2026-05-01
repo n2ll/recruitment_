@@ -56,7 +56,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "agent";
 
 interface RecommendResponse {
   success: boolean;
@@ -153,6 +153,82 @@ export default function AdminPage() {
     status: "pending" | "need_info";
   } | null>(null);
   const [draftEdited, setDraftEdited] = useState(false);
+
+  // 구인 에이전트 테스트 탭
+  const [agentApplicantId, setAgentApplicantId] = useState<number | "manual">("manual");
+  const [agentSearch, setAgentSearch] = useState("");
+  const [agentInbound, setAgentInbound] = useState("");
+  const [agentManualName, setAgentManualName] = useState("");
+  const [agentManualBranch, setAgentManualBranch] = useState("");
+  const [agentManualWorkHours, setAgentManualWorkHours] = useState("");
+  const [agentUseRealHistory, setAgentUseRealHistory] = useState(true);
+  const [agentExtraHistory, setAgentExtraHistory] = useState("");
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentResult, setAgentResult] = useState<{
+    status: "reply" | "need_info";
+    draft_text: string | null;
+    reasoning: string;
+    missing_info?: string;
+    history_turn_count: number;
+  } | null>(null);
+
+  const runAgentTest = async () => {
+    if (!agentInbound.trim()) {
+      alert("인입 메시지를 입력해주세요.");
+      return;
+    }
+    setAgentLoading(true);
+    setAgentResult(null);
+    try {
+      const manualHistory = agentExtraHistory
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          // "구직자: ..." or "에이전트: ..." 또는 "에:" / "구:" 약어
+          const m = line.match(/^(구직자|구|에이전트|에|매니저|관리자):\s*(.*)$/);
+          if (!m) return null;
+          const direction =
+            m[1] === "구직자" || m[1] === "구" ? "inbound" : "outbound";
+          return {
+            direction: direction as "inbound" | "outbound",
+            body: m[2],
+            created_at: new Date().toISOString(),
+          };
+        })
+        .filter((x): x is { direction: "inbound" | "outbound"; body: string; created_at: string } => x !== null);
+
+      const res = await fetch("/api/admin/agent/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicant_id: agentApplicantId === "manual" ? null : agentApplicantId,
+          inbound_text: agentInbound,
+          use_real_history: agentApplicantId !== "manual" && agentUseRealHistory,
+          manual: agentApplicantId === "manual" ? {
+            name: agentManualName || null,
+            branch1: agentManualBranch || null,
+            work_hours: agentManualWorkHours || null,
+          } : undefined,
+          manual_history: manualHistory.length > 0 ? manualHistory : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "테스트 실패");
+        return;
+      }
+      setAgentResult({
+        ...json.draft,
+        history_turn_count: json.context?.history_turn_count ?? 0,
+      });
+    } catch (e) {
+      console.error(e);
+      alert("테스트 중 오류");
+    } finally {
+      setAgentLoading(false);
+    }
+  };
 
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
@@ -924,6 +1000,11 @@ export default function AdminPage() {
             onClick={() => setTab("branches")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
             지점 관리
+          </button>
+          <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
+            onClick={() => setTab("agent")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            구인 에이전트
           </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()}>
@@ -1718,6 +1799,168 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+          ) : tab === "agent" ? (
+            <div className="content">
+              <h2 className="page-title">🤖 구인 에이전트 테스트</h2>
+              <p className="page-desc">
+                가짜 인입 메시지를 입력하고 Claude가 어떤 답변 초안을 만드는지 즉시 확인합니다.
+                실제 SMS 발송 X · DB 저장 X. 톤·예시 튜닝은 <code>prompts/conversation-examples.txt</code> 파일을 수정 후 재배포.
+              </p>
+
+              <div className="agent-test-grid">
+                <div className="agent-input-col">
+                  <div className="agent-section">
+                    <label className="rec-label">지원자 컨텍스트</label>
+                    <div className="agent-radio-row">
+                      <button
+                        className={`radio-btn ${agentApplicantId === "manual" ? "radio-on" : ""}`}
+                        onClick={() => setAgentApplicantId("manual")}
+                      >
+                        신규/모르는 번호
+                      </button>
+                      <button
+                        className={`radio-btn ${agentApplicantId !== "manual" ? "radio-on" : ""}`}
+                        onClick={() => {
+                          if (data.length > 0) {
+                            setAgentApplicantId(data[0].id);
+                          }
+                        }}
+                      >
+                        기존 지원자 선택
+                      </button>
+                    </div>
+
+                    {agentApplicantId === "manual" ? (
+                      <div className="agent-manual-fields">
+                        <input
+                          className="rec-input"
+                          placeholder="이름 (선택)"
+                          value={agentManualName}
+                          onChange={(e) => setAgentManualName(e.target.value)}
+                        />
+                        <input
+                          className="rec-input"
+                          placeholder="지점 (선택, 예: 강북미아)"
+                          value={agentManualBranch}
+                          onChange={(e) => setAgentManualBranch(e.target.value)}
+                        />
+                        <input
+                          className="rec-input"
+                          placeholder="시간대 (선택, 예: 평일 오전 08~13)"
+                          value={agentManualWorkHours}
+                          onChange={(e) => setAgentManualWorkHours(e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="agent-applicant-picker">
+                        <input
+                          className="rec-input"
+                          placeholder="이름 또는 전화번호로 검색"
+                          value={agentSearch}
+                          onChange={(e) => setAgentSearch(e.target.value)}
+                        />
+                        <select
+                          className="filter-select"
+                          style={{ width: "100%", marginTop: 6 }}
+                          value={agentApplicantId}
+                          onChange={(e) => setAgentApplicantId(Number(e.target.value))}
+                        >
+                          {data
+                            .filter((a) => {
+                              if (!agentSearch) return true;
+                              const s = agentSearch.toLowerCase();
+                              return (
+                                a.name.toLowerCase().includes(s) ||
+                                a.phone.includes(s)
+                              );
+                            })
+                            .slice(0, 100)
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} · {a.phone} · {a.branch} · {a.status}
+                              </option>
+                            ))}
+                        </select>
+                        <label className="agent-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={agentUseRealHistory}
+                            onChange={(e) => setAgentUseRealHistory(e.target.checked)}
+                          />
+                          이 지원자의 실제 대화 히스토리 함께 사용
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="agent-section">
+                    <label className="rec-label">추가 히스토리 (선택)</label>
+                    <textarea
+                      className="rec-textarea"
+                      rows={4}
+                      placeholder={`각 줄: "구직자: ..." 또는 "에이전트: ..."\n예) 에이전트: 안녕하세요 티오 생겼어요\n구직자: 시급은요?`}
+                      value={agentExtraHistory}
+                      onChange={(e) => setAgentExtraHistory(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="agent-section">
+                    <label className="rec-label">방금 받은 인입 메시지 <span className="req">*</span></label>
+                    <textarea
+                      className="rec-textarea"
+                      rows={3}
+                      placeholder="예: 안녕하세요 비마트 지원하고 싶어요"
+                      value={agentInbound}
+                      onChange={(e) => setAgentInbound(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    className="rec-btn-primary"
+                    style={{ width: "100%" }}
+                    onClick={runAgentTest}
+                    disabled={agentLoading}
+                  >
+                    {agentLoading ? "Claude 호출 중..." : "초안 생성"}
+                  </button>
+                </div>
+
+                <div className="agent-output-col">
+                  <label className="rec-label">생성 결과</label>
+                  {!agentResult && !agentLoading && (
+                    <div className="agent-empty">왼쪽에 메시지 입력 후 [초안 생성] 클릭</div>
+                  )}
+                  {agentLoading && (
+                    <div className="agent-empty">⏳ Claude 호출 중...</div>
+                  )}
+                  {agentResult && (
+                    <div className={`agent-result ${agentResult.status === "need_info" ? "agent-result-warn" : "agent-result-ok"}`}>
+                      <div className="agent-result-header">
+                        <span className="agent-status-badge">
+                          {agentResult.status === "need_info" ? "⚠️ need_info" : "✅ reply"}
+                        </span>
+                        <span className="agent-history-count">
+                          히스토리 {agentResult.history_turn_count}턴 참조
+                        </span>
+                      </div>
+                      {agentResult.draft_text && (
+                        <div className="agent-bubble">
+                          {agentResult.draft_text}
+                        </div>
+                      )}
+                      {agentResult.missing_info && (
+                        <div className="agent-missing">
+                          <strong>모자란 정보:</strong> {agentResult.missing_info}
+                        </div>
+                      )}
+                      <div className="agent-reasoning">
+                        <strong>판단 근거:</strong> {agentResult.reasoning}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
@@ -2380,6 +2623,68 @@ const css = `
   .bubble-meta {
     display: flex; gap: 8px; justify-content: flex-end;
     font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 4px;
+  }
+
+  .agent-test-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  @media (max-width: 1100px) {
+    .agent-test-grid { grid-template-columns: 1fr; }
+  }
+  .agent-input-col, .agent-output-col {
+    background: #fff; padding: 16px; border-radius: 12px; border: 1px solid #e8e8e0;
+  }
+  .agent-section { margin-bottom: 14px; }
+  .agent-radio-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .agent-radio-row .radio-btn {
+    flex: 1; padding: 8px;
+    border: 1.5px solid #E8E8E0; border-radius: 8px;
+    font-size: 12px; font-weight: 500; font-family: inherit;
+    color: #6b7280; background: #fff; cursor: pointer;
+  }
+  .agent-radio-row .radio-on {
+    border-color: #F5C518; background: #FFFBEB;
+    color: #92650A; font-weight: 700;
+  }
+  .agent-manual-fields { display: flex; flex-direction: column; gap: 6px; }
+  .agent-manual-fields .rec-input { margin-top: 0; }
+  .agent-applicant-picker .rec-input { margin-top: 0; }
+  .agent-checkbox {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 10px; font-size: 12px; color: #4b5563; cursor: pointer;
+  }
+  .agent-empty {
+    padding: 40px 20px; text-align: center; color: #9ca3af;
+    font-size: 13px; background: #f9fafb; border-radius: 8px;
+  }
+  .agent-result {
+    padding: 14px; border-radius: 10px;
+    border: 1.5px solid; background: #fff;
+  }
+  .agent-result-ok { border-color: #10b981; background: #ECFDF5; }
+  .agent-result-warn { border-color: #FCD34D; background: #FEF3C7; }
+  .agent-result-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .agent-status-badge {
+    font-size: 12px; font-weight: 700; padding: 3px 8px;
+    background: #fff; border-radius: 12px;
+  }
+  .agent-history-count { font-size: 11px; color: #6b7280; }
+  .agent-bubble {
+    padding: 12px 14px; background: #fff; border-radius: 10px;
+    line-height: 1.65; white-space: pre-wrap; word-break: break-word;
+    margin-bottom: 10px; font-size: 14px;
+  }
+  .agent-missing {
+    padding: 8px 10px; background: #fff7ed; border: 1px solid #FDBA74;
+    border-radius: 6px; font-size: 12px; color: #7c2d12; margin-bottom: 8px;
+    line-height: 1.6;
+  }
+  .agent-reasoning {
+    padding: 8px 10px; background: #f3f4f6; border-radius: 6px;
+    font-size: 12px; color: #4b5563; line-height: 1.6;
   }
 
   .ai-draft {
