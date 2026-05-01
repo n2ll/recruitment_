@@ -154,7 +154,7 @@ export default function AdminPage() {
   } | null>(null);
   const [draftEdited, setDraftEdited] = useState(false);
 
-  // 구인 에이전트 테스트 탭 (세션 기반 — 한 번 시작하면 자동 누적)
+  // 구인 에이전트 테스트 탭 (세션 기반 — 공고만으로 응대 시뮬레이션)
   type AgentSessionTurn = {
     direction: "inbound" | "outbound";
     body: string;
@@ -163,30 +163,14 @@ export default function AdminPage() {
     missing_info?: string;
   };
 
-  const [agentApplicantId, setAgentApplicantId] = useState<number | "manual">("manual");
-  const [agentSearch, setAgentSearch] = useState("");
+  const [agentJobPosting, setAgentJobPosting] = useState("");
   const [agentNextInbound, setAgentNextInbound] = useState("");
-  const [agentManualName, setAgentManualName] = useState("");
-  const [agentManualBranch, setAgentManualBranch] = useState("");
-  const [agentManualWorkHours, setAgentManualWorkHours] = useState("");
-  const [agentUseRealHistory, setAgentUseRealHistory] = useState(true);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentSession, setAgentSession] = useState<AgentSessionTurn[]>([]);
-  const [agentRealHistoryCount, setAgentRealHistoryCount] = useState<number | null>(null);
 
   const resetAgentSession = () => {
     setAgentSession([]);
     setAgentNextInbound("");
-    setAgentRealHistoryCount(null);
-  };
-
-  // 컨텍스트 변경 시 세션 자동 초기화
-  const setAgentContext = (next: number | "manual") => {
-    if (agentSession.length > 0) {
-      if (!confirm("컨텍스트를 바꾸면 현재 대화가 초기화됩니다. 계속할까요?")) return;
-    }
-    setAgentApplicantId(next);
-    resetAgentSession();
   };
 
   const runAgentTest = async () => {
@@ -197,7 +181,6 @@ export default function AdminPage() {
     }
     setAgentLoading(true);
 
-    // 즉시 inbound bubble 추가 (낙관적 업데이트)
     const newInbound: AgentSessionTurn = { direction: "inbound", body: inbound };
     const sessionWithInbound = [...agentSession, newInbound];
     setAgentSession(sessionWithInbound);
@@ -214,21 +197,14 @@ export default function AdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          applicant_id: agentApplicantId === "manual" ? null : agentApplicantId,
           inbound_text: inbound,
-          use_real_history: agentApplicantId !== "manual" && agentUseRealHistory,
-          manual: agentApplicantId === "manual" ? {
-            name: agentManualName || null,
-            branch1: agentManualBranch || null,
-            work_hours: agentManualWorkHours || null,
-          } : undefined,
+          job_posting: agentJobPosting.trim() || null,
           manual_history: manualHistory.length > 0 ? manualHistory : undefined,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
         alert(json.error || "테스트 실패");
-        // 실패 시 inbound는 남겨두되 에러 표시
         setAgentSession([
           ...sessionWithInbound,
           {
@@ -240,10 +216,6 @@ export default function AdminPage() {
         ]);
         return;
       }
-
-      const realCount =
-        (json.context?.history_turn_count ?? 0) - agentSession.length;
-      setAgentRealHistoryCount(Math.max(0, realCount));
 
       const draft = json.draft;
       const outboundBody =
@@ -1859,100 +1831,36 @@ export default function AdminPage() {
               <div className="agent-test-grid">
                 <div className="agent-input-col">
                   <div className="agent-section">
-                    <label className="rec-label">지원자 컨텍스트</label>
-                    <div className="agent-radio-row">
-                      <button
-                        className={`radio-btn ${agentApplicantId === "manual" ? "radio-on" : ""}`}
-                        onClick={() => setAgentContext("manual")}
-                      >
-                        신규/모르는 번호
-                      </button>
-                      <button
-                        className={`radio-btn ${agentApplicantId !== "manual" ? "radio-on" : ""}`}
-                        onClick={() => {
-                          if (data.length > 0) setAgentContext(data[0].id);
-                        }}
-                      >
-                        기존 지원자 선택
-                      </button>
-                    </div>
+                    <label className="rec-label">📢 구인공고</label>
+                    <textarea
+                      className="rec-textarea"
+                      rows={14}
+                      placeholder="이 공고를 보고 문의온 구직자처럼 응대합니다.
 
-                    {agentApplicantId === "manual" ? (
-                      <div className="agent-manual-fields">
-                        <input
-                          className="rec-input"
-                          placeholder="이름 (선택)"
-                          value={agentManualName}
-                          onChange={(e) => setAgentManualName(e.target.value)}
-                        />
-                        <input
-                          className="rec-input"
-                          placeholder="지점 (선택, 예: 강북미아)"
-                          value={agentManualBranch}
-                          onChange={(e) => setAgentManualBranch(e.target.value)}
-                        />
-                        <input
-                          className="rec-input"
-                          placeholder="시간대 (선택, 예: 평일 오전 08~13)"
-                          value={agentManualWorkHours}
-                          onChange={(e) => setAgentManualWorkHours(e.target.value)}
-                        />
-                      </div>
-                    ) : (
-                      <div className="agent-applicant-picker">
-                        <input
-                          className="rec-input"
-                          placeholder="이름 또는 전화번호로 검색"
-                          value={agentSearch}
-                          onChange={(e) => setAgentSearch(e.target.value)}
-                        />
-                        <select
-                          className="filter-select"
-                          style={{ width: "100%", marginTop: 6 }}
-                          value={agentApplicantId}
-                          onChange={(e) => {
-                            const v = Number(e.target.value);
-                            if (agentSession.length > 0) {
-                              if (!confirm("컨텍스트를 바꾸면 현재 대화가 초기화됩니다.")) return;
-                            }
-                            setAgentApplicantId(v);
-                            resetAgentSession();
-                          }}
-                        >
-                          {data
-                            .filter((a) => {
-                              if (!agentSearch) return true;
-                              const s = agentSearch.toLowerCase();
-                              return a.name.toLowerCase().includes(s) || a.phone.includes(s);
-                            })
-                            .slice(0, 100)
-                            .map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.name} · {a.phone} · {a.branch} · {a.status}
-                              </option>
-                            ))}
-                        </select>
-                        <label className="agent-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={agentUseRealHistory}
-                            onChange={(e) => setAgentUseRealHistory(e.target.checked)}
-                          />
-                          이 지원자의 실제 messages 히스토리 함께 사용
-                        </label>
-                      </div>
-                    )}
+예)
+[강북미아] 비마트 평일 오전 자차 배송원 모집
+
+📦 업무: 비마트 장보기 물품 인근 배송
+⏰ 시간: 평일 08~13시
+📍 픽업지: 서울 강북구 도봉로 34
+💰 시급: 25,000원
+🚗 자차 필수 (경차/세단 가능)
+
+지원: 본 문자에 답장으로"
+                      value={agentJobPosting}
+                      onChange={(e) => {
+                        if (agentSession.length > 0 && e.target.value !== agentJobPosting) {
+                          // 공고 바꿔도 세션은 유지 — 단, 사용자가 새 공고로 갈아탈 거면 직접 초기화 버튼 사용
+                        }
+                        setAgentJobPosting(e.target.value);
+                      }}
+                    />
                   </div>
 
                   <div className="agent-section agent-stats">
                     <div className="agent-stat-row">
                       <span>세션 턴</span><strong>{agentSession.length}</strong>
                     </div>
-                    {agentRealHistoryCount !== null && (
-                      <div className="agent-stat-row">
-                        <span>실제 히스토리 추가</span><strong>{agentRealHistoryCount}턴</strong>
-                      </div>
-                    )}
                     <button
                       className="rec-btn-secondary"
                       style={{ width: "100%", marginTop: 10 }}
