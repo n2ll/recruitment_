@@ -3,12 +3,6 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-const BRANCHES = [
-  "은평", "마포상암", "서대문신촌", "용산한남",
-  "도봉쌍문", "중구명동", "성동옥수", "동대문제기",
-  "강북미아", "노원중계", "중랑면목", "광진자양",
-];
-
 const TIMESLOTS = [
   { label: "평일 오전", sub: "월~금 08:00 ~ 13:00", value: "평일(월~금) 오전 타임 (08:00 ~ 13:00)" },
   { label: "평일 오후", sub: "월~금 11:00 ~ 16:00", value: "평일(월~금) 오후 타임 (11:00 ~ 16:00)" },
@@ -176,6 +170,31 @@ function ApplyPage() {
   const [step, setStep] = useState<"form" | "done">("form");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(true);
+  const [branchesError, setBranchesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/branches", { cache: "no-store" });
+        const json = await res.json();
+        if (!alive) return;
+        if (!res.ok) throw new Error(json.error || "지점 목록을 불러오지 못했습니다.");
+        setBranches(Array.isArray(json.branches) ? json.branches : []);
+      } catch (e) {
+        if (!alive) return;
+        setBranchesError(e instanceof Error ? e.message : "지점 목록 로드 실패");
+      } finally {
+        if (alive) setBranchesLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const set = (key: keyof FormData) => (val: string) =>
     setForm((f) => ({ ...f, [key]: val }));
@@ -417,16 +436,24 @@ function ApplyPage() {
             </div>
             <p className="section-desc">1지망은 필수, 2지망은 선택입니다.</p>
 
-            <Dropdown label="1지망" value={form.branch1}
-              options={BRANCHES} onChange={set("branch1")}
-              placeholder="지점을 선택해주세요" required
-              exclude={form.branch2} />
-            {errors.branch1 && <p className="error-msg" style={{ marginTop: -10 }}>{errors.branch1}</p>}
+            {branchesLoading ? (
+              <p className="section-desc">지점 목록을 불러오는 중...</p>
+            ) : branchesError ? (
+              <p className="error-msg">⚠️ {branchesError} — 새로고침 후 다시 시도해주세요.</p>
+            ) : (
+              <>
+                <Dropdown label="1지망" value={form.branch1}
+                  options={branches} onChange={set("branch1")}
+                  placeholder="지점을 선택해주세요" required
+                  exclude={form.branch2} />
+                {errors.branch1 && <p className="error-msg" style={{ marginTop: -10 }}>{errors.branch1}</p>}
 
-            <Dropdown label="2지망 (선택)" value={form.branch2}
-              options={BRANCHES} onChange={set("branch2")}
-              placeholder="선택 안함"
-              exclude={form.branch1} />
+                <Dropdown label="2지망 (선택)" value={form.branch2}
+                  options={branches} onChange={set("branch2")}
+                  placeholder="선택 안함"
+                  exclude={form.branch1} />
+              </>
+            )}
           </section>
 
           <div className="divider" />
@@ -563,7 +590,7 @@ function ApplyPage() {
 
           {/* 제출 버튼 */}
           <button className={`submit-btn ${submitting ? "submitting" : ""}`}
-            onClick={handleSubmit} disabled={submitting}>
+            onClick={handleSubmit} disabled={submitting || branchesLoading || !!branchesError}>
             {submitting
               ? <span className="spin-wrap"><span className="spinner" />제출 중...</span>
               : "지원서 제출하기 →"}

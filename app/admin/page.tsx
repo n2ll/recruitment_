@@ -56,7 +56,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches";
 
 interface RecommendResponse {
   success: boolean;
@@ -102,13 +102,12 @@ const ALL_STATUSES = [
   "서류심사", "스크리닝 완료", "확정", "이탈", "부적합",
 ];
 
-const BRANCHES = [
-  "전체", "은평", "마포상암", "서대문신촌", "용산한남",
-  "도봉쌍문", "중구명동", "성동옥수", "동대문제기",
-  "강북미아", "노원중계", "중랑면목", "광진자양",
-];
-
-const BRANCH_NAMES = BRANCHES.slice(1);
+interface Branch {
+  id: number;
+  name: string;
+  sort_order: number;
+  active: boolean;
+}
 
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 type SlotKey = typeof SLOTS[number];
@@ -132,6 +131,8 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [data, setData] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [search, setSearch] = useState("");
@@ -350,6 +351,105 @@ export default function AdminPage() {
     }
   }, []);
 
+  const [newBranchName, setNewBranchName] = useState("");
+  const [branchSaving, setBranchSaving] = useState<number | "new" | null>(null);
+
+  const addBranch = async () => {
+    const name = newBranchName.trim();
+    if (!name) {
+      alert("지점 이름을 입력해주세요.");
+      return;
+    }
+    setBranchSaving("new");
+    try {
+      const res = await fetch("/api/admin/branches", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "지점 추가 실패");
+        return;
+      }
+      setNewBranchName("");
+      await fetchBranchesRef.current?.();
+    } catch (e) {
+      console.error(e);
+      alert("지점 추가 중 오류");
+    } finally {
+      setBranchSaving(null);
+    }
+  };
+
+  const patchBranch = async (
+    id: number,
+    updates: Partial<Pick<Branch, "name" | "sort_order" | "active">>
+  ) => {
+    setBranchSaving(id);
+    try {
+      const res = await fetch(`/api/admin/branches/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "수정 실패");
+        await fetchBranchesRef.current?.();
+        return;
+      }
+      setBranches((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, ...json.data } : b))
+      );
+    } catch (e) {
+      console.error(e);
+      alert("수정 중 오류");
+    } finally {
+      setBranchSaving(null);
+    }
+  };
+
+  const deleteBranch = async (id: number, name: string) => {
+    if (!confirm(`'${name}' 지점을 삭제하시겠어요?\n해당 지점에 지원자가 있으면 비활성화 처리됩니다.`)) return;
+    setBranchSaving(id);
+    try {
+      const res = await fetch(`/api/admin/branches/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "삭제 실패");
+        return;
+      }
+      if (json.soft) {
+        alert(json.message || "지원자가 있어 비활성화 처리했습니다.");
+      }
+      await fetchBranchesRef.current?.();
+    } catch (e) {
+      console.error(e);
+      alert("삭제 중 오류");
+    } finally {
+      setBranchSaving(null);
+    }
+  };
+
+  const fetchBranchesRef = useRef<(() => Promise<void>) | null>(null);
+
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/branches", { cache: "no-store" });
+      const json = await res.json();
+      setBranches(json.data || []);
+    } catch {
+      console.error("지점 목록 로딩 실패");
+    } finally {
+      setBranchesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBranchesRef.current = fetchBranches;
+  }, [fetchBranches]);
+
   const fetchHeartbeats = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/heartbeat", { cache: "no-store" });
@@ -447,11 +547,12 @@ export default function AdminPage() {
   useEffect(() => {
     fetchData();
     fetchHeartbeats();
+    fetchBranches();
     // 폴링은 Realtime 끊김 시 fallback (60초)
     const dataInterval = setInterval(() => fetchData(true), 60000);
     const hbInterval = setInterval(fetchHeartbeats, 60000);
     return () => { clearInterval(dataInterval); clearInterval(hbInterval); };
-  }, [fetchData, fetchHeartbeats]);
+  }, [fetchData, fetchHeartbeats, fetchBranches]);
 
   // ── Realtime 구독: applicants / messages / device_heartbeat ──
   useEffect(() => {
@@ -572,7 +673,9 @@ export default function AdminPage() {
     deployed: data.filter((a) => a.status === "확정").length,
   };
 
-  const branchStats = BRANCHES.slice(1).map((b) => ({
+  const activeBranchNames = branches.filter((b) => b.active).map((b) => b.name);
+  const allBranchNames = branches.map((b) => b.name);
+  const branchStats = activeBranchNames.map((b) => ({
     name: b,
     total: data.filter((a) => a.branch === b).length,
     pass: data.filter((a) => a.branch === b && a.filter_pass === "Y").length,
@@ -622,6 +725,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             배송원 컨택
             {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
+          </button>
+          <button className={`nav-btn ${tab === "branches" ? "nav-active" : ""}`}
+            onClick={() => setTab("branches")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            지점 관리
           </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()}>
@@ -688,7 +796,7 @@ export default function AdminPage() {
               <h2 className="page-title">지원자 목록 <span className="count">{filtered.length}명</span></h2>
               <div className="filters">
                 <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-                  {BRANCHES.map((b) => <option key={b}>{b}</option>)}
+                  {["전체", ...activeBranchNames].map((b) => <option key={b}>{b}</option>)}
                 </select>
                 <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   {["전체", ...ALL_STATUSES].map((s) => <option key={s}>{s}</option>)}
@@ -809,7 +917,7 @@ export default function AdminPage() {
                         onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}
                       >
                         <option value="">—</option>
-                        {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+                        {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </label>
                     <label className="edit-field">
@@ -820,7 +928,7 @@ export default function AdminPage() {
                         onChange={(e) => setDraft("current_branch", e.target.value || null)}
                       >
                         <option value="">— (비근무)</option>
-                        {BRANCH_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+                        {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </label>
                     <label className="edit-field">
@@ -891,7 +999,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {BRANCH_NAMES.map((b) => {
+                    {activeBranchNames.map((b) => {
                       const rowTotal = data.filter(
                         (a) =>
                           a.filter_pass === "Y" &&
@@ -1010,7 +1118,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {BRANCH_NAMES.map((b) => (
+                    {activeBranchNames.map((b) => (
                       <tr key={b}>
                         <td className="td-bold">{b}</td>
                         {SLOTS.map((s) => {
@@ -1287,6 +1395,128 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+          ) : tab === "branches" ? (
+            <div className="content">
+              <h2 className="page-title">지점 관리 <span className="count">{branches.filter((b) => b.active).length}개 활성</span></h2>
+              <p className="page-desc">
+                /apply 페이지의 지점 드롭다운과 /admin의 모든 지점 필터·통계가 이 목록을 사용합니다.
+                삭제 시 해당 지점에 지원자가 있으면 자동으로 비활성화 처리됩니다.
+              </p>
+
+              <div className="branch-add-row">
+                <input
+                  className="filter-input"
+                  placeholder="새 지점 이름 (예: 송파잠실)"
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addBranch(); }}
+                />
+                <button
+                  className="rec-btn-primary"
+                  onClick={addBranch}
+                  disabled={branchSaving === "new"}
+                >
+                  {branchSaving === "new" ? "추가 중..." : "+ 지점 추가"}
+                </button>
+              </div>
+
+              {branchesLoading ? (
+                <div className="loading">로딩 중...</div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 70 }}>순서</th>
+                        <th>지점명</th>
+                        <th style={{ width: 100 }}>활성</th>
+                        <th style={{ width: 110 }}>상태</th>
+                        <th style={{ width: 90 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {branches.map((b) => {
+                        const usageCount = data.filter(
+                          (a) =>
+                            a.branch === b.name ||
+                            a.branch1 === b.name ||
+                            a.branch2 === b.name ||
+                            a.confirmed_branch === b.name ||
+                            a.current_branch === b.name
+                        ).length;
+                        const saving = branchSaving === b.id;
+                        return (
+                          <tr key={b.id} style={{ opacity: b.active ? 1 : 0.55 }}>
+                            <td>
+                              <input
+                                type="number"
+                                className="branch-sort-input"
+                                defaultValue={b.sort_order}
+                                disabled={saving}
+                                onBlur={(e) => {
+                                  const v = Number(e.target.value);
+                                  if (Number.isFinite(v) && v !== b.sort_order) {
+                                    patchBranch(b.id, { sort_order: v });
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                className="branch-name-input"
+                                defaultValue={b.name}
+                                disabled={saving}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim();
+                                  if (v && v !== b.name) {
+                                    if (
+                                      usageCount > 0 &&
+                                      !confirm(
+                                        `'${b.name}' → '${v}' 로 이름을 변경합니다.\n` +
+                                          `이 지점은 지원자 ${usageCount}명이 참조 중이며, 기존 데이터의 지점 이름은 자동 변경되지 않습니다.\n계속하시겠어요?`
+                                      )
+                                    ) {
+                                      e.target.value = b.name;
+                                      return;
+                                    }
+                                    patchBranch(b.id, { name: v });
+                                  } else if (!v) {
+                                    e.target.value = b.name;
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                className={`radio-btn ${b.active ? "radio-on" : ""}`}
+                                style={{ minWidth: 80 }}
+                                disabled={saving}
+                                onClick={() => patchBranch(b.id, { active: !b.active })}
+                              >
+                                {b.active ? "활성" : "비활성"}
+                              </button>
+                            </td>
+                            <td className="td-meta">
+                              {usageCount > 0 ? `지원자 ${usageCount}명` : "사용 0"}
+                            </td>
+                            <td>
+                              <button
+                                className="rec-btn-secondary"
+                                disabled={saving}
+                                onClick={() => deleteBranch(b.id, b.name)}
+                              >
+                                삭제
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
@@ -1294,7 +1524,7 @@ export default function AdminPage() {
 
               <div className="filters">
                 <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-                  {BRANCHES.map((b) => <option key={b}>{b}</option>)}
+                  {["전체", ...activeBranchNames].map((b) => <option key={b}>{b}</option>)}
                 </select>
                 <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
@@ -1675,6 +1905,19 @@ const css = `
     background: #fff; border: 1px solid #FCD34D; border-radius: 10px;
     font-size: 11px; color: #78350F; font-weight: 600;
   }
+
+  .branch-add-row {
+    display: flex; gap: 8px; margin-bottom: 16px; max-width: 520px;
+  }
+  .branch-add-row .filter-input { flex: 1; margin: 0; }
+  .branch-add-row .rec-btn-primary { margin-top: 0; padding: 10px 18px; }
+  .branch-name-input, .branch-sort-input {
+    padding: 6px 10px; border: 1px solid #e8e8e0; border-radius: 6px;
+    font-family: inherit; font-size: 13px; outline: none; background: #fff;
+  }
+  .branch-name-input { width: 100%; max-width: 240px; font-weight: 600; }
+  .branch-sort-input { width: 60px; text-align: center; }
+  .branch-name-input:focus, .branch-sort-input:focus { border-color: #F5C518; }
 
   .rec-result { margin-top: 12px; }
   .rec-job-info {
