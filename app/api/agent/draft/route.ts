@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { generateDraftReply, AgentApplicantContext, AgentTurn } from "@/lib/agent";
 import { sendSlackAgentAlert } from "@/lib/slack";
+import { runAgentForCandidate } from "@/lib/agent/router";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+// 자동 응대로 들어가는 stage 목록 (paused/abort/null은 기존 draft 생성 흐름)
+const AUTO_AGENT_STAGES = new Set(["screening", "onboarding", "active"]);
 
 interface SupabaseWebhookPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -99,6 +103,48 @@ export async function POST(req: NextRequest) {
       introduction: null,
     };
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // [신규] 진행 중인 job_candidate 있으면 → 자동 응대 (runAgentForCandidate)
+  // 없으면 기존 흐름(message_drafts 생성)으로 폴백
+  // ─────────────────────────────────────────────────────────────
+  if (applicant.id) {
+    const { data: jc } = await supabase
+      .from("job_candidates")
+      .select("id, job_id, agent_stage, responded_at")
+      .eq("applicant_id", applicant.id)
+      .not("agent_stage", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (jc && AUTO_AGENT_STAGES.has(jc.agent_stage as string)) {
+      // 1) messages 행에 job_id 채워주기 — agent가 history 로드 시 그 공고 컨텍스트만 사용
+      await supabase
+        .from("messages")
+        .update({ job_id: jc.job_id })
+        .eq("id", rec.id);
+
+      // 2) 첫 응답이면 responded_at 기록
+      if (!jc.responded_at) {
+        await supabase
+          .from("job_candidates")
+          .update({ responded_at: rec.created_at })
+          .eq("id", jc.id);
+      }
+
+      // 3) Agent 호출 (Claude + 응답 발송 + transition 적용)
+      const agentResult = await runAgentForCandidate({
+        supabase,
+        candidate_id: jc.id as number,
+        inbound_message_id: rec.id,
+        inbound_text: rec.body,
+      });
+
+      return NextResponse.json({ route: "agent", ...agentResult });
+    }
+  }
+  // ─────────────────────────────────────────────────────────────
 
   // 최근 대화 — 가장 최근 30턴을 가져오고, 시간순(오래된 → 최근)으로 재정렬해서 Claude에 전달
   const { data: recentMsgs } = await supabase

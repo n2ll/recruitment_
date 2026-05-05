@@ -6,6 +6,9 @@ node_modules/
 *.tsbuildinfo
 next-env.d.ts
 
+# Claude Code 로컬 작업 메모리
+.claude/
+
 # Google Service Account key files (DO NOT COMMIT)
 ongmanagement-*.json
 *-service-account.json

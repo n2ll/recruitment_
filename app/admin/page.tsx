@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getBrowserClient } from "@/lib/supabase";
+import AgentJobsView from "./agent/AgentJobsView";
 
 interface Applicant {
   id: number;
@@ -1821,137 +1822,7 @@ export default function AdminPage() {
               )}
             </div>
           ) : tab === "agent" ? (
-            <div className="content">
-              <h2 className="page-title">🤖 구인 에이전트 테스트</h2>
-              <p className="page-desc">
-                구직자처럼 메시지를 보내면 Claude가 답변 초안을 즉시 만들어 대화가 이어집니다.
-                실제 SMS 발송 X · DB 저장 X. 톤·예시 튜닝은 <code>prompts/conversation-examples.txt</code> 수정 후 재배포.
-              </p>
-
-              <div className="agent-test-grid">
-                <div className="agent-input-col">
-                  <div className="agent-section">
-                    <label className="rec-label">📢 구인공고</label>
-                    <textarea
-                      className="rec-textarea"
-                      rows={14}
-                      placeholder="이 공고를 보고 문의온 구직자처럼 응대합니다.
-
-예)
-[강북미아] 비마트 평일 오전 자차 배송원 모집
-
-📦 업무: 비마트 장보기 물품 인근 배송
-⏰ 시간: 평일 08~13시
-📍 픽업지: 서울 강북구 도봉로 34
-💰 시급: 25,000원
-🚗 자차 필수 (경차/세단 가능)
-
-지원: 본 문자에 답장으로"
-                      value={agentJobPosting}
-                      onChange={(e) => {
-                        if (agentSession.length > 0 && e.target.value !== agentJobPosting) {
-                          // 공고 바꿔도 세션은 유지 — 단, 사용자가 새 공고로 갈아탈 거면 직접 초기화 버튼 사용
-                        }
-                        setAgentJobPosting(e.target.value);
-                      }}
-                    />
-                  </div>
-
-                  <div className="agent-section agent-stats">
-                    <div className="agent-stat-row">
-                      <span>세션 턴</span><strong>{agentSession.length}</strong>
-                    </div>
-                    <button
-                      className="rec-btn-secondary"
-                      style={{ width: "100%", marginTop: 10 }}
-                      onClick={() => {
-                        if (agentSession.length === 0 || confirm("대화를 초기화할까요?")) {
-                          resetAgentSession();
-                        }
-                      }}
-                      disabled={agentSession.length === 0}
-                    >
-                      🔄 대화 초기화
-                    </button>
-                  </div>
-                </div>
-
-                <div className="agent-output-col agent-chat-col">
-                  <div className="agent-chat-area">
-                    {agentSession.length === 0 ? (
-                      <div className="agent-empty">
-                        아래 입력창에 구직자가 보낼 메시지를 입력하면<br/>Claude 답변과 함께 대화가 시작됩니다.
-                      </div>
-                    ) : (
-                      <div className="agent-chat-list">
-                        {agentSession.map((turn, idx) => (
-                          <div
-                            key={idx}
-                            className={`agent-turn ${turn.direction === "inbound" ? "agent-turn-in" : "agent-turn-out"}`}
-                          >
-                            <div className="agent-turn-label">
-                              {turn.direction === "inbound" ? "구직자" : "🤖 에이전트"}
-                              {turn.status === "need_info" && (
-                                <span className="agent-need-badge">need_info</span>
-                              )}
-                              <button
-                                className="agent-turn-del"
-                                title="이 턴부터 삭제"
-                                onClick={() => deleteAgentTurnsFrom(idx)}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                            <textarea
-                              className="agent-turn-body"
-                              value={turn.body}
-                              onChange={(e) => editAgentTurn(idx, e.target.value)}
-                              rows={Math.max(1, Math.min(6, turn.body.split("\n").length + 1))}
-                            />
-                            {turn.reasoning && (
-                              <div className="agent-turn-reason">
-                                <strong>판단:</strong> {turn.reasoning}
-                                {turn.missing_info && <> · <strong>모자란 정보:</strong> {turn.missing_info}</>}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        {agentLoading && (
-                          <div className="agent-turn agent-turn-out">
-                            <div className="agent-turn-label">🤖 에이전트</div>
-                            <div className="agent-typing">⏳ Claude 호출 중...</div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="agent-input-row">
-                    <textarea
-                      className="rec-textarea"
-                      rows={2}
-                      placeholder='구직자가 보낼 메시지를 입력 (Enter로 전송, Shift+Enter 줄바꿈)'
-                      value={agentNextInbound}
-                      onChange={(e) => setAgentNextInbound(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          runAgentTest();
-                        }
-                      }}
-                      disabled={agentLoading}
-                    />
-                    <button
-                      className="rec-btn-primary agent-send-btn"
-                      onClick={runAgentTest}
-                      disabled={agentLoading || !agentNextInbound.trim()}
-                    >
-                      {agentLoading ? "..." : "전송"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AgentJobsView branches={activeBranchNames} />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>

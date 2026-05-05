@@ -1,4 +1,13 @@
 /**
+ * Slack 알림 — 현재 전체 OFF (운영 판단)
+ *
+ * 복구하려면 SLACK_NOTIFICATIONS_ENABLED=1 환경변수 설정 후 재배포.
+ * 호출부는 그대로 두어도 됨 (각 함수가 진입 시점에 self-disable).
+ */
+
+const SLACK_ENABLED = process.env.SLACK_NOTIFICATIONS_ENABLED === "1";
+
+/**
  * AI 에이전트가 답변 못 만들었을 때 — 매니저 직접 응대 필요 알림
  */
 export async function sendSlackAgentAlert(data: {
@@ -8,6 +17,7 @@ export async function sendSlackAgentAlert(data: {
   inbound_text: string;
   missing_info: string;
 }) {
+  if (!SLACK_ENABLED) return;
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 
@@ -45,6 +55,7 @@ export async function sendSlackNotification(data: {
   filter_pass: string;
   source: string;
 }) {
+  if (!SLACK_ENABLED) return;
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 

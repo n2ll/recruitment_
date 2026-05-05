@@ -18,6 +18,11 @@ export async function GET(
 
     const supabase = createServiceClient();
 
+    // job_id 필터 (선택) — 구인 에이전트 탭에서 공고별 컨텍스트 분리용
+    const url = new URL(req.url);
+    const jobIdParam = url.searchParams.get("job_id");
+    const jobIdFilter = jobIdParam ? Number(jobIdParam) : null;
+
     // 지원자 phone 번호 조회
     const { data: applicant } = await supabase
       .from("applicants")
@@ -30,19 +35,27 @@ export async function GET(
     let error;
 
     if (applicant?.phone) {
-      const result = await supabase
+      let q = supabase
         .from("messages")
         .select("*")
         .or(`applicant_id.eq.${applicantId},applicant_phone.eq.${applicant.phone}`)
         .order("created_at", { ascending: true });
+      if (jobIdFilter !== null && Number.isFinite(jobIdFilter)) {
+        q = q.eq("job_id", jobIdFilter);
+      }
+      const result = await q;
       messages = result.data;
       error = result.error;
     } else {
-      const result = await supabase
+      let q = supabase
         .from("messages")
         .select("*")
         .eq("applicant_id", applicantId)
         .order("created_at", { ascending: true });
+      if (jobIdFilter !== null && Number.isFinite(jobIdFilter)) {
+        q = q.eq("job_id", jobIdFilter);
+      }
+      const result = await q;
       messages = result.data;
       error = result.error;
     }
@@ -71,7 +84,11 @@ export async function GET(
       .limit(1)
       .maybeSingle();
 
-    return NextResponse.json({ data: messages || [], draft: latestDraft || null });
+    return NextResponse.json({
+      data: messages || [],
+      messages: messages || [],   // alias — 신규 호출자가 사용
+      draft: latestDraft || null,
+    });
   } catch (err) {
     console.error("[messages API error]", err);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });
