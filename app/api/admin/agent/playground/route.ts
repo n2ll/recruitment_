@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// transitions.ts와 동일한 본문 (운영 텍스트 — screening-exmamples.txt 기반)
+// transitions.ts와 동일한 본문 (운영 텍스트 — screening-examples.txt 기반)
 // ─────────────────────────────────────────────────────────────
 
 function buildConfirmText(name: string): string {

@@ -13,7 +13,7 @@ export type StageName = "screening" | "onboarding" | "active" | "paused" | "abor
 
 /**
  * 스크리닝(screening) 체크리스트 — 8항목.
- * prompts/screening-exmamples.txt의 운영 항목을 그대로 매핑.
+ * prompts/screening-examples.txt의 운영 항목을 그대로 매핑.
  *
  * - true: 회사가 안내·확인했고 지원자가 인지/동의
  * - false: 아직 미확인

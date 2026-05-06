@@ -5,7 +5,7 @@
  * 8항목 체크리스트를 채우며, 모두 충족 시 advance: onboarding.
  *
  * 항목 정의는 lib/agent/types.ts 의 ScreeningChecklist 참조.
- * 운영 톤 reference: prompts/screening-exmamples.txt + prompts/conversation-examples.txt
+ * 운영 톤 reference: prompts/screening-examples.txt + prompts/conversation-examples.txt
  */
 
 import { emptyScreening, isComplete, mergeAgentState } from "../checklist";

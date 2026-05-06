@@ -68,10 +68,7 @@ export async function sendSlackNotification(data: {
       `> *연락처:* ${data.phone}\n` +
       `> *지점:* ${data.branch}\n` +
       `> *시작가능일:* ${data.available_date}\n` +
-      `> *유입채널:* ${data.source}\n` +
-      (data.filter_pass === "Y"
-        ? `\n:bell: 스크리닝 미실시 — <https://docs.google.com/spreadsheets/d/${process.env.GOOGLE_SHEET_ID}/edit|스크리닝 관리 시트 열기>`
-        : ""),
+      `> *유입채널:* ${data.source}\n`,
   };
 
   await fetch(webhookUrl, {

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { appendToSheet, appendToScreeningSheet } from "@/lib/google-sheets";
-import { sendSlackNotification } from "@/lib/slack";
 import { sendNotification } from "@/lib/solapi";
 import { geocodeAddress } from "@/lib/kakao-geocode";
 
@@ -115,49 +113,6 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-
-    // ── Supabase 데이터 → 구글 시트 동기화 ──────────────────
-    try {
-      await appendToSheet(inserted);
-    } catch (sheetErr) {
-      console.error("[시트1 sync error]", sheetErr);
-    }
-
-    // ── 필터 통과 시 시트2(스크리닝 관리)에도 추가 ───────────
-    if (filterPass) {
-      try {
-        console.log("[시트2 데이터]", JSON.stringify({
-          name: inserted.name,
-          phone: inserted.phone,
-          branch: inserted.branch,
-          available_date: inserted.available_date,
-          status: inserted.status,
-        }));
-        await appendToScreeningSheet({
-          name: inserted.name,
-          phone: inserted.phone,
-          branch: inserted.branch,
-          available_date: inserted.available_date,
-          status: inserted.status,
-        });
-      } catch (screenErr) {
-        console.error("[시트2 screening error]", screenErr);
-      }
-    }
-
-    // ── 슬랙 알림 (일시 off — 필요 시 주석 해제) ──────────
-    // try {
-    //   await sendSlackNotification({
-    //     name: inserted.name,
-    //     phone: inserted.phone,
-    //     branch: inserted.branch,
-    //     available_date: inserted.available_date,
-    //     filter_pass: inserted.filter_pass,
-    //     source: inserted.source,
-    //   });
-    // } catch (slackErr) {
-    //   console.error("[Slack notification error]", slackErr);
-    // }
 
     // ── 서류접수 안내 자동 발송 (알림톡 ① / SMS 폴백) ──────
     try {

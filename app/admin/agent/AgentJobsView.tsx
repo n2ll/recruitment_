@@ -505,8 +505,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         .ajv {
           display: flex;
           flex-direction: column;
-          height: calc(100vh - 64px);
-          margin: -32px -32px -32px;     /* 부모 .content padding 보정 */
+          height: calc(100vh - 33px);    /* phone-bar(약 33px) 제외 */
           background: #f5f5f0;
           font-size: 13px;
           color: #1a1a1a;

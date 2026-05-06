@@ -168,7 +168,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .update({ current_branch: null /* 라우터에서 job.branch로 채움 */ })
           .eq("id", applicant_id);
 
-        // 첫 출근 룰 안내 자동 발송 (screening-exmamples.txt 마지막 단락)
+        // 첫 출근 룰 안내 자동 발송 (screening-examples.txt 마지막 단락)
         try {
           const rulesText = buildFirstDayRules(applicant_name);
           const r = await sendNotification(
@@ -214,7 +214,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 }
 
 // ─────────────────────────────────────────────────────────────
-// 자동 발송 본문 (운영 텍스트 — prompts/screening-exmamples.txt 기반)
+// 자동 발송 본문 (운영 텍스트 — prompts/screening-examples.txt 기반)
 // ─────────────────────────────────────────────────────────────
 
 function buildConfirmText(name: string | null): string {
