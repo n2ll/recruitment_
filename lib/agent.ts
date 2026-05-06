@@ -8,23 +8,9 @@
  *   매니저가 직접 .txt 파일을 수정하면 다음 배포부터 반영됨.
  */
 
-import fs from "fs";
-import path from "path";
+import { loadConversationExamples } from "./agent/examples";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-
-let cachedExamples: string | null = null;
-function loadConversationExamples(): string {
-  if (cachedExamples !== null) return cachedExamples;
-  try {
-    const filePath = path.join(process.cwd(), "prompts", "conversation-examples.txt");
-    cachedExamples = fs.readFileSync(filePath, "utf-8");
-  } catch (e) {
-    console.error("[agent] failed to load conversation-examples.txt", e);
-    cachedExamples = "";
-  }
-  return cachedExamples;
-}
 
 export interface AgentApplicantContext {
   id: number | null;

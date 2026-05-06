@@ -14,6 +14,7 @@
  */
 
 import { emptyOnboarding, isComplete, mergeAgentState } from "../checklist";
+import { buildToneGuide } from "../examples";
 import type {
   OnboardingChecklist,
   Stage,
@@ -25,7 +26,7 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-6";
 const MANAGER_NAME = process.env.AGENT_MANAGER_NAME || "홍석범";
 
-const SYSTEM_PROMPT = `너는 옹고잉 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대 에이전트다.
+const SYSTEM_PROMPT_BODY = `너는 옹고잉 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대 에이전트다.
 지금은 "온보딩(근무 준비)" 단계 — 지원자가 이미 확정된 상태이며, 근무 시작 전 준비 사항을 챙기고 있다.
 
 ## 진입 직후 자동 발송 (이미 시스템이 보냄)
@@ -63,6 +64,10 @@ const SYSTEM_PROMPT = `너는 옹고잉 비마트 배송원 채용 매니저 "${
 
 ## 출력
 onboarding_turn tool로만 응답.`;
+
+function buildSystemPrompt(): string {
+  return `${SYSTEM_PROMPT_BODY}\n\n${buildToneGuide()}`;
+}
 
 interface OnboardingToolInput {
   reply_text: string;
@@ -157,7 +162,7 @@ onboarding_turn tool로 응답해라.`;
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 768,
-          system: SYSTEM_PROMPT,
+          system: buildSystemPrompt(),
           tools: [TOOL],
           tool_choice: { type: "tool", name: "onboarding_turn" },
           messages: [{ role: "user", content: userContent }],

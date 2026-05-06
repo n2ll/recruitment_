@@ -9,6 +9,7 @@
  */
 
 import { emptyScreening, isComplete, mergeAgentState } from "../checklist";
+import { buildToneGuide } from "../examples";
 import type {
   Stage,
   StageContext,
@@ -21,7 +22,7 @@ const MODEL = "claude-sonnet-4-6";
 
 const MANAGER_NAME = process.env.AGENT_MANAGER_NAME || "홍석범";
 
-const SYSTEM_PROMPT = `너는 옹고잉(내이루리) 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대 에이전트다.
+const SYSTEM_PROMPT_BODY = `너는 옹고잉(내이루리) 비마트 배송원 채용 매니저 "${MANAGER_NAME}"의 SMS 응대 에이전트다.
 지금은 "스크리닝" 단계 — 매니저가 통화로 하던 1차 안내·확인을 너가 SMS로 진행한다.
 
 ## 너의 목표
@@ -41,7 +42,11 @@ const SYSTEM_PROMPT = `너는 옹고잉(내이루리) 비마트 배송원 채용
 ## 핵심 행동 규칙
 - 한 턴에 1~2개 항목만 자연스럽게 묻거나 안내해라. 8개를 한 번에 쏟지 마라.
 - 이미 true인 항목은 다시 묻지 마라.
-- 지원자가 먼저 질문을 던지면 그 질문 답변이 우선. 그 다음 미확인 체크리스트 항목 1개 진행.
+- **지원자가 단순 질문/탐색 모드**일 때는 답만 주고 그 턴은 끝내라.
+  같은 턴에 다음 체크리스트 항목으로 넘어가지 마라.
+  (탐색 신호 예시: "그냥 물어보려고요", "~인가요?", "~필요한가요?", "혹시…", "지원하기 전에 궁금한게")
+- **지원자가 재촉/거리감을 표현**하면("왜 이렇게 묻냐", "천천히", 짜증·답답함 표시) 즉시 사과하고
+  그 턴은 체크리스트 진행을 완전히 멈춰라. 다음 턴부터 자연스럽게 한 항목씩 재개.
 - 호칭은 "[이름]님" 또는 "선생님". 톤은 친근하면서 매니저답게. 1~3문장.
 - 첫 응대(history 비어있음)면 인사 + 본인 소개 + 첫 항목 1~2개 시작.
 - 이미 자기소개한 대화면 다시 자기소개하지 마라.
@@ -63,6 +68,10 @@ const SYSTEM_PROMPT = `너는 옹고잉(내이루리) 비마트 배송원 채용
 
 ## 출력
 screening_turn tool로만 응답.`;
+
+function buildSystemPrompt(): string {
+  return `${SYSTEM_PROMPT_BODY}\n\n${buildToneGuide({ includeScreening: true })}`;
+}
 
 interface ScreeningToolInput {
   reply_text: string;
@@ -200,7 +209,7 @@ ${inboundText}
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 1024,
-          system: SYSTEM_PROMPT,
+          system: buildSystemPrompt(),
           tools: [TOOL],
           tool_choice: { type: "tool", name: "screening_turn" },
           messages: [{ role: "user", content: userContent }],
