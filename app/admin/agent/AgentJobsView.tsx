@@ -249,23 +249,41 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
   };
 
   // ── 렌더 ───────────────────────────────────────────────
+  const visibleJobs = showClosed ? closedJobs : activeJobs;
+
   return (
     <div className="ajv">
-      {/* 사이드바 */}
-      <aside className="ajv-side">
+      {/* 상단 공고 셀렉터 (가로 칩) */}
+      <header className="ajv-top">
         <button className="ajv-create-btn" onClick={() => setShowCreate(true)}>
           + 새 공고
         </button>
 
-        <div className="ajv-side-sec">
-          <div className="ajv-side-h">활성 ({activeJobs.length})</div>
+        <div className="ajv-top-toggle">
+          <button
+            className={`ajv-tt-btn ${!showClosed ? "ajv-tt-on" : ""}`}
+            onClick={() => setShowClosed(false)}
+          >
+            활성 {activeJobs.length}
+          </button>
+          <button
+            className={`ajv-tt-btn ${showClosed ? "ajv-tt-on" : ""}`}
+            onClick={() => setShowClosed(true)}
+          >
+            마감 {closedJobs.length}
+          </button>
+        </div>
+
+        <div className="ajv-chips">
           {jobsLoading ? (
-            <div className="ajv-side-empty">로딩 중...</div>
-          ) : activeJobs.length === 0 ? (
-            <div className="ajv-side-empty">활성 공고 없음</div>
+            <span className="ajv-chip-empty">로딩 중...</span>
+          ) : visibleJobs.length === 0 ? (
+            <span className="ajv-chip-empty">
+              {showClosed ? "마감된 공고가 없습니다." : "활성 공고가 없습니다. [+ 새 공고]를 눌러 시작하세요."}
+            </span>
           ) : (
-            activeJobs.map((j) => (
-              <SidebarJobItem
+            visibleJobs.map((j) => (
+              <JobChip
                 key={j.id}
                 job={j}
                 selected={j.id === selectedJobId}
@@ -274,26 +292,10 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
             ))
           )}
         </div>
+      </header>
 
-        <div className="ajv-side-sec">
-          <button
-            className="ajv-side-h ajv-side-h-toggle"
-            onClick={() => setShowClosed((v) => !v)}
-          >
-            {showClosed ? "▼" : "▶"} 마감 ({closedJobs.length})
-          </button>
-          {showClosed && closedJobs.map((j) => (
-            <SidebarJobItem
-              key={j.id}
-              job={j}
-              selected={j.id === selectedJobId}
-              onClick={() => { setSelectedJobId(j.id); setPanelCid(null); }}
-            />
-          ))}
-        </div>
-      </aside>
-
-      {/* 메인 */}
+      {/* 메인 + 슬라이드 패널 (가로 분할) */}
+      <div className="ajv-body">
       <section className="ajv-main">
         {!selectedJob ? (
           <div className="ajv-empty">왼쪽에서 공고를 선택하거나 [+ 새 공고]를 만들어주세요.</div>
@@ -484,6 +486,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           </div>
         </aside>
       )}
+      </div>
 
       {/* 공고 작성 모달 */}
       {showCreate && (
@@ -501,7 +504,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       <style jsx>{`
         .ajv {
           display: flex;
-          gap: 0;
+          flex-direction: column;
           height: calc(100vh - 64px);
           margin: -32px -32px -32px;     /* 부모 .content padding 보정 */
           background: #f5f5f0;
@@ -509,46 +512,69 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           color: #1a1a1a;
         }
 
-        /* 사이드바 */
-        .ajv-side {
-          width: 230px;
-          flex-shrink: 0;
+        /* 상단 셀렉터 */
+        .ajv-top {
           background: #fff;
-          border-right: 1px solid #e8e8e0;
-          padding: 16px 12px;
-          overflow-y: auto;
+          border-bottom: 1px solid #e8e8e0;
+          padding: 12px 24px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-shrink: 0;
         }
         .ajv-create-btn {
-          width: 100%;
-          padding: 10px 12px;
+          padding: 8px 14px;
           background: #1a1a1a;
           color: #fff;
           border: none;
           border-radius: 8px;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 600;
           cursor: pointer;
-          margin-bottom: 16px;
+          flex-shrink: 0;
         }
-        .ajv-side-sec { margin-bottom: 18px; }
-        .ajv-side-h {
-          font-size: 11px;
-          color: #6b7280;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          padding: 6px 8px;
-          margin-bottom: 4px;
+        .ajv-top-toggle {
+          display: flex;
+          background: #f3f4f6;
+          border-radius: 8px;
+          padding: 2px;
+          flex-shrink: 0;
         }
-        .ajv-side-h-toggle {
-          background: none; border: none; cursor: pointer;
-          width: 100%; text-align: left;
+        .ajv-tt-btn {
+          padding: 6px 12px;
+          background: none;
+          border: none;
+          border-radius: 6px;
           font-family: inherit;
+          font-size: 11px;
+          font-weight: 600;
+          color: #6b7280;
+          cursor: pointer;
         }
-        .ajv-side-empty {
-          padding: 8px 10px;
-          color: #9ca3af;
+        .ajv-tt-on {
+          background: #fff;
+          color: #1a1a1a;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .ajv-chips {
+          flex: 1;
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding: 2px 0;
+        }
+        .ajv-chip-empty {
           font-size: 12px;
+          color: #9ca3af;
+          padding: 6px 8px;
+        }
+
+        /* 메인 + 패널 가로 컨테이너 */
+        .ajv-body {
+          flex: 1;
+          display: flex;
+          min-height: 0;
+          overflow: hidden;
         }
 
         /* 메인 */
@@ -731,7 +757,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 // 보조 컴포넌트
 // ─────────────────────────────────────────────────────────────
 
-function SidebarJobItem({
+function JobChip({
   job, selected, onClick,
 }: {
   job: JobRow;
@@ -739,44 +765,47 @@ function SidebarJobItem({
   onClick: () => void;
 }) {
   const total = job.counts ? Object.values(job.counts).reduce((a, b) => a + b, 0) : 0;
-  const active =
-    (job.counts?.active ?? 0);
+  const active = job.counts?.active ?? 0;
   return (
-    <button
-      className={`sj ${selected ? "sj-active" : ""}`}
-      onClick={onClick}
-    >
-      <div className="sj-title">{job.title}</div>
-      <div className="sj-meta">
-        {active}/{job.capacity} 확정 · {total}명 진행
-      </div>
+    <button className={`jc ${selected ? "jc-active" : ""}`} onClick={onClick}>
+      <span className="jc-title">{job.title}</span>
+      <span className="jc-meta">
+        {active}/{job.capacity}확정 · {total}진행
+      </span>
       <style jsx>{`
-        .sj {
-          display: block; width: 100%;
-          padding: 8px 10px;
+        .jc {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
           border-radius: 8px;
-          background: none;
-          border: 1.5px solid transparent;
-          text-align: left;
+          background: #fff;
+          border: 1.5px solid #e8e8e0;
           font-family: inherit;
           cursor: pointer;
-          margin-bottom: 3px;
+          white-space: nowrap;
+          flex-shrink: 0;
+          transition: all 0.1s;
         }
-        .sj:hover { background: #f9fafb; }
-        .sj-active {
+        .jc:hover { background: #f9fafb; }
+        .jc-active {
           background: #FFFBEB !important;
           border-color: #F5C518 !important;
         }
-        .sj-title {
+        .jc-title {
           font-size: 12px;
           font-weight: 600;
           color: #1a1a1a;
-          margin-bottom: 3px;
+          max-width: 220px;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
         }
-        .sj-meta { font-size: 11px; color: #9ca3af; }
+        .jc-meta {
+          font-size: 11px;
+          color: #9ca3af;
+          padding-left: 6px;
+          border-left: 1px solid #e8e8e0;
+        }
       `}</style>
     </button>
   );

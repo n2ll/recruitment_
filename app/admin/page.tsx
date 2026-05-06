@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
+import PlaygroundView from "./agent/PlaygroundView";
 
 interface Applicant {
   id: number;
@@ -57,7 +58,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "agent";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "agent" | "playground";
 
 interface RecommendResponse {
   success: boolean;
@@ -1028,6 +1029,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             구인 에이전트
           </button>
+          <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
+            onClick={() => setTab("playground")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
+            플레이그라운드
+          </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1823,6 +1829,8 @@ export default function AdminPage() {
             </div>
           ) : tab === "agent" ? (
             <AgentJobsView branches={activeBranchNames} />
+          ) : tab === "playground" ? (
+            <PlaygroundView branches={activeBranchNames} />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
