@@ -14,7 +14,11 @@ import { explorationStage } from "@/lib/agent/stages/exploration";
 import { onboardingStage } from "@/lib/agent/stages/onboarding";
 import { screeningStage } from "@/lib/agent/stages/screening";
 import { activeStage } from "@/lib/agent/stages/active";
-import { buildScreeningAnnouncement } from "@/lib/agent/transitions";
+import {
+  buildScreeningAnnouncement,
+  buildOnboardingGuideText,
+  buildFirstDayRules,
+} from "@/lib/agent/transitions";
 import type {
   AgentState,
   ApplicantContext,
@@ -79,10 +83,7 @@ export async function POST(req: NextRequest) {
     if (result.transition.to === "screening") {
       auto_messages_preview = [buildScreeningAnnouncement(name)];
     } else if (result.transition.to === "onboarding") {
-      auto_messages_preview = [
-        buildConfirmText(name),
-        buildOnboardingGuideText(name),
-      ];
+      auto_messages_preview = [buildOnboardingGuideText(name)];
     } else if (result.transition.to === "active") {
       auto_messages_preview = [buildFirstDayRules(name)];
     }
@@ -95,38 +96,4 @@ export async function POST(req: NextRequest) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// transitions.ts와 동일한 본문 (운영 텍스트 — screening-examples.txt 기반)
-// ─────────────────────────────────────────────────────────────
-
-function buildConfirmText(name: string): string {
-  return `안녕하세요 ${name}님, 옹고잉입니다. 근무 확정 안내드립니다 :)
-업무 진행을 위한 앱설치 및 요청사항을 곧 별도 안내드릴게요.`;
-}
-
-function buildOnboardingGuideText(name: string): string {
-  return [
-    `안녕하세요 ${name}님? 업무 진행을 위한 앱설치 및 요청사항을 전달드립니다. 영상교육 수료 후, 회신 부탁드립니다.`,
-    "",
-    "1. 배민 커넥트 앱 설치 후 가입",
-    "2. 앱 가입 시 안전보건교육 영상(2시간) 필수 시청 필요",
-    "3. 가입 및 교육 수료 후 마이페이지 > 내 정보에서 '아이디' 확인 후, 아이디 회신 부탁드립니다.",
-    "4. 차량번호도 함께 회신 부탁드립니다.",
-    "",
-    "[참고 자료]",
-    "가입 가이드: https://www.youtube.com/watch?v=bMM112zT7JY",
-    "사용법 가이드: https://www.youtube.com/watch?v=5547PR3fzRs",
-  ].join("\n");
-}
-
-function buildFirstDayRules(name: string): string {
-  return [
-    `${name}님 안녕하세요? 첫 근무 관련 안내사항 전달드립니다!`,
-    "",
-    "1) 08시 경에 나오셔서 카카오 채널로 건물 또는 주차하신 사진 부탁드립니다 (현재 활동 여부 확인용).",
-    "2) 배차 들어오면 수락해 주시고(라우트는 자동), 가까운 곳 우선으로 돌아주시면 감사하겠습니다.",
-    "3) 식사는 13시 이후로 진행 부탁드립니다.",
-    "4) 배차 시점부터 60분 내 배송 완료 부탁드립니다.",
-    "5) 상차지에서 배차 받고 10분 대기 후 출발 부탁드립니다.",
-  ].join("\n");
-}
+// 자동 발송 텍스트는 lib/agent/transitions.ts 에서 import — 중복 제거

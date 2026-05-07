@@ -241,8 +241,12 @@ function toStageResult(out: ExplorationToolInput, ctx: StageContext): StageResul
       break;
   }
 
+  // advance 시: AI 응답("네 좋습니다 바로 안내드릴게요") 발송 생략 →
+  // 시스템 자동 안내 묶음(buildScreeningAnnouncement)이 곧바로 발송되며 그게 응답을 겸함.
+  const reply_text = out.transition === "advance" ? null : out.reply_text;
+
   return {
-    reply_text: out.reply_text,
+    reply_text,
     state_update,
     transition,
     reasoning: out.reasoning,

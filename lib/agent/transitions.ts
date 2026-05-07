@@ -139,6 +139,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 
       if (transition.to === "onboarding") {
         // screening → onboarding: 확정 처리 + 앱·교육 안내 자동 발송
+        // (별도 "확정 안내" 메시지는 보내지 않음 — AI의 마지막 응답 + 가이드 본문이 그 역할 대신)
         await supabase
           .from("job_candidates")
           .update({ confirmed_at: now })
@@ -147,34 +148,6 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .from("applicants")
           .update({ status: "확정" })
           .eq("id", applicant_id);
-
-        // 확정 알림톡 ③ — 미발급이면 SMS 폴백
-        try {
-          const confirmText = buildConfirmText(applicant_name);
-          const r1 = await sendNotification(
-            applicant_phone,
-            "CONFIRM",
-            { "#{이름}": applicant_name ?? "지원자" },
-            confirmText
-          );
-          if (r1.success) {
-            await supabase.from("messages").insert({
-              applicant_id,
-              applicant_phone,
-              direction: "outbound",
-              body: confirmText,
-              status: "sent",
-              sent_by: "system-auto",
-              solapi_msg_id: r1.messageId ?? null,
-              message_type: r1.via,
-              template_id: r1.templateId ?? null,
-              job_id,
-            });
-            autoSent++;
-          }
-        } catch (e) {
-          console.error("[transitions] CONFIRM send failed", e);
-        }
 
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {
@@ -290,16 +263,10 @@ export function buildScreeningAnnouncement(name: string | null): string {
   ].join("\n");
 }
 
-function buildConfirmText(name: string | null): string {
-  const n = name ?? "지원자";
-  return `안녕하세요 ${n}님, 옹고잉입니다. 근무 확정 안내드립니다 :)
-업무 진행을 위한 앱설치 및 요청사항을 곧 별도 안내드릴게요.`;
-}
-
-function buildOnboardingGuideText(name: string | null): string {
-  const n = name ?? "지원자";
+export function buildOnboardingGuideText(_name: string | null): string {
+  // 인사말 없이 바로 본문으로 시작 — 직전 AI 응답("그럼 온보딩 절차로 안내 드릴게요")이 인사 역할을 대신함
   return [
-    `안녕하세요 ${n}님? 업무 진행을 위한 앱설치 및 요청사항을 전달드립니다. 영상교육 수료 후, 회신 부탁드립니다.`,
+    "업무 진행을 위한 앱설치 및 요청사항을 전달드립니다. 영상교육 수료 후, 회신 부탁드립니다.",
     "",
     "1. 배민 커넥트 앱 설치 후 가입",
     "2. 앱 가입 시 안전보건교육 영상(2시간) 필수 시청 필요",
@@ -312,7 +279,7 @@ function buildOnboardingGuideText(name: string | null): string {
   ].join("\n");
 }
 
-function buildFirstDayRules(name: string | null): string {
+export function buildFirstDayRules(name: string | null): string {
   const n = name ?? "지원자";
   return [
     `${n}님 안녕하세요? 첫 근무 관련 안내사항 전달드립니다!`,
