@@ -4,6 +4,7 @@
  */
 
 export type AgentStage =
+  | "exploration"
   | "screening"
   | "onboarding"
   | "active"
@@ -107,6 +108,7 @@ export const ONBOARDING_KEYS = [
 export const STAGE_LABEL: Record<string, string> = {
   null: "발송됨",
   sent: "발송됨",
+  exploration: "탐색",
   screening: "스크리닝",
   onboarding: "온보딩",
   active: "근무중",
@@ -117,6 +119,7 @@ export const STAGE_LABEL: Record<string, string> = {
 export const STAGE_COLOR: Record<string, string> = {
   sent: "#9ca3af",
   null: "#9ca3af",
+  exploration: "#06b6d4",
   screening: "#3b82f6",
   onboarding: "#f59e0b",
   active: "#10b981",
@@ -126,6 +129,7 @@ export const STAGE_COLOR: Record<string, string> = {
 
 export const STAGE_ORDER: ReadonlyArray<string> = [
   "sent",
+  "exploration",
   "screening",
   "onboarding",
   "active",

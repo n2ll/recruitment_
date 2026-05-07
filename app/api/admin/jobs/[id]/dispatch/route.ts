@@ -114,12 +114,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       continue;
     }
 
-    // job_candidates 갱신 — sent_at + agent_stage='screening'
+    // job_candidates 갱신 — sent_at + agent_stage='exploration' (탐색 단계로 진입, 지원의사 확인 후 screening)
     await supabase
       .from("job_candidates")
       .update({
         sent_at: now,
-        agent_stage: "screening",
+        agent_stage: "exploration",
       })
       .eq("id", c.id);
 

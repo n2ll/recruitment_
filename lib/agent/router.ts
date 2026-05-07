@@ -13,6 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendSms } from "../solapi";
 import { applyTransition } from "./transitions";
+import { explorationStage } from "./stages/exploration";
 import { onboardingStage } from "./stages/onboarding";
 import { screeningStage } from "./stages/screening";
 import { activeStage } from "./stages/active";
@@ -27,6 +28,7 @@ import type {
 } from "./types";
 
 const STAGES: Record<Exclude<StageName, "paused" | "abort">, Stage> = {
+  exploration: explorationStage,
   screening: screeningStage,
   onboarding: onboardingStage,
   active: activeStage,

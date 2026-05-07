@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // 자동 응대로 들어가는 stage 목록 (paused/abort/null은 기존 draft 생성 흐름)
-const AUTO_AGENT_STAGES = new Set(["screening", "onboarding", "active"]);
+const AUTO_AGENT_STAGES = new Set(["exploration", "screening", "onboarding", "active"]);
 
 interface SupabaseWebhookPayload {
   type: "INSERT" | "UPDATE" | "DELETE";

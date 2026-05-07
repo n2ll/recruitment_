@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { explorationStage } from "@/lib/agent/stages/exploration";
 import { onboardingStage } from "@/lib/agent/stages/onboarding";
 import { screeningStage } from "@/lib/agent/stages/screening";
 import { activeStage } from "@/lib/agent/stages/active";
@@ -27,13 +28,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const STAGES: Record<Exclude<StageName, "paused" | "abort">, Stage> = {
+  exploration: explorationStage,
   screening: screeningStage,
   onboarding: onboardingStage,
   active: activeStage,
 };
 
 interface PlaygroundRequest {
-  stage: "screening" | "onboarding" | "active";
+  stage: "exploration" | "screening" | "onboarding" | "active";
   job: JobContext | null;
   applicant: ApplicantContext;
   history: ConversationTurn[];
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!payload.stage || !STAGES[payload.stage]) {
-    return NextResponse.json({ error: "stage 값 필수: screening/onboarding/active" }, { status: 400 });
+    return NextResponse.json({ error: "stage 값 필수: exploration/screening/onboarding/active" }, { status: 400 });
   }
   if (!payload.applicant || !payload.applicant.phone) {
     return NextResponse.json({ error: "applicant.phone 필수" }, { status: 400 });

@@ -83,6 +83,8 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     case "advance": {
       nextStage = transition.to;
 
+      // exploration → screening: 자동 발송 없음. 다음 인입에서 screening 모듈이 자연스럽게 이어받음.
+
       if (transition.to === "onboarding") {
         // screening → onboarding: 확정 처리 + 앱·교육 안내 자동 발송
         await supabase

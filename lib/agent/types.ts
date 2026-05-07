@@ -5,7 +5,7 @@
  * 결과는 응답 텍스트 + 체크리스트 갱신 + 단계 전이 시그널.
  */
 
-export type StageName = "screening" | "onboarding" | "active" | "paused" | "abort";
+export type StageName = "exploration" | "screening" | "onboarding" | "active" | "paused" | "abort";
 
 // ─────────────────────────────────────────────────────────────
 // 체크리스트

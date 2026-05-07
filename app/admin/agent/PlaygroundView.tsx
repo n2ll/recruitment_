@@ -35,7 +35,7 @@ interface RecCandidate {
   score: { total: number; distance: number; vehicle: number; recency: number; distanceKm: number };
 }
 
-type SimStage = "screening" | "onboarding" | "active";
+type SimStage = "exploration" | "screening" | "onboarding" | "active";
 
 interface ConvTurn {
   direction: "inbound" | "outbound";
@@ -77,7 +77,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
   const [candidates, setCandidates] = useState<RecCandidate[]>([]);
 
   // ── 시뮬 상태 ─────────────────────────────────────────
-  const [stage, setStage] = useState<SimStage>("screening");
+  const [stage, setStage] = useState<SimStage>("exploration");
   const [agentState, setAgentState] = useState<AgentState>({});
   const [conversation, setConversation] = useState<ConvTurn[]>([]);
   const [input, setInput] = useState("");
@@ -172,7 +172,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
   const resetSim = () => {
     if (conversation.length > 0 && !confirm("대화·체크리스트를 초기화할까요?")) return;
-    setStage("screening");
+    setStage("exploration");
     setAgentState({});
     setConversation([]);
     setInput("");
@@ -432,7 +432,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
         <h3 className="pg-h">⚙️ 시뮬 단계</h3>
         <div className="pg-stage-row">
-          {(["screening", "onboarding", "active"] as SimStage[]).map((s) => (
+          {(["exploration", "screening", "onboarding", "active"] as SimStage[]).map((s) => (
             <button
               key={s}
               className={`pg-stage-btn ${stage === s ? "pg-stage-on" : ""}`}

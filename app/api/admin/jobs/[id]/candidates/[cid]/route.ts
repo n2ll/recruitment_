@@ -3,7 +3,7 @@
  * PATCH /api/admin/jobs/[id]/candidates/[cid]   — 매니저 액션 (일시정지/재개/부적합/단계 변경)
  *
  * PATCH 허용 필드:
- *   - agent_stage: "screening" | "onboarding" | "active" | "paused" | "abort" | null
+ *   - agent_stage: "exploration" | "screening" | "onboarding" | "active" | "paused" | "abort" | null
  *   - paused_reason: string | null
  *   - closed_reason: string | null
  *
@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 
-const ALLOWED_STAGES = ["screening", "onboarding", "active", "paused", "abort"];
+const ALLOWED_STAGES = ["exploration", "screening", "onboarding", "active", "paused", "abort"];
 
 export async function GET(
   _req: NextRequest,
