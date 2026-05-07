@@ -14,6 +14,7 @@ import { explorationStage } from "@/lib/agent/stages/exploration";
 import { onboardingStage } from "@/lib/agent/stages/onboarding";
 import { screeningStage } from "@/lib/agent/stages/screening";
 import { activeStage } from "@/lib/agent/stages/active";
+import { buildScreeningAnnouncement } from "@/lib/agent/transitions";
 import type {
   AgentState,
   ApplicantContext,
@@ -75,7 +76,9 @@ export async function POST(req: NextRequest) {
   let auto_messages_preview: string[] = [];
   if (result.transition.kind === "advance") {
     const name = payload.applicant.name ?? "지원자";
-    if (result.transition.to === "onboarding") {
+    if (result.transition.to === "screening") {
+      auto_messages_preview = [buildScreeningAnnouncement(name)];
+    } else if (result.transition.to === "onboarding") {
       auto_messages_preview = [
         buildConfirmText(name),
         buildOnboardingGuideText(name),

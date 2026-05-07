@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendNotification } from "../solapi";
 import { mergeAgentState } from "./checklist";
-import type { AgentState, StageName, StageTransition } from "./types";
+import type { AgentState, JobContext, ScreeningChecklist, StageName, StageTransition } from "./types";
 
 interface ApplyTransitionInput {
   supabase: SupabaseClient;
@@ -19,6 +19,7 @@ interface ApplyTransitionInput {
   applicant_name: string | null;
   applicant_phone: string;
   job_id: number;
+  job: JobContext | null;           // exploration → screening 시 조건부 자동 true 판정용
   current_stage: StageName;
   state_update: AgentState;        // stage.process가 만든 새 state (이미 merge 완료된 형태)
   transition: StageTransition;
@@ -37,6 +38,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     applicant_name,
     applicant_phone,
     job_id,
+    job,
     current_stage,
     state_update,
     transition,
@@ -83,7 +85,57 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     case "advance": {
       nextStage = transition.to;
 
-      // exploration → screening: 자동 발송 없음. 다음 인입에서 screening 모듈이 자연스럽게 이어받음.
+      // ─── exploration → screening: 안내 묶음 자동 발송 + 조건부 자동 true ───
+      if (transition.to === "screening") {
+        // 1) 안내 묶음 (정산/프로모션/업무시간) 1통 발송
+        try {
+          const announceText = buildScreeningAnnouncement(applicant_name);
+          const r = await sendNotification(
+            applicant_phone,
+            "SCREENING_ANNOUNCE",
+            { "#{이름}": applicant_name ?? "지원자" },
+            announceText
+          );
+          if (r.success) {
+            await supabase.from("messages").insert({
+              applicant_id,
+              applicant_phone,
+              direction: "outbound",
+              body: announceText,
+              status: "sent",
+              sent_by: "system-auto",
+              solapi_msg_id: r.messageId ?? null,
+              message_type: r.via,
+              template_id: r.templateId ?? null,
+              job_id,
+            });
+            autoSent++;
+          }
+        } catch (e) {
+          console.error("[transitions] SCREENING_ANNOUNCE send failed", e);
+        }
+
+        // 2) 안내 항목 + 조건부 항목 자동 true
+        const autoTrue: Partial<ScreeningChecklist> = {
+          프로모션_종료가능성_안내: true,
+          정산주기_안내: true,
+          업무시간_체계_이해: true,
+        };
+        // 자차 필요 없는 공고면 자차_재확인 자동 통과
+        if (job && job.vehicle_required === false) {
+          autoTrue.자차_재확인 = true;
+        }
+        // 주말 슬롯이 아니면 공휴일 항목 자동 통과
+        const slot = job?.slot ?? "";
+        if (!slot.includes("주말")) {
+          autoTrue.공휴일_업무여부_확인 = true;
+        }
+
+        extraStateUpdate = {
+          screening: autoTrue,
+          meta: { screening_entered_at: now },
+        };
+      }
 
       if (transition.to === "onboarding") {
         // screening → onboarding: 확정 처리 + 앱·교육 안내 자동 발송
@@ -218,6 +270,25 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 // ─────────────────────────────────────────────────────────────
 // 자동 발송 본문 (운영 텍스트 — prompts/screening-examples.txt 기반)
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * exploration → screening 진입 시 자동 발송되는 안내 묶음.
+ * 매니저가 통화로 풀어주던 6항목 중 "안내" 성격(정산/프로모션/업무시간)을
+ * 한 통에 깔끔하게 통보. 이후 AI가 확인질문만 묶어서 진행.
+ */
+export function buildScreeningAnnouncement(name: string | null): string {
+  const n = name ?? "지원자";
+  return [
+    `${n}님, 본격적인 진행을 위해 몇 가지 안내드릴게요!`,
+    "",
+    "1) 업무시간은 배차 시간 기준입니다.",
+    "   08:00 첫 배차 / 16:00 마지막 배차이고, 배송 시간은 별도로 산정됩니다.",
+    "2) 정산은 건당 금액이 매주, 프로모션 비용은 2주 간격으로 진행됩니다.",
+    "3) 프로모션 5천원 비용은 1~2개월 후 종료될 수 있는 점 참고 부탁드려요.",
+    "",
+    "읽어보시고 괜찮으시면 몇 가지만 짧게 여쭤볼게요^^",
+  ].join("\n");
+}
 
 function buildConfirmText(name: string | null): string {
   const n = name ?? "지원자";

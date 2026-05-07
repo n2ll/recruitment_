@@ -151,6 +151,7 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
     applicant_name: applicant.name,
     applicant_phone: applicant.phone,
     job_id: jc.job_id,
+    job,
     current_stage: stageName,
     state_update: result.state_update,
     transition: result.transition,
