@@ -72,6 +72,7 @@ export interface JobContext {
   start_date: string | null;
   vehicle_required: boolean;
   pickup_address: string | null;
+  site_manager_id: number | null;
 }
 
 export interface ApplicantContext {

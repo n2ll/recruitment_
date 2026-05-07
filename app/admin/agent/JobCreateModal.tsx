@@ -10,7 +10,15 @@
  *   4. [공고 저장 + 발송] → POST /api/admin/jobs → POST /api/admin/jobs/[id]/dispatch
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+interface SiteManager {
+  id: number;
+  name: string;
+  phone: string;
+  branch: string | null;
+  active: boolean;
+}
 
 interface RecCandidate {
   id: number;
@@ -53,6 +61,20 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
   const [capacity, setCapacity] = useState(1);
   const [vehicleRequired, setVehicleRequired] = useState(true);
   const [pickupAddress, setPickupAddress] = useState("");
+  const [siteManagerId, setSiteManagerId] = useState<number | null>(null);
+  const [siteManagers, setSiteManagers] = useState<SiteManager[]>([]);
+
+  // 매니저 목록 로드
+  useEffect(() => {
+    fetch("/api/admin/site-managers", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j.data)) {
+          setSiteManagers((j.data as SiteManager[]).filter((m) => m.active));
+        }
+      })
+      .catch((e) => console.error("[JobCreateModal] site-managers load", e));
+  }, []);
 
   const [recLoading, setRecLoading] = useState(false);
   const [candidates, setCandidates] = useState<RecCandidate[]>([]);
@@ -166,6 +188,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
           vehicle_required: vehicleRequired,
           pickup_address: pickupAddress || null,
           capacity,
+          site_manager_id: siteManagerId,
         }),
       });
       const createJson = await createRes.json();
@@ -321,6 +344,20 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
                 value={pickupAddress}
                 onChange={(e) => setPickupAddress(e.target.value)}
               />
+            </label>
+            <label className="ajm-meta ajm-meta-wide">
+              <span>현장 매니저 (만남장소 안내·확정 알림에 사용)</span>
+              <select
+                value={siteManagerId ?? ""}
+                onChange={(e) => setSiteManagerId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">선택 안함</option>
+                {siteManagers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.phone}){m.branch ? ` — ${m.branch}` : ""}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 

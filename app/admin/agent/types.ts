@@ -25,6 +25,7 @@ export interface JobRow {
   pickup_lng: number | null;
   capacity: number;
   status: "active" | "closed" | "paused";
+  site_manager_id: number | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;

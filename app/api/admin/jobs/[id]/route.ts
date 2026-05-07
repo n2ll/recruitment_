@@ -18,6 +18,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "pickup_lng",
   "capacity",
   "status",
+  "site_manager_id",
 ]);
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

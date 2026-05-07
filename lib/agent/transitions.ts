@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendNotification } from "../solapi";
+import { sendSlackConfirmedAlert } from "../slack";
 import { mergeAgentState } from "./checklist";
 import type { AgentState, JobContext, ScreeningChecklist, StageName, StageTransition } from "./types";
 
@@ -149,6 +150,28 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .update({ status: "확정" })
           .eq("id", applicant_id);
 
+        // 슬랙 확정 알림 — 라인명 / 지원자 / 매니저
+        try {
+          let smName: string | null = null;
+          if (job?.site_manager_id) {
+            const { data: sm } = await supabase
+              .from("site_managers")
+              .select("name")
+              .eq("id", job.site_manager_id)
+              .maybeSingle();
+            smName = (sm?.name as string | null) ?? null;
+          }
+          await sendSlackConfirmedAlert({
+            job_title: job?.title ?? "(공고 정보 없음)",
+            applicant_name,
+            applicant_phone,
+            branch: job?.branch ?? null,
+            site_manager_name: smName,
+          });
+        } catch (e) {
+          console.error("[transitions] slack confirmed alert failed", e);
+        }
+
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {
           const guideText = buildOnboardingGuideText(applicant_name);
@@ -227,6 +250,37 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     }
   }
 
+  // ─── 후처리: onboarding 단계에서 배민ID + 차량번호 둘 다 수신 시 만남장소 자동 발송 ───
+  // (transition.kind 무관하게 검사 — stay 중 인입에서 둘 다 도착 케이스가 가장 흔함)
+  const mergedForCheck = mergeAgentState(state_update, extraStateUpdate);
+  const onb = mergedForCheck.onboarding;
+  if (
+    (current_stage === "onboarding" || nextStage === "onboarding") &&
+    onb?.배민_아이디_수신 === true &&
+    onb?.차량번호_수신 === true &&
+    onb?.만남장소_안내발송됨 !== true
+  ) {
+    try {
+      const venueSent = await sendVenueGuide({
+        supabase,
+        applicant_id,
+        applicant_name,
+        applicant_phone,
+        job_id,
+        job,
+      });
+      if (venueSent) {
+        autoSent++;
+        extraStateUpdate = mergeAgentState(extraStateUpdate, {
+          onboarding: { 만남장소_안내발송됨: true },
+          meta: { venue_sent_at: now },
+        });
+      }
+    } catch (e) {
+      console.error("[transitions] venue guide auto-send failed", e);
+    }
+  }
+
   // job_candidates 갱신
   const merged = mergeAgentState(state_update, extraStateUpdate);
   const jcUpdate: Record<string, unknown> = {
@@ -238,6 +292,120 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
   await supabase.from("job_candidates").update(jcUpdate).eq("id", candidate_id);
 
   return { next_stage: nextStage, auto_sent_messages: autoSent };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 만남장소 자동 발송 (배민ID + 차량번호 둘 다 수신 시점)
+// ─────────────────────────────────────────────────────────────
+
+interface SendVenueGuideInput {
+  supabase: SupabaseClient;
+  applicant_id: number;
+  applicant_name: string | null;
+  applicant_phone: string;
+  job_id: number;
+  job: JobContext | null;
+}
+
+async function sendVenueGuide(input: SendVenueGuideInput): Promise<boolean> {
+  const { supabase, applicant_id, applicant_name, applicant_phone, job_id, job } = input;
+
+  if (!job) {
+    console.warn("[venue-guide] skipped: job 없음", { applicant_id });
+    return false;
+  }
+  if (!job.start_date) {
+    console.warn("[venue-guide] skipped: start_date 없음", { applicant_id, job_id: job.id });
+    return false;
+  }
+  if (!job.pickup_address) {
+    console.warn("[venue-guide] skipped: pickup_address 없음", { applicant_id, job_id: job.id });
+    return false;
+  }
+
+  let smName: string | null = null;
+  let smPhone: string | null = null;
+  if (job.site_manager_id) {
+    const { data: sm } = await supabase
+      .from("site_managers")
+      .select("name, phone")
+      .eq("id", job.site_manager_id)
+      .maybeSingle();
+    smName = (sm?.name as string | null) ?? null;
+    smPhone = (sm?.phone as string | null) ?? null;
+  }
+  if (!smName || !smPhone) {
+    console.warn("[venue-guide] skipped: 현장 매니저 미배정", { applicant_id, job_id: job.id });
+    return false;
+  }
+
+  const text = buildVenueGuideText({
+    name: applicant_name,
+    start_date: job.start_date,
+    pickup_address: job.pickup_address,
+    site_manager_name: smName,
+    site_manager_phone: smPhone,
+  });
+
+  const r = await sendNotification(
+    applicant_phone,
+    "VENUE_GUIDE",
+    {
+      "#{이름}": applicant_name ?? "지원자",
+      "#{일시}": formatStartDate(job.start_date),
+      "#{위치}": job.pickup_address,
+      "#{매니저이름}": smName,
+      "#{매니저전화}": smPhone,
+    },
+    text
+  );
+
+  if (!r.success) {
+    console.error("[venue-guide] send failed", r.error);
+    return false;
+  }
+
+  await supabase.from("messages").insert({
+    applicant_id,
+    applicant_phone,
+    direction: "outbound",
+    body: text,
+    status: "sent",
+    sent_by: "system-auto",
+    solapi_msg_id: r.messageId ?? null,
+    message_type: r.via,
+    template_id: r.templateId ?? null,
+    job_id,
+  });
+
+  return true;
+}
+
+function formatStartDate(iso: string): string {
+  // iso = "2026-05-07" 형태 가정
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const w = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  return `${m}/${day}(${w})`;
+}
+
+export function buildVenueGuideText(params: {
+  name: string | null;
+  start_date: string;
+  pickup_address: string;
+  site_manager_name: string;
+  site_manager_phone: string;
+}): string {
+  const n = params.name ?? "지원자";
+  return [
+    `${n}님, 업무 시작 만남 장소 안내드립니다.`,
+    "",
+    `일시: ${formatStartDate(params.start_date)} 07:50`,
+    `위치: ${params.pickup_address}`,
+    `현장 담당자: ${params.site_manager_name} 매니저 ${params.site_manager_phone}`,
+  ].join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("jobs")
-    .select("id, title, body, branch, slot, start_date, vehicle_required, pickup_address, capacity, status, created_at, updated_at, closed_at")
+    .select("id, title, body, branch, slot, start_date, vehicle_required, pickup_address, capacity, status, site_manager_id, created_at, updated_at, closed_at")
     .order("created_at", { ascending: false });
 
   if (statusFilter && statusFilter !== "all") {
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
     pickup_lat,
     pickup_lng,
     capacity,
+    site_manager_id,
     created_by,
   } = body as {
     title?: string;
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
     pickup_lat?: number | null;
     pickup_lng?: number | null;
     capacity?: number;
+    site_manager_id?: number | null;
     created_by?: string | null;
   };
 
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
       pickup_lat: pickup_lat ?? null,
       pickup_lng: pickup_lng ?? null,
       capacity: capacity ?? 1,
+      site_manager_id: site_manager_id ?? null,
       created_by: created_by ?? null,
     })
     .select()

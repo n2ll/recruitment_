@@ -100,7 +100,8 @@ export type TemplateKey =
   | "WAIT"
   | "ATTENDANCE"
   | "GUIDE"
-  | "SCREENING_ANNOUNCE";
+  | "SCREENING_ANNOUNCE"
+  | "VENUE_GUIDE";
 
 export async function sendNotification(
   to: string,

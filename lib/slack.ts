@@ -8,6 +8,43 @@
 const SLACK_ENABLED = process.env.SLACK_NOTIFICATIONS_ENABLED === "1";
 
 /**
+ * 지원자 확정(screening → onboarding 전이) 시 슬랙 알림.
+ * 라인명(공고 제목) + 지원자 이름 + 전화번호 + 매니저 정보.
+ */
+export async function sendSlackConfirmedAlert(data: {
+  job_title: string;
+  applicant_name: string | null;
+  applicant_phone: string;
+  branch: string | null;
+  site_manager_name: string | null;
+}) {
+  if (!SLACK_ENABLED) return;
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const name = data.applicant_name || "(이름 없음)";
+  const branchTag = data.branch ? ` · ${data.branch}` : "";
+  const sm = data.site_manager_name ? `\n> *현장 매니저:* ${data.site_manager_name}` : "";
+
+  const message = {
+    text:
+      `:white_check_mark: *지원자 확정* ${branchTag}\n` +
+      `> *라인:* ${data.job_title}\n` +
+      `> *지원자:* ${name} (${data.applicant_phone})${sm}`,
+  };
+
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    });
+  } catch (e) {
+    console.error("[slack confirmed alert]", e);
+  }
+}
+
+/**
  * AI 에이전트가 답변 못 만들었을 때 — 매니저 직접 응대 필요 알림
  */
 export async function sendSlackAgentAlert(data: {
