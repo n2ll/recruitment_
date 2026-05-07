@@ -33,8 +33,6 @@ const EMPTY_NEW = {
   name: "",
   phone: "",
   branch: "",
-  role: "현장",
-  note: "",
 };
 
 export default function SiteManagersView({ branches }: Props) {
@@ -81,10 +79,7 @@ export default function SiteManagersView({ branches }: Props) {
         a.name !== b.name ||
         a.phone !== b.phone ||
         (a.branch ?? "") !== (b.branch ?? "") ||
-        (a.role ?? "") !== (b.role ?? "") ||
-        (a.note ?? "") !== (b.note ?? "") ||
-        a.active !== b.active ||
-        a.sort_order !== b.sort_order
+        a.active !== b.active
       );
     },
     [rows, localRows]
@@ -106,10 +101,7 @@ export default function SiteManagersView({ branches }: Props) {
           name: row.name,
           phone: row.phone,
           branch: row.branch,
-          role: row.role,
-          note: row.note,
           active: row.active,
-          sort_order: row.sort_order,
         }),
       });
       const json = await res.json();
@@ -159,8 +151,6 @@ export default function SiteManagersView({ branches }: Props) {
           name: newRow.name,
           phone: newRow.phone,
           branch: newRow.branch || null,
-          role: newRow.role || "현장",
-          note: newRow.note || null,
           active: true,
         }),
       });
@@ -217,18 +207,6 @@ export default function SiteManagersView({ branches }: Props) {
             </option>
           ))}
         </select>
-        <input
-          className="filter-input sm-narrow"
-          placeholder="역할 (현장)"
-          value={newRow.role}
-          onChange={(e) => setNewRow((r) => ({ ...r, role: e.target.value }))}
-        />
-        <input
-          className="filter-input"
-          placeholder="비고"
-          value={newRow.note}
-          onChange={(e) => setNewRow((r) => ({ ...r, note: e.target.value }))}
-        />
         <button className="rec-btn-secondary" onClick={addRow} disabled={adding}>
           {adding ? "추가 중..." : "+ 매니저 추가"}
         </button>
@@ -243,14 +221,11 @@ export default function SiteManagersView({ branches }: Props) {
           <table className="table sm-table">
             <thead>
               <tr>
-                <th style={{ width: 130 }}>이름</th>
-                <th style={{ width: 150 }}>전화</th>
-                <th style={{ width: 150 }}>담당 지점</th>
-                <th style={{ width: 100 }}>역할</th>
-                <th>비고</th>
+                <th>이름</th>
+                <th>전화</th>
+                <th>담당 지점</th>
                 <th style={{ width: 80 }}>활성</th>
-                <th style={{ width: 70 }}>정렬</th>
-                <th style={{ width: 120 }}></th>
+                <th style={{ width: 160 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -294,24 +269,6 @@ export default function SiteManagersView({ branches }: Props) {
                       </select>
                     </td>
                     <td>
-                      <input
-                        type="text"
-                        className="sm-input"
-                        value={r.role ?? ""}
-                        disabled={isSaving}
-                        onChange={(e) => updateLocal(r.id, { role: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="sm-input"
-                        value={r.note ?? ""}
-                        disabled={isSaving}
-                        onChange={(e) => updateLocal(r.id, { note: e.target.value })}
-                      />
-                    </td>
-                    <td>
                       <label className="toggle">
                         <input
                           type="checkbox"
@@ -321,17 +278,6 @@ export default function SiteManagersView({ branches }: Props) {
                         />
                         <span className="toggle-slider" />
                       </label>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="sm-input sm-narrow"
-                        value={r.sort_order}
-                        disabled={isSaving}
-                        onChange={(e) =>
-                          updateLocal(r.id, { sort_order: Number(e.target.value) || 0 })
-                        }
-                      />
                     </td>
                     <td className="sm-actions">
                       <button
@@ -401,9 +347,12 @@ export default function SiteManagersView({ branches }: Props) {
         }
         .sm-actions {
           display: flex;
-          gap: 4px;
+          gap: 6px;
+          justify-content: flex-end;
         }
         .sm-btn-sm {
+          flex: 1;
+          min-width: 60px;
           padding: 6px 10px;
           font-size: 12px;
         }

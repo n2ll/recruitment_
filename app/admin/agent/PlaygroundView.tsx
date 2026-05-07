@@ -10,7 +10,7 @@
  * 우측: 채팅 시뮬 + 단계 배지 + 체크리스트 + 자동 발송 미리보기
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AgentState,
   ONBOARDING_KEYS,
@@ -21,6 +21,14 @@ import {
 
 interface PlaygroundViewProps {
   branches: string[];
+}
+
+interface SiteManager {
+  id: number;
+  name: string;
+  phone: string;
+  branch: string | null;
+  active: boolean;
 }
 
 interface RecCandidate {
@@ -60,6 +68,19 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
   const [jobStartDate, setJobStartDate] = useState("");
   const [jobVehicle, setJobVehicle] = useState(true);
   const [jobPickup, setJobPickup] = useState("");
+  const [jobSiteManagerId, setJobSiteManagerId] = useState<number | null>(null);
+  const [siteManagers, setSiteManagers] = useState<SiteManager[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/site-managers", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j.data)) {
+          setSiteManagers((j.data as SiteManager[]).filter((m) => m.active));
+        }
+      })
+      .catch((e) => console.error("[playground] site-managers load", e));
+  }, []);
 
   // ── 지원자 (가짜) ─────────────────────────────────────
   const [appName, setAppName] = useState("홍길동");
@@ -211,6 +232,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
             start_date: jobStartDate || null,
             vehicle_required: jobVehicle,
             pickup_address: jobPickup || null,
+            site_manager_id: jobSiteManagerId,
           },
           applicant: {
             id: 0,
@@ -358,6 +380,19 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           </label>
           <label className="pg-meta-wide"><span>픽업 주소</span>
             <input value={jobPickup} onChange={(e) => setJobPickup(e.target.value)} placeholder="예) 서울 강북구 도봉로 34" />
+          </label>
+          <label className="pg-meta-wide"><span>현장 매니저 (만남장소 안내·확정 알림에 사용)</span>
+            <select
+              value={jobSiteManagerId ?? ""}
+              onChange={(e) => setJobSiteManagerId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">선택 안함</option>
+              {siteManagers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.phone}){m.branch ? ` — ${m.branch}` : ""}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
