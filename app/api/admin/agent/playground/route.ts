@@ -20,6 +20,7 @@ import {
   buildFirstDayRules,
   buildVenueGuideText,
 } from "@/lib/agent/transitions";
+import { mergeAgentState } from "@/lib/agent/checklist";
 import { createServiceClient } from "@/lib/supabase";
 import type {
   AgentState,
@@ -78,16 +79,39 @@ export async function POST(req: NextRequest) {
 
   const result = await stage.process(ctx, payload.inbound_text.trim());
 
-  // 실제 운영에서 보내질 자동 발송 텍스트 미리보기
+  // 실제 운영(transitions.applyTransition)이 처리하는 자동 발송 + 자동 체크리스트 갱신을 시뮬한다.
+  // Playground는 applyTransition을 부르지 않으므로, 같은 부수효과를 여기서 직접 미러링.
   const name = payload.applicant.name ?? "지원자";
   let auto_messages_preview: string[] = [];
 
-  // (1) 단계 전이 시 자동 발송
+  // (1) 단계 전이 시 자동 발송 + 자동 true 체크리스트
   if (result.transition.kind === "advance") {
     if (result.transition.to === "screening") {
       auto_messages_preview = [buildScreeningAnnouncement(name)];
+
+      // exploration → screening: 안내 항목 + 조건부 항목 자동 true
+      const job = payload.job;
+      const slot = job?.slot ?? "";
+      const screeningAuto: Record<string, boolean> = {
+        프로모션_종료가능성_안내: true,
+        정산주기_안내: true,
+        업무시간_체계_이해: true,
+      };
+      if (job && job.vehicle_required === false) {
+        screeningAuto.자차_재확인 = true;
+      }
+      if (!slot.includes("주말")) {
+        screeningAuto.공휴일_업무여부_확인 = true;
+      }
+      result.state_update = mergeAgentState(result.state_update, {
+        screening: screeningAuto,
+      });
     } else if (result.transition.to === "onboarding") {
       auto_messages_preview = [buildOnboardingGuideText(name)];
+      // screening → onboarding: 앱설치 교육 안내 발송됨 자동 true
+      result.state_update = mergeAgentState(result.state_update, {
+        onboarding: { 앱설치_교육_안내발송됨: true },
+      });
     } else if (result.transition.to === "active") {
       auto_messages_preview = [buildFirstDayRules(name)];
     }
@@ -95,7 +119,7 @@ export async function POST(req: NextRequest) {
 
   // (2) 만남장소 자동 발송 — onboarding state post-process 시뮬
   // (배민ID + 차량번호 둘 다 true & 아직 미발송 상태일 때 시스템이 자동 발송)
-  if (payload.stage === "onboarding") {
+  if (payload.stage === "onboarding" || result.transition.kind === "advance") {
     const onb = result.state_update.onboarding;
     const willSendVenue =
       onb?.배민_아이디_수신 === true &&
@@ -111,7 +135,6 @@ export async function POST(req: NextRequest) {
       } else if (!job?.site_manager_id) {
         auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 현장 매니저 미배정");
       } else {
-        // 매니저 정보 조회 (시뮬용)
         try {
           const supabase = createServiceClient();
           const { data: sm } = await supabase
@@ -129,6 +152,10 @@ export async function POST(req: NextRequest) {
                 site_manager_phone: sm.phone as string,
               })
             );
+            // 만남장소 발송됨 — 다음 턴 중복 발송 방지
+            result.state_update = mergeAgentState(result.state_update, {
+              onboarding: { 만남장소_안내발송됨: true },
+            });
           } else {
             auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 매니저 정보 조회 실패");
           }
