@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
+import SiteManagersView from "./site-managers/SiteManagersView";
 
 interface Applicant {
   id: number;
@@ -58,7 +59,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "agent" | "playground";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground";
 
 interface RecommendResponse {
   success: boolean;
@@ -1024,6 +1025,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
             지점 관리
           </button>
+          <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
+            onClick={() => setTab("site-managers")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            현장 매니저
+          </button>
           <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
             onClick={() => setTab("agent")}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1827,6 +1833,8 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+          ) : tab === "site-managers" ? (
+            <SiteManagersView branches={activeBranchNames} />
           ) : tab === "agent" ? (
             <AgentJobsView branches={activeBranchNames} />
           ) : tab === "playground" ? (
