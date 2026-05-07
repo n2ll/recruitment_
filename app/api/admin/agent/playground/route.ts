@@ -18,7 +18,9 @@ import {
   buildScreeningAnnouncement,
   buildOnboardingGuideText,
   buildFirstDayRules,
+  buildVenueGuideText,
 } from "@/lib/agent/transitions";
+import { createServiceClient } from "@/lib/supabase";
 import type {
   AgentState,
   ApplicantContext,
@@ -76,16 +78,65 @@ export async function POST(req: NextRequest) {
 
   const result = await stage.process(ctx, payload.inbound_text.trim());
 
-  // transition: advance 시 실제 운영에서 보내질 자동 발송 텍스트 미리보기
+  // 실제 운영에서 보내질 자동 발송 텍스트 미리보기
+  const name = payload.applicant.name ?? "지원자";
   let auto_messages_preview: string[] = [];
+
+  // (1) 단계 전이 시 자동 발송
   if (result.transition.kind === "advance") {
-    const name = payload.applicant.name ?? "지원자";
     if (result.transition.to === "screening") {
       auto_messages_preview = [buildScreeningAnnouncement(name)];
     } else if (result.transition.to === "onboarding") {
       auto_messages_preview = [buildOnboardingGuideText(name)];
     } else if (result.transition.to === "active") {
       auto_messages_preview = [buildFirstDayRules(name)];
+    }
+  }
+
+  // (2) 만남장소 자동 발송 — onboarding state post-process 시뮬
+  // (배민ID + 차량번호 둘 다 true & 아직 미발송 상태일 때 시스템이 자동 발송)
+  if (payload.stage === "onboarding") {
+    const onb = result.state_update.onboarding;
+    const willSendVenue =
+      onb?.배민_아이디_수신 === true &&
+      onb?.차량번호_수신 === true &&
+      onb?.만남장소_안내발송됨 !== true;
+
+    if (willSendVenue) {
+      const job = payload.job;
+      if (!job?.start_date) {
+        auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 공고에 시작일 없음");
+      } else if (!job?.pickup_address) {
+        auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 공고에 픽업주소 없음");
+      } else if (!job?.site_manager_id) {
+        auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 현장 매니저 미배정");
+      } else {
+        // 매니저 정보 조회 (시뮬용)
+        try {
+          const supabase = createServiceClient();
+          const { data: sm } = await supabase
+            .from("site_managers")
+            .select("name, phone")
+            .eq("id", job.site_manager_id)
+            .maybeSingle();
+          if (sm?.name && sm?.phone) {
+            auto_messages_preview.push(
+              buildVenueGuideText({
+                name: payload.applicant.name,
+                start_date: job.start_date,
+                pickup_address: job.pickup_address,
+                site_manager_name: sm.name as string,
+                site_manager_phone: sm.phone as string,
+              })
+            );
+          } else {
+            auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 미충족: 매니저 정보 조회 실패");
+          }
+        } catch (e) {
+          console.error("[playground] venue preview fetch failed", e);
+          auto_messages_preview.push("⚠️ 만남장소 자동 발송 조건 조회 실패 (DB 오류)");
+        }
+      }
     }
   }
 

@@ -268,9 +268,26 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
       const result = json.result;
 
       // 3) 응답 turn 추가
+      // AI 응답이 비어 있으면(advance 직전 / 만남장소 자동발송 직전 등),
+      // 시스템 자동 발송 메시지를 에이전트 말풍선의 본문으로 사용한다.
+      // 그 외 케이스는 본문 + 자동발송 미리보기 분리 표시.
+      const autoMessages = Array.isArray(json.auto_messages_preview)
+        ? (json.auto_messages_preview as string[])
+        : [];
+      const replyEmpty = !result.reply_text || !String(result.reply_text).trim();
+      const useAutoAsBody = replyEmpty && autoMessages.length > 0;
+      const fallbackEmpty =
+        result.transition.kind === "pause"
+          ? "(pause — 매니저 인계 대기)"
+          : result.transition.kind === "abort"
+          ? "(abort — 종료)"
+          : "(응답 없음)";
+
       const outboundTurn: ConvTurn = {
         direction: "outbound",
-        body: result.reply_text || "(응답 없음 — pause/abort)",
+        body: useAutoAsBody
+          ? autoMessages.join("\n\n────────────\n\n")
+          : result.reply_text || fallbackEmpty,
         created_at: new Date().toISOString(),
         reasoning: result.reasoning,
         transition:
@@ -281,10 +298,8 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
             : result.transition.kind === "abort"
             ? `⛔ abort: ${result.transition.reason}`
             : undefined,
-        auto_preview:
-          Array.isArray(json.auto_messages_preview) && json.auto_messages_preview.length > 0
-            ? json.auto_messages_preview
-            : undefined,
+        // useAutoAsBody일 땐 본문에 이미 들어갔으므로 별도 preview 영역 안 보여줌
+        auto_preview: !useAutoAsBody && autoMessages.length > 0 ? autoMessages : undefined,
       };
       setConversation([...newConv, outboundTurn]);
 
