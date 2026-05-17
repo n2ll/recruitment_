@@ -27,7 +27,21 @@ interface FormData {
   experience: string;
   availableDate: string;
   selfOwnership: string;
+  source: string;
   marketingConsent: boolean;
+}
+
+const SOURCE_OPTIONS = [
+  { label: "당근", value: "danggeun" },
+  { label: "페이스북", value: "facebook" },
+  { label: "네이버 검색", value: "naver" },
+  { label: "해당없음", value: "direct" },
+];
+
+function normalizeSource(raw: string | null): string {
+  const known = SOURCE_OPTIONS.map((s) => s.value);
+  if (raw && known.includes(raw)) return raw;
+  return "direct";
 }
 
 const KAKAO_CHANNEL_URL =
@@ -155,7 +169,7 @@ export default function ApplyPageWrapper() {
 
 function ApplyPage() {
   const searchParams = useSearchParams();
-  const source = searchParams.get("source") || "direct";
+  const defaultSource = normalizeSource(searchParams.get("source"));
   const branchParam = searchParams.get("branch") || "";
 
   const [form, setForm] = useState<FormData>({
@@ -164,6 +178,7 @@ function ApplyPage() {
     branch1: branchParam, branch2: "",
     workHours: [], introduction: "", experience: "",
     availableDate: "", selfOwnership: "",
+    source: defaultSource,
     marketingConsent: true,
   });
 
@@ -248,7 +263,7 @@ function ApplyPage() {
       const res = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, source }),
+        body: JSON.stringify({ ...form, source: form.source }),
       });
       if (!res.ok) throw new Error();
       setStep("done");
@@ -567,6 +582,19 @@ function ApplyPage() {
               </div>
               {errors.selfOwnership && <p className="error-msg">{errors.selfOwnership}</p>}
             </div>
+
+            <div className="field-wrap">
+              <label className="field-label">지원 경로 <span className="req">*</span></label>
+              <div className="radio-group source-row">
+                {SOURCE_OPTIONS.map((opt) => (
+                  <button key={opt.value} type="button"
+                    className={`radio-btn ${form.source === opt.value ? "radio-on" : ""}`}
+                    onClick={() => set("source")(opt.value)}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
 
           {/* 마케팅 수신 동의 (선택) */}
@@ -700,6 +728,8 @@ const css = `
     color: #92650A; font-weight: 700;
     box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
   }
+  .source-row { gap: 6px; }
+  .source-row .radio-btn { padding: 11px 6px; font-size: 13px; }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;

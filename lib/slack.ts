@@ -5,6 +5,8 @@
  * 호출부는 그대로 두어도 됨 (각 함수가 진입 시점에 self-disable).
  */
 
+import { sourceLabel } from "@/lib/applicant-source";
+
 const SLACK_ENABLED = process.env.SLACK_NOTIFICATIONS_ENABLED === "1";
 
 /**
@@ -105,7 +107,7 @@ export async function sendSlackNotification(data: {
       `> *연락처:* ${data.phone}\n` +
       `> *지점:* ${data.branch}\n` +
       `> *시작가능일:* ${data.available_date}\n` +
-      `> *유입채널:* ${data.source}\n`,
+      `> *유입채널:* ${sourceLabel(data.source)}\n`,
   };
 
   await fetch(webhookUrl, {

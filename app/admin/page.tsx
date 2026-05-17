@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
+import DanggeunView from "./agent/DanggeunView";
 import SiteManagersView from "./site-managers/SiteManagersView";
+import { sourceLabel } from "@/lib/applicant-source";
 
 interface Applicant {
   id: number;
@@ -59,7 +61,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun";
 
 interface RecommendResponse {
   success: boolean;
@@ -1040,6 +1042,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
             플레이그라운드
           </button>
+          <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
+            onClick={() => setTab("danggeun")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
+            당근전용
+          </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1133,7 +1140,7 @@ export default function AdminPage() {
                         <td>{a.license_type}</td>
                         <td>{a.available_date}</td>
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
-                        <td>{a.source}</td>
+                        <td>{sourceLabel(a.source)}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
                         <td>
                           {canScreen && (
@@ -1839,6 +1846,8 @@ export default function AdminPage() {
             <AgentJobsView branches={activeBranchNames} />
           ) : tab === "playground" ? (
             <PlaygroundView branches={activeBranchNames} />
+          ) : tab === "danggeun" ? (
+            <DanggeunView branches={activeBranchNames} />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>
