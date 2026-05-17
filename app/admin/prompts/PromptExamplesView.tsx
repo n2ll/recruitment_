@@ -1,0 +1,539 @@
+"use client";
+
+/**
+ * 톤 가이드 — 퓨샷 예시 라이브러리.
+ *
+ * 매니저가 자유롭게 추가/수정/삭제. 같은 데이터가 AI 프롬프트에도 자동 주입됨.
+ * - conversation: 일반 대화 예시 (모든 stage에 톤 가이드로)
+ * - screening: 스크리닝 단계 운영 항목/문구
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type Category = "conversation" | "screening";
+
+interface PromptExample {
+  id: number;
+  category: Category;
+  title: string;
+  body: string;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  conversation: "대화 톤",
+  screening: "스크리닝 운영 문구",
+};
+
+const CATEGORY_DESC: Record<Category, string> = {
+  conversation:
+    "매니저가 실제로 보낸 메시지 예시. AI가 이 톤·길이·말투를 그대로 모방합니다.",
+  screening:
+    "지원/스크리닝/온보딩 단계의 운영 문구 모음. AI가 톤을 흡수해 자연스럽게 풀어냅니다.",
+};
+
+interface EditorState {
+  mode: "create" | "edit";
+  id?: number;
+  category: Category;
+  title: string;
+  body: string;
+}
+
+export default function PromptExamplesView() {
+  const [items, setItems] = useState<PromptExample[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Category>("conversation");
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/prompt-examples", { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok) setItems(Array.isArray(json.data) ? json.data : []);
+    } catch (e) {
+      console.error("[prompt-examples list]", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const filtered = useMemo(
+    () => items.filter((it) => it.category === tab),
+    [items, tab]
+  );
+
+  const handleSeed = async () => {
+    if (!confirm("기본 예시 14건을 한 번에 추가합니다. (기존 데이터가 있으면 거부됩니다) 진행할까요?")) {
+      return;
+    }
+    setSeeding(true);
+    try {
+      const res = await fetch("/api/admin/prompt-examples", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "seed" }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "시드 실패");
+        return;
+      }
+      alert(`${json.inserted}건 추가됨.`);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "시드 실패");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editor) return;
+    if (!editor.title.trim() || !editor.body.trim()) {
+      alert("제목과 본문을 입력해주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const isEdit = editor.mode === "edit" && editor.id != null;
+      const url = isEdit
+        ? `/api/admin/prompt-examples/${editor.id}`
+        : "/api/admin/prompt-examples";
+      const method = isEdit ? "PUT" : "POST";
+      const payload: Record<string, unknown> = {
+        title: editor.title,
+        body: editor.body,
+      };
+      if (!isEdit) payload.category = editor.category;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "저장 실패");
+        return;
+      }
+      setEditor(null);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("이 예시를 삭제할까요?")) return;
+    try {
+      const res = await fetch(`/api/admin/prompt-examples/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || "삭제 실패");
+        return;
+      }
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "삭제 실패");
+    }
+  };
+
+  const handleReorder = async (it: PromptExample, direction: "up" | "down") => {
+    const sameCategory = filtered;
+    const idx = sameCategory.findIndex((x) => x.id === it.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sameCategory.length) return;
+    const other = sameCategory[swapIdx];
+
+    try {
+      await Promise.all([
+        fetch(`/api/admin/prompt-examples/${it.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sort_order: other.sort_order }),
+        }),
+        fetch(`/api/admin/prompt-examples/${other.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sort_order: it.sort_order }),
+        }),
+      ]);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "순서 변경 실패");
+    }
+  };
+
+  return (
+    <div className="content">
+      <style>{css}</style>
+
+      <div className="pe-header">
+        <div>
+          <h2 className="page-title">톤 가이드</h2>
+          <p className="page-desc">
+            AI 프롬프트에 자동 주입되는 퓨샷 예시입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.
+          </p>
+        </div>
+        <div className="pe-header-actions">
+          {items.length === 0 && !loading && (
+            <button className="pe-btn pe-btn-primary" onClick={handleSeed} disabled={seeding}>
+              {seeding ? "추가 중..." : "기본 예시 가져오기"}
+            </button>
+          )}
+          <button
+            className="pe-btn pe-btn-primary"
+            onClick={() =>
+              setEditor({ mode: "create", category: tab, title: "", body: "" })
+            }
+          >
+            + 새 예시
+          </button>
+        </div>
+      </div>
+
+      <div className="pe-tabs">
+        {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+          <button
+            key={c}
+            className={`pe-tab ${tab === c ? "pe-tab-active" : ""}`}
+            onClick={() => setTab(c)}
+          >
+            {CATEGORY_LABELS[c]}{" "}
+            <span className="pe-tab-count">
+              {items.filter((x) => x.category === c).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <p className="pe-cat-desc">{CATEGORY_DESC[tab]}</p>
+
+      {loading ? (
+        <div className="pe-empty">로딩 중...</div>
+      ) : filtered.length === 0 ? (
+        <div className="pe-empty">
+          {items.length === 0
+            ? "아직 예시가 없습니다. 상단의 '기본 예시 가져오기'로 시작하세요."
+            : "이 카테고리에는 예시가 없습니다."}
+        </div>
+      ) : (
+        <div className="pe-list">
+          {filtered.map((it, idx) => (
+            <div key={it.id} className="pe-card">
+              <div className="pe-card-head">
+                <div className="pe-card-title">{it.title}</div>
+                <div className="pe-card-actions">
+                  <button
+                    className="pe-btn-ghost"
+                    onClick={() => handleReorder(it, "up")}
+                    disabled={idx === 0}
+                    title="위로"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    className="pe-btn-ghost"
+                    onClick={() => handleReorder(it, "down")}
+                    disabled={idx === filtered.length - 1}
+                    title="아래로"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    className="pe-btn-ghost"
+                    onClick={() =>
+                      setEditor({
+                        mode: "edit",
+                        id: it.id,
+                        category: it.category,
+                        title: it.title,
+                        body: it.body,
+                      })
+                    }
+                  >
+                    편집
+                  </button>
+                  <button
+                    className="pe-btn-ghost pe-btn-danger"
+                    onClick={() => handleDelete(it.id)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+              <pre className="pe-card-body">{it.body}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editor && (
+        <div className="pe-modal-bg" onClick={() => !saving && setEditor(null)}>
+          <div className="pe-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pe-modal-head">
+              <h3 className="pe-modal-title">
+                {editor.mode === "create" ? "새 예시 추가" : "예시 편집"}
+              </h3>
+              <button className="pe-btn-ghost" onClick={() => setEditor(null)}>
+                ×
+              </button>
+            </div>
+
+            <div className="pe-field">
+              <label className="pe-label">카테고리</label>
+              {editor.mode === "create" ? (
+                <select
+                  className="pe-input"
+                  value={editor.category}
+                  onChange={(e) =>
+                    setEditor({ ...editor, category: e.target.value as Category })
+                  }
+                >
+                  {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORY_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="pe-readonly">{CATEGORY_LABELS[editor.category]}</div>
+              )}
+            </div>
+
+            <div className="pe-field">
+              <label className="pe-label">제목</label>
+              <input
+                className="pe-input"
+                value={editor.title}
+                onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+                placeholder="예: 대화 9 — 첫 응대 인사"
+              />
+            </div>
+
+            <div className="pe-field">
+              <label className="pe-label">본문</label>
+              <textarea
+                className="pe-input pe-textarea"
+                value={editor.body}
+                onChange={(e) => setEditor({ ...editor, body: e.target.value })}
+                placeholder="에이전트: 안녕하세요 ㅇㅇ님...&#10;구직자: 네 안녕하세요..."
+                rows={14}
+              />
+            </div>
+
+            <div className="pe-modal-actions">
+              <button
+                className="pe-btn pe-btn-ghost-bordered"
+                onClick={() => setEditor(null)}
+                disabled={saving}
+              >
+                취소
+              </button>
+              <button
+                className="pe-btn pe-btn-primary"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const css = `
+  .pe-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .pe-header-actions { display: flex; gap: 8px; }
+  .pe-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 8px;
+  }
+  .pe-tab {
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pe-tab:hover { color: #111827; }
+  .pe-tab-active {
+    color: #92650A;
+    border-bottom-color: #F5C518;
+  }
+  .pe-tab-count {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 99px;
+    background: #f3f4f6;
+    color: #6b7280;
+    margin-left: 6px;
+    font-weight: 600;
+  }
+  .pe-tab-active .pe-tab-count {
+    background: #FEF3C7;
+    color: #92650A;
+  }
+  .pe-cat-desc {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 16px;
+  }
+  .pe-empty {
+    padding: 40px;
+    text-align: center;
+    color: #9ca3af;
+    background: #fff;
+    border: 1px dashed #e5e7eb;
+    border-radius: 10px;
+  }
+  .pe-list { display: flex; flex-direction: column; gap: 10px; }
+  .pe-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .pe-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .pe-card-title { font-weight: 700; font-size: 14px; color: #111827; }
+  .pe-card-actions { display: flex; gap: 4px; }
+  .pe-card-body {
+    margin: 0;
+    padding: 10px 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #374151;
+    white-space: pre-wrap;
+    font-family: inherit;
+    word-break: break-word;
+  }
+  .pe-btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pe-btn-primary { background: #1f2937; color: #fff; }
+  .pe-btn-primary:hover:not(:disabled) { background: #111827; }
+  .pe-btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+  .pe-btn-ghost {
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pe-btn-ghost:hover:not(:disabled) { background: #f3f4f6; color: #111827; }
+  .pe-btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pe-btn-ghost-bordered {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    color: #374151;
+  }
+  .pe-btn-ghost-bordered:hover { background: #f3f4f6; }
+  .pe-btn-danger { color: #dc2626; }
+  .pe-btn-danger:hover:not(:disabled) { background: #fee2e2; color: #991b1b; }
+
+  .pe-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 24px;
+  }
+  .pe-modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pe-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pe-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: #111827; }
+  .pe-field { display: flex; flex-direction: column; gap: 4px; }
+  .pe-label { font-size: 12px; font-weight: 600; color: #374151; }
+  .pe-input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #111827;
+    background: #fff;
+  }
+  .pe-input:focus {
+    outline: none;
+    border-color: #F5C518;
+    box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
+  }
+  .pe-textarea { resize: vertical; min-height: 200px; line-height: 1.6; }
+  .pe-readonly {
+    padding: 9px 11px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #6b7280;
+    background: #f9fafb;
+  }
+  .pe-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+  }
+`;

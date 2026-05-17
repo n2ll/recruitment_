@@ -1,46 +1,66 @@
 /**
- * 프롬프트 예시 파일 로더 — 매니저 실제 대화 톤을 시스템 프롬프트에 주입.
+ * 퓨샷 예시 로더 — Supabase `prompt_examples` 테이블에서 동적 로드.
  *
- * - prompts/conversation-examples.txt : 일반 대화 톤 (모든 stage)
- * - prompts/screening-examples.txt    : 스크리닝 단계 운영 항목/문구
+ * - category='conversation' : 일반 대화 톤 (모든 stage)
+ * - category='screening'    : 스크리닝 단계 운영 항목/문구
  *
- * 매니저가 .txt 파일을 수정하면 다음 배포(또는 cold start)부터 반영됨.
+ * 매니저가 admin UI에서 편집하면 다음 캐시 만료(60초) 이후 자동 반영.
  */
 
-import fs from "fs";
-import path from "path";
+import { createServiceClient } from "@/lib/supabase";
 
-let conversationCache: string | null = null;
-let screeningCache: string | null = null;
+interface CachedCategory {
+  text: string;
+  expiresAt: number;
+}
 
-function readPromptFile(filename: string): string {
+const CACHE_TTL_MS = 60_000;
+const cache = new Map<string, CachedCategory>();
+
+async function fetchCategory(category: "conversation" | "screening"): Promise<string> {
+  const cached = cache.get(category);
+  if (cached && cached.expiresAt > Date.now()) return cached.text;
+
   try {
-    const filePath = path.join(process.cwd(), "prompts", filename);
-    return fs.readFileSync(filePath, "utf-8");
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from("prompt_examples")
+      .select("title, body, sort_order")
+      .eq("category", category)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      console.error(`[agent/examples] supabase error for ${category}`, error);
+      return cached?.text ?? "";
+    }
+
+    const text = (data ?? [])
+      .map((row) => `[${row.title}]\n${row.body}`)
+      .join("\n\n");
+
+    cache.set(category, { text, expiresAt: Date.now() + CACHE_TTL_MS });
+    return text;
   } catch (e) {
-    console.error(`[agent/examples] failed to load ${filename}`, e);
-    return "";
+    console.error(`[agent/examples] exception for ${category}`, e);
+    return cached?.text ?? "";
   }
 }
 
-export function loadConversationExamples(): string {
-  if (conversationCache !== null) return conversationCache;
-  conversationCache = readPromptFile("conversation-examples.txt");
-  return conversationCache;
+export async function loadConversationExamples(): Promise<string> {
+  return fetchCategory("conversation");
 }
 
-export function loadScreeningExamples(): string {
-  if (screeningCache !== null) return screeningCache;
-  screeningCache = readPromptFile("screening-examples.txt");
-  return screeningCache;
+export async function loadScreeningExamples(): Promise<string> {
+  return fetchCategory("screening");
 }
 
 /**
  * 시스템 프롬프트 끝에 붙일 톤 가이드 블록.
- * 단순히 예시를 던지는 대신, "이 톤을 그대로 모방하라"고 명시한다.
  */
-export function buildToneGuide(opts: { includeScreening?: boolean } = {}): string {
-  const conv = loadConversationExamples();
+export async function buildToneGuide(
+  opts: { includeScreening?: boolean } = {}
+): Promise<string> {
+  const conv = await loadConversationExamples();
   const lines = [
     "## 매니저 실제 대화 톤 — 반드시 모방",
     "아래는 매니저 홍석범이 실제로 지원자에게 보낸 메시지 모음이다.",
@@ -55,14 +75,20 @@ export function buildToneGuide(opts: { includeScreening?: boolean } = {}): strin
   ];
 
   if (opts.includeScreening) {
+    const screening = await loadScreeningExamples();
     lines.push(
       "",
       "## 스크리닝 운영 항목 원본 (참고)",
       "체크리스트 항목·자동 발송 본문이 어디서 왔는지 확인용. 그대로 인용보다는 톤을 흡수해 자연스럽게 풀어라.",
       "",
-      loadScreeningExamples(),
+      screening
     );
   }
 
   return lines.join("\n");
+}
+
+// 캐시 강제 무효화 (편집 직후 즉시 반영하고 싶을 때 사용)
+export function invalidateExamplesCache(): void {
+  cache.clear();
 }

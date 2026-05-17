@@ -45,8 +45,8 @@ const KAKAO_CHANNEL_URL =
   process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL || "http://pf.kakao.com/_xnxaxaib";
 const APPLY_URL = process.env.AGENT_APPLY_URL || "";
 
-function buildSystemPrompt(): string {
-  const examples = loadConversationExamples();
+async function buildSystemPrompt(): Promise<string> {
+  const examples = await loadConversationExamples();
   const examplesSection = examples
     ? `\n## 실제 대화 예시 (톤·길이·스타일 참고용 — 무조건 이 톤 따라가)\n\n${examples}`
     : "";
@@ -154,7 +154,7 @@ ${input.latestInbound}
   const body = {
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: buildSystemPrompt(),
+    system: await buildSystemPrompt(),
     tools: [
       {
         name: "draft_reply",

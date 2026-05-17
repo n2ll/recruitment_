@@ -5,6 +5,7 @@ import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
 import DanggeunView from "./agent/DanggeunView";
+import PromptExamplesView from "./prompts/PromptExamplesView";
 import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
 
@@ -61,7 +62,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "prompts";
 
 interface RecommendResponse {
   success: boolean;
@@ -1047,6 +1048,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
             당근전용
           </button>
+          <button className={`nav-btn ${tab === "prompts" ? "nav-active" : ""}`}
+            onClick={() => setTab("prompts")}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4h12M3 9h12M3 14h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            톤 가이드
+          </button>
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1848,6 +1854,8 @@ export default function AdminPage() {
             <PlaygroundView branches={activeBranchNames} />
           ) : tab === "danggeun" ? (
             <DanggeunView branches={activeBranchNames} />
+          ) : tab === "prompts" ? (
+            <PromptExamplesView />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>

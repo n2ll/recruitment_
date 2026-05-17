@@ -33,6 +33,8 @@ npm run build && npm start
 | **현장 매니저** | 만남장소·확정 알림에 쓸 매니저 정보 |
 | **구인 에이전트** | 공고 단위 칸반 — AI가 단계별 자동 응대 |
 | **플레이그라운드** | AI 응대 시뮬 (실발송 X) |
+| **당근전용** | source='danggeun' 후보 관리 + 매니저 직접 시작 멘트 (실발송) |
+| **톤 가이드** | 퓨샷 예시 라이브러리 — AI 프롬프트와 매니저 참고용 양쪽 활용 |
 
 ## 구인 에이전트 4단계
 
@@ -93,9 +95,8 @@ lib/
   slack.ts            웹훅 알림
   kakao-geocode.ts    주소 → 위경도
   scoring.ts          추천 점수 계산
-prompts/
-  conversation-examples.txt   매니저 실제 대화 톤 (모든 stage 주입)
-  screening-examples.txt      스크리닝 운영 항목 원본
+docs/migrations/
+  2026-05-prompt-examples.sql  prompt_examples 테이블 마이그레이션
 ```
 
 ## 환경변수
