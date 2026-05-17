@@ -26,6 +26,34 @@ interface Candidate {
   created_at: string;
   last_message_at: string | null;
   unread_count: number;
+  agent_stage: string | null;
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  exploration: "탐색",
+  screening: "스크리닝",
+  onboarding: "온보딩",
+  active: "근무중",
+  paused: "매니저 인계",
+  abort: "중단",
+};
+
+const STAGE_COLOR: Record<string, { bg: string; fg: string }> = {
+  exploration: { bg: "#DBEAFE", fg: "#1E40AF" },
+  screening: { bg: "#FEF3C7", fg: "#92400E" },
+  onboarding: { bg: "#E9D5FF", fg: "#6B21A8" },
+  active: { bg: "#D1FAE5", fg: "#065F46" },
+  paused: { bg: "#FEE2E2", fg: "#991B1B" },
+  abort: { bg: "#F3F4F6", fg: "#6B7280" },
+};
+
+function stageBadge(stage: string | null) {
+  if (!stage) return { label: "—", bg: "#F3F4F6", fg: "#9CA3AF" };
+  return {
+    label: STAGE_LABEL[stage] ?? stage,
+    bg: STAGE_COLOR[stage]?.bg ?? "#F3F4F6",
+    fg: STAGE_COLOR[stage]?.fg ?? "#6B7280",
+  };
 }
 
 interface Message {
@@ -357,29 +385,35 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                 {candidates.length === 0 ? "아직 등록된 당근 후보가 없습니다." : "검색 결과 없음"}
               </div>
             ) : (
-              filteredCandidates.map((c) => (
-                <button
-                  key={c.id}
-                  className={`dg-list-item ${selectedId === c.id ? "dg-list-active" : ""}`}
-                  onClick={() => setSelectedId(c.id)}
-                >
-                  <div className="dg-list-row">
-                    <span className="dg-list-name">{c.name}</span>
-                    {c.unread_count > 0 && <span className="dg-badge">{c.unread_count}</span>}
-                  </div>
-                  <div className="dg-list-meta">
-                    <span>{formatPhone(c.phone)}</span>
-                    <span>·</span>
-                    <span>{c.branch ?? "-"}</span>
-                    {c.last_message_at && (
-                      <>
-                        <span>·</span>
-                        <span>{timeAgo(c.last_message_at)}</span>
-                      </>
-                    )}
-                  </div>
-                </button>
-              ))
+              filteredCandidates.map((c) => {
+                const sb = stageBadge(c.agent_stage);
+                return (
+                  <button
+                    key={c.id}
+                    className={`dg-list-item ${selectedId === c.id ? "dg-list-active" : ""}`}
+                    onClick={() => setSelectedId(c.id)}
+                  >
+                    <div className="dg-list-row">
+                      <span className="dg-list-name">{c.name}</span>
+                      <span className="dg-stage" style={{ background: sb.bg, color: sb.fg }}>
+                        {sb.label}
+                      </span>
+                      {c.unread_count > 0 && <span className="dg-badge">{c.unread_count}</span>}
+                    </div>
+                    <div className="dg-list-meta">
+                      <span>{formatPhone(c.phone)}</span>
+                      <span>·</span>
+                      <span>{c.branch ?? "-"}</span>
+                      {c.last_message_at && (
+                        <>
+                          <span>·</span>
+                          <span>{timeAgo(c.last_message_at)}</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </section>
@@ -395,7 +429,20 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
           <>
             <header className="dg-conv-head">
               <div>
-                <div className="dg-conv-name">{selectedCandidate.name}</div>
+                <div className="dg-conv-name">
+                  {selectedCandidate.name}
+                  {(() => {
+                    const sb = stageBadge(selectedCandidate.agent_stage);
+                    return (
+                      <span
+                        className="dg-stage"
+                        style={{ background: sb.bg, color: sb.fg, marginLeft: 8 }}
+                      >
+                        {sb.label}
+                      </span>
+                    );
+                  })()}
+                </div>
                 <div className="dg-conv-sub">
                   {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
                   {selectedCandidate.status ?? "-"}
@@ -564,6 +611,13 @@ const css = `
     padding: 1px 6px;
     border-radius: 99px;
     font-weight: 700;
+  }
+  .dg-stage {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 700;
+    display: inline-block;
   }
   .dg-empty { padding: 16px; text-align: center; color: #9ca3af; font-size: 12px; }
 

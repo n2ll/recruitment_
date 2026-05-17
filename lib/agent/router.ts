@@ -75,7 +75,14 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   }
 
   const stageName = jc.agent_stage as StageName | null;
-  if (!stageName || stageName === "paused" || stageName === "abort") {
+  // onboarding에 진입하면 AI 응답은 끈다 — 자동 발송(앱설치·만남장소 안내 등)은 transitions.ts가 별도로 수행.
+  // 사용자 정책: 온보딩부터는 매니저가 직접 응대.
+  if (
+    !stageName ||
+    stageName === "paused" ||
+    stageName === "abort" ||
+    stageName === "onboarding"
+  ) {
     return { ok: true, skipped: `stage=${stageName ?? "null"} — agent skipped` };
   }
 
