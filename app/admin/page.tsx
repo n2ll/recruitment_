@@ -1045,8 +1045,8 @@ export default function AdminPage() {
           </button>
           <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
             onClick={() => setTab("danggeun")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
-            당근전용
+            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
+            당근마켓구인
           </button>
           <button className={`nav-btn ${tab === "prompts" ? "nav-active" : ""}`}
             onClick={() => setTab("prompts")}>
