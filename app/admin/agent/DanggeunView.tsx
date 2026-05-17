@@ -193,11 +193,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        if (res.status === 409 && json.existing) {
-          alert(`이미 등록된 전화번호입니다 (${json.existing.name}).`);
-        } else {
-          alert(json.error || "등록 실패");
-        }
+        alert(json.error || "등록 실패");
         return;
       }
       setNewName("");

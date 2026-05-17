@@ -31,19 +31,7 @@ export async function POST(req: NextRequest) {
     const normalizedPhone = (phone as string).replace(/-/g, "");
     const supabase = createServiceClient();
 
-    // 중복 체크 (전화번호)
-    const { data: existing } = await supabase
-      .from("applicants")
-      .select("id, name")
-      .eq("phone", normalizedPhone)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      return NextResponse.json(
-        { error: "이미 등록된 전화번호입니다.", existing: existing[0] },
-        { status: 409 }
-      );
-    }
+    // 중복 전화번호 체크는 의도적으로 없음 — 매니저가 동일 번호에도 재발송 가능해야 함.
 
     // NOT NULL 텍스트 컬럼들 → 미확인 placeholder (대화로 채울 예정)
     const PLACEHOLDER = "미확인";
