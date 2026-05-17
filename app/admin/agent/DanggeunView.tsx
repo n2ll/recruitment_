@@ -3,15 +3,16 @@
 /**
  * 당근전용 — source='danggeun' 후보 관리 + 실 발송/저장.
  *
- * 좌측 상단: 매니저가 저장하는 고정 시작 멘트 1개 (브라우저 localStorage)
- * 좌측 중단: 새 후보 수동 등록 → INSERT applicants(source='danggeun') + 시작 멘트 실 발송
- * 좌측 하단: 기존 source='danggeun' 후보 리스트
- * 우측: 선택된 후보와의 실 대화창 (DB 메시지 읽기 + SOLAPI 발송)
+ * 상단 툴바: 시작 멘트 설정 / 새 당근 후보 / 새로고침
+ * 메인: 좌(후보 목록) + 우(대화창)
+ * 모달: 시작 멘트 편집, 새 후보 등록
  *
- * 시작 멘트는 매니저 브라우저별로 저장 — 다른 PC/브라우저에서는 다시 입력해야 함.
+ * Realtime: applicants(source='danggeun') / messages / job_candidates 구독.
+ * 시작 멘트는 매니저 브라우저 localStorage(다른 PC/브라우저에는 적용 안 됨).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getBrowserClient } from "@/lib/supabase";
 
 interface DanggeunViewProps {
   branches: string[];
@@ -28,6 +29,19 @@ interface Candidate {
   unread_count: number;
   agent_stage: string | null;
 }
+
+interface Message {
+  id: string | number;
+  applicant_id: number | null;
+  applicant_phone: string;
+  direction: "inbound" | "outbound";
+  body: string;
+  status: string;
+  sent_by: string | null;
+  created_at: string;
+}
+
+const STORAGE_KEY = "danggeun_start_message_v1";
 
 const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
@@ -55,19 +69,6 @@ function stageBadge(stage: string | null) {
     fg: STAGE_COLOR[stage]?.fg ?? "#6B7280",
   };
 }
-
-interface Message {
-  id: string | number;
-  applicant_id: number | null;
-  applicant_phone: string;
-  direction: "inbound" | "outbound";
-  body: string;
-  status: string;
-  sent_by: string | null;
-  created_at: string;
-}
-
-const STORAGE_KEY = "danggeun_start_message_v1";
 
 function formatPhone(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
@@ -107,20 +108,28 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
 
   // ── 우측 대화창 ────────────────────────────────────────
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [outbound, setOutbound] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ── 초기 로드 (localStorage) ──────────────────────────
+  // ── 모달 ──────────────────────────────────────────────
+  const [showStartMsgModal, setShowStartMsgModal] = useState(false);
+  const [showNewModal, setShowNewModal] = useState(false);
+
+  // ── 초기 로드 ─────────────────────────────────────────
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY) ?? "";
       setStartMsg(saved);
       setStartMsgDraft(saved);
     } catch {
-      // localStorage 비활성 환경 대비
+      // localStorage 비활성 환경
     }
     setStartMsgLoaded(true);
   }, []);
@@ -144,10 +153,62 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
     fetchCandidates();
   }, [fetchCandidates]);
 
-  // 지점 옵션이 비동기로 들어올 수 있어 첫 항목으로 초기화
   useEffect(() => {
     if (!newBranch && branches.length > 0) setNewBranch(branches[0]);
   }, [branches, newBranch]);
+
+  // ── Realtime ──────────────────────────────────────────
+  useEffect(() => {
+    const supabase = getBrowserClient();
+    const channel = supabase
+      .channel("danggeun-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "applicants" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Candidate & { source?: string };
+            if (row.source !== "danggeun") return;
+            setCandidates((prev) =>
+              prev.some((c) => c.id === row.id) ? prev : [row, ...prev]
+            );
+          } else if (payload.eventType === "UPDATE") {
+            const row = payload.new as Candidate & { source?: string };
+            if (row.source !== "danggeun") return;
+            setCandidates((prev) =>
+              prev.map((c) => (c.id === row.id ? { ...c, ...row } : c))
+            );
+          } else if (payload.eventType === "DELETE") {
+            const old = payload.old as { id: number };
+            setCandidates((prev) => prev.filter((c) => c.id !== old.id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new as Message;
+          const currentId = selectedIdRef.current;
+          if (currentId != null && msg.applicant_id === currentId) {
+            setMessages((prev) =>
+              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "job_candidates" },
+        () => {
+          fetchCandidates();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchCandidates]);
 
   // ── 대화창 로드 ────────────────────────────────────────
   const fetchMessages = useCallback(async (id: number) => {
@@ -188,6 +249,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       localStorage.setItem(STORAGE_KEY, startMsgDraft);
       setStartMsg(startMsgDraft);
       alert("시작 멘트가 저장되었습니다. (이 브라우저 기준)");
+      setShowStartMsgModal(false);
     } catch (e) {
       alert(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -226,6 +288,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       }
       setNewName("");
       setNewPhone("");
+      setShowNewModal(false);
       await fetchCandidates();
       if (json.applicant?.id) setSelectedId(json.applicant.id);
     } catch (e) {
@@ -257,6 +320,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
         return;
       }
       setOutbound("");
+      // Realtime이 메시지를 추가하지만 즉시 반영 위해 한 번 fetch
       await fetchMessages(selectedId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "발송 실패");
@@ -283,96 +347,37 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
 
   // ── 렌더 ───────────────────────────────────────────────
   return (
-    <div className="content" style={{ display: "flex", gap: 16, height: "calc(100vh - 120px)", padding: 0 }}>
+    <div className="content" style={{ display: "flex", flexDirection: "column", gap: 12, height: "calc(100vh - 120px)", padding: 0 }}>
       <style>{css}</style>
 
-      {/* 좌측 패널 */}
-      <aside className="dg-left">
-        <section className="dg-card">
-          <div className="dg-card-head">
-            <h3 className="dg-card-title">당근 시작 멘트</h3>
-            {startMsgDirty && <span className="dg-pill dg-pill-warn">미저장</span>}
-          </div>
-          <p className="dg-card-desc">
-            새 당근 후보 등록 시 자동으로 발송되는 첫 메시지. 이 브라우저에만 저장됩니다.
-          </p>
-          <textarea
-            className="dg-textarea"
-            rows={5}
-            placeholder="예) 안녕하세요. 당근에서 연락드린 옹고잉 매니저입니다..."
-            value={startMsgDraft}
-            onChange={(e) => setStartMsgDraft(e.target.value)}
-            disabled={!startMsgLoaded}
-          />
-          <div className="dg-row-end">
-            <button
-              className="dg-btn dg-btn-primary"
-              onClick={handleSaveStartMsg}
-              disabled={startMsgSaving || !startMsgDirty}
-            >
-              {startMsgSaving ? "저장 중..." : "저장"}
-            </button>
-          </div>
-        </section>
-
-        <section className="dg-card">
-          <div className="dg-card-head">
-            <h3 className="dg-card-title">새 당근 후보 등록</h3>
-          </div>
-          <p className="dg-card-desc">
-            등록과 동시에 위 시작 멘트가 <b>실제로 발송</b>되고 messages에 기록됩니다.
-          </p>
-          <div className="dg-field">
-            <label className="dg-label">이름</label>
-            <input
-              className="dg-input"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="홍길동"
-            />
-          </div>
-          <div className="dg-field">
-            <label className="dg-label">전화번호</label>
-            <input
-              className="dg-input"
-              value={newPhone}
-              onChange={(e) => setNewPhone(formatPhone(e.target.value))}
-              placeholder="010-0000-0000"
-            />
-          </div>
-          <div className="dg-field">
-            <label className="dg-label">희망 지점</label>
-            <select
-              className="dg-input"
-              value={newBranch}
-              onChange={(e) => setNewBranch(e.target.value)}
-            >
-              {branches.length === 0 && <option value="">지점 로딩 중...</option>}
-              {branches.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* 상단 툴바 */}
+      <div className="dg-toolbar">
+        <div className="dg-toolbar-left">
+          <h2 className="dg-title">
+            당근 후보 <span className="dg-count">{candidates.length}명</span>
+          </h2>
+        </div>
+        <div className="dg-toolbar-actions">
           <button
-            className="dg-btn dg-btn-primary dg-btn-block"
-            onClick={handleStart}
-            disabled={submitting}
+            className={`dg-btn ${startMsg ? "dg-btn-ghost-bordered" : "dg-btn-warn"}`}
+            onClick={() => setShowStartMsgModal(true)}
           >
-            {submitting ? "발송 중..." : "대화 시작 (실 발송)"}
+            {startMsg ? "시작 멘트 ✓" : "시작 멘트 설정 필요"}
           </button>
-        </section>
+          <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
+            + 새 당근 후보
+          </button>
+          <button className="dg-btn-ghost" onClick={fetchCandidates} disabled={listLoading}>
+            {listLoading ? "..." : "새로고침"}
+          </button>
+        </div>
+      </div>
 
-        <section className="dg-card dg-card-grow">
-          <div className="dg-card-head">
-            <h3 className="dg-card-title">당근 후보 {candidates.length}명</h3>
-            <button className="dg-btn-ghost" onClick={fetchCandidates} disabled={listLoading}>
-              {listLoading ? "..." : "새로고침"}
-            </button>
-          </div>
+      {/* 본문: 좌(목록) + 우(대화) */}
+      <div className="dg-body">
+        <aside className="dg-list-pane">
           <input
-            className="dg-input"
+            className="dg-input dg-search"
             placeholder="이름 / 전화번호 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -382,7 +387,9 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
               <div className="dg-empty">로딩 중...</div>
             ) : filteredCandidates.length === 0 ? (
               <div className="dg-empty">
-                {candidates.length === 0 ? "아직 등록된 당근 후보가 없습니다." : "검색 결과 없음"}
+                {candidates.length === 0
+                  ? "아직 등록된 당근 후보가 없습니다. 우측 상단 '+ 새 당근 후보'로 시작하세요."
+                  : "검색 결과 없음"}
               </div>
             ) : (
               filteredCandidates.map((c) => {
@@ -416,134 +423,256 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
               })
             )}
           </div>
-        </section>
-      </aside>
+        </aside>
 
-      {/* 우측 대화창 */}
-      <main className="dg-right">
-        {selectedCandidate == null ? (
-          <div className="dg-placeholder">
-            <p>좌측에서 후보를 선택하거나 새로 등록하세요.</p>
-          </div>
-        ) : (
-          <>
-            <header className="dg-conv-head">
-              <div>
-                <div className="dg-conv-name">
-                  {selectedCandidate.name}
-                  {(() => {
-                    const sb = stageBadge(selectedCandidate.agent_stage);
-                    return (
-                      <span
-                        className="dg-stage"
-                        style={{ background: sb.bg, color: sb.fg, marginLeft: 8 }}
-                      >
-                        {sb.label}
-                      </span>
-                    );
-                  })()}
-                </div>
-                <div className="dg-conv-sub">
-                  {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
-                  {selectedCandidate.status ?? "-"}
-                </div>
-              </div>
-              <button
-                className="dg-btn-ghost"
-                onClick={() => selectedId != null && fetchMessages(selectedId)}
-              >
-                새로고침
-              </button>
-            </header>
-
-            <div className="dg-conv-body">
-              {msgLoading ? (
-                <div className="dg-empty">로딩 중...</div>
-              ) : messages.length === 0 ? (
-                <div className="dg-empty">대화 내역 없음</div>
-              ) : (
-                messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`dg-msg ${m.direction === "outbound" ? "dg-msg-out" : "dg-msg-in"}`}
-                  >
-                    <div className="dg-msg-bubble">{m.body}</div>
-                    <div className="dg-msg-meta">
-                      {m.direction === "outbound" && m.sent_by ? `${m.sent_by} · ` : ""}
-                      {new Date(m.created_at).toLocaleString("ko-KR", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
-              <div ref={messagesEndRef} />
+        <main className="dg-right">
+          {selectedCandidate == null ? (
+            <div className="dg-placeholder">
+              <p>좌측에서 후보를 선택하거나 우측 상단 '+ 새 당근 후보'로 등록하세요.</p>
             </div>
+          ) : (
+            <>
+              <header className="dg-conv-head">
+                <div>
+                  <div className="dg-conv-name">
+                    {selectedCandidate.name}
+                    {(() => {
+                      const sb = stageBadge(selectedCandidate.agent_stage);
+                      return (
+                        <span
+                          className="dg-stage"
+                          style={{ background: sb.bg, color: sb.fg, marginLeft: 8 }}
+                        >
+                          {sb.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="dg-conv-sub">
+                    {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
+                    {selectedCandidate.status ?? "-"}
+                  </div>
+                </div>
+                <button
+                  className="dg-btn-ghost"
+                  onClick={() => selectedId != null && fetchMessages(selectedId)}
+                >
+                  새로고침
+                </button>
+              </header>
 
-            <div className="dg-conv-input">
-              <textarea
-                className="dg-textarea"
-                rows={3}
-                placeholder="매니저 답장을 직접 작성하면 즉시 실 발송됩니다"
-                value={outbound}
-                onChange={(e) => setOutbound(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendReply();
+              <div className="dg-conv-body">
+                {msgLoading ? (
+                  <div className="dg-empty">로딩 중...</div>
+                ) : messages.length === 0 ? (
+                  <div className="dg-empty">대화 내역 없음</div>
+                ) : (
+                  messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`dg-msg ${m.direction === "outbound" ? "dg-msg-out" : "dg-msg-in"}`}
+                    >
+                      <div className="dg-msg-bubble">{m.body}</div>
+                      <div className="dg-msg-meta">
+                        {m.direction === "outbound" && m.sent_by ? `${m.sent_by} · ` : ""}
+                        {new Date(m.created_at).toLocaleString("ko-KR", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="dg-conv-input">
+                <textarea
+                  className="dg-textarea"
+                  rows={3}
+                  placeholder="매니저 답장을 직접 작성하면 즉시 실 발송됩니다"
+                  value={outbound}
+                  onChange={(e) => setOutbound(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendReply();
+                  }}
+                />
+                <button
+                  className="dg-btn dg-btn-primary"
+                  onClick={handleSendReply}
+                  disabled={sending || !outbound.trim()}
+                >
+                  {sending ? "발송 중..." : "보내기"}
+                </button>
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+
+      {/* 모달: 시작 멘트 */}
+      {showStartMsgModal && (
+        <div className="dg-modal-bg" onClick={() => !startMsgSaving && setShowStartMsgModal(false)}>
+          <div className="dg-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dg-modal-head">
+              <h3 className="dg-modal-title">당근 시작 멘트</h3>
+              <button className="dg-btn-ghost" onClick={() => setShowStartMsgModal(false)}>
+                ×
+              </button>
+            </div>
+            <p className="dg-modal-desc">
+              새 당근 후보 등록 시 자동으로 발송되는 첫 메시지. 이 브라우저에만 저장됩니다.
+            </p>
+            <textarea
+              className="dg-textarea"
+              rows={8}
+              placeholder="예) 안녕하세요. 당근에서 연락드린 옹고잉 매니저입니다..."
+              value={startMsgDraft}
+              onChange={(e) => setStartMsgDraft(e.target.value)}
+              disabled={!startMsgLoaded}
+            />
+            <div className="dg-modal-actions">
+              <button
+                className="dg-btn dg-btn-ghost-bordered"
+                onClick={() => {
+                  setStartMsgDraft(startMsg);
+                  setShowStartMsgModal(false);
                 }}
-              />
+                disabled={startMsgSaving}
+              >
+                취소
+              </button>
               <button
                 className="dg-btn dg-btn-primary"
-                onClick={handleSendReply}
-                disabled={sending || !outbound.trim()}
+                onClick={handleSaveStartMsg}
+                disabled={startMsgSaving || !startMsgDirty}
               >
-                {sending ? "발송 중..." : "보내기"}
+                {startMsgSaving ? "저장 중..." : "저장"}
               </button>
             </div>
-          </>
-        )}
-      </main>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 새 후보 등록 */}
+      {showNewModal && (
+        <div className="dg-modal-bg" onClick={() => !submitting && setShowNewModal(false)}>
+          <div className="dg-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dg-modal-head">
+              <h3 className="dg-modal-title">새 당근 후보 등록</h3>
+              <button className="dg-btn-ghost" onClick={() => setShowNewModal(false)}>
+                ×
+              </button>
+            </div>
+            <p className="dg-modal-desc">
+              등록과 동시에 저장된 시작 멘트가 <b>실제로 발송</b>되고 messages에 기록됩니다.
+            </p>
+            {!startMsg && (
+              <div className="dg-warn">
+                ⚠ 시작 멘트가 아직 저장되지 않았습니다. 먼저 우측 상단에서 시작 멘트를 설정해주세요.
+              </div>
+            )}
+            <div className="dg-field">
+              <label className="dg-label">이름</label>
+              <input
+                className="dg-input"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="홍길동"
+              />
+            </div>
+            <div className="dg-field">
+              <label className="dg-label">전화번호</label>
+              <input
+                className="dg-input"
+                value={newPhone}
+                onChange={(e) => setNewPhone(formatPhone(e.target.value))}
+                placeholder="010-0000-0000"
+              />
+            </div>
+            <div className="dg-field">
+              <label className="dg-label">희망 지점</label>
+              <select
+                className="dg-input"
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+              >
+                {branches.length === 0 && <option value="">지점 로딩 중...</option>}
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="dg-modal-actions">
+              <button
+                className="dg-btn dg-btn-ghost-bordered"
+                onClick={() => setShowNewModal(false)}
+                disabled={submitting}
+              >
+                취소
+              </button>
+              <button
+                className="dg-btn dg-btn-primary"
+                onClick={handleStart}
+                disabled={submitting || !startMsg}
+              >
+                {submitting ? "발송 중..." : "대화 시작 (실 발송)"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 const css = `
-  .dg-left {
-    width: 380px;
+  .dg-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    gap: 12px;
+  }
+  .dg-toolbar-left { display: flex; align-items: center; gap: 8px; }
+  .dg-toolbar-actions { display: flex; gap: 8px; align-items: center; }
+  .dg-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0; }
+  .dg-count { color: #6b7280; font-weight: 500; margin-left: 4px; }
+
+  .dg-body {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+  }
+  .dg-list-pane {
+    flex: 1;
+    max-width: 480px;
     min-width: 320px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
   }
+  .dg-search { flex: 0 0 auto; }
   .dg-right {
-    flex: 1;
+    flex: 2;
     display: flex;
     flex-direction: column;
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 10px;
     overflow: hidden;
+    min-width: 0;
   }
-  .dg-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .dg-card-grow { flex: 1; min-height: 220px; }
-  .dg-card-head { display: flex; align-items: center; justify-content: space-between; }
-  .dg-card-title { font-size: 14px; font-weight: 700; color: #111827; margin: 0; }
-  .dg-card-desc { font-size: 12px; color: #6b7280; margin: 0; }
-  .dg-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; }
-  .dg-pill-warn { background: #FEF3C7; color: #92400E; }
-  .dg-field { display: flex; flex-direction: column; gap: 4px; }
-  .dg-label { font-size: 12px; font-weight: 600; color: #374151; }
+
   .dg-input, .dg-textarea {
     width: 100%;
     padding: 8px 10px;
@@ -560,7 +689,10 @@ const css = `
     border-color: #F5C518;
     box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
   }
-  .dg-row-end { display: flex; justify-content: flex-end; }
+
+  .dg-field { display: flex; flex-direction: column; gap: 4px; }
+  .dg-label { font-size: 12px; font-weight: 600; color: #374151; }
+
   .dg-btn {
     padding: 8px 14px;
     border-radius: 6px;
@@ -573,7 +705,6 @@ const css = `
   .dg-btn-primary { background: #1f2937; color: #fff; }
   .dg-btn-primary:hover:not(:disabled) { background: #111827; }
   .dg-btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
-  .dg-btn-block { width: 100%; padding: 10px; }
   .dg-btn-ghost {
     background: transparent;
     border: 1px solid #d1d5db;
@@ -585,24 +716,36 @@ const css = `
     font-family: inherit;
   }
   .dg-btn-ghost:hover { background: #f3f4f6; }
+  .dg-btn-ghost-bordered {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    color: #374151;
+  }
+  .dg-btn-ghost-bordered:hover { background: #f3f4f6; }
+  .dg-btn-warn {
+    background: #FEF3C7;
+    border: 1px solid #F5C518;
+    color: #92400E;
+  }
+  .dg-btn-warn:hover { background: #FDE68A; }
 
-  .dg-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
+  .dg-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; min-height: 0; }
   .dg-list-item {
     text-align: left;
     background: #fff;
     border: 1px solid transparent;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 10px 12px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     font-family: inherit;
   }
   .dg-list-item:hover { background: #f9fafb; }
   .dg-list-active { background: #FFFBEB !important; border-color: #F5C518; }
-  .dg-list-row { display: flex; align-items: center; justify-content: space-between; }
-  .dg-list-name { font-weight: 600; font-size: 13px; color: #111827; }
+  .dg-list-row { display: flex; align-items: center; gap: 6px; }
+  .dg-list-name { font-weight: 600; font-size: 13px; color: #111827; flex: 1; }
   .dg-list-meta { font-size: 11px; color: #6b7280; display: flex; gap: 4px; align-items: center; }
   .dg-badge {
     background: #ef4444;
@@ -628,6 +771,8 @@ const css = `
     justify-content: center;
     color: #9ca3af;
     font-size: 13px;
+    text-align: center;
+    padding: 24px;
   }
   .dg-conv-head {
     display: flex; align-items: center; justify-content: space-between;
@@ -670,4 +815,39 @@ const css = `
   }
   .dg-conv-input .dg-textarea { flex: 1; }
   .dg-conv-input .dg-btn { white-space: nowrap; }
+
+  /* 모달 */
+  .dg-modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 24px;
+  }
+  .dg-modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dg-modal-head { display: flex; align-items: center; justify-content: space-between; }
+  .dg-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: #111827; }
+  .dg-modal-desc { font-size: 12px; color: #6b7280; margin: 0; }
+  .dg-modal-actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 8px;
+  }
+  .dg-warn {
+    padding: 10px 12px;
+    background: #FEF3C7;
+    border: 1px solid #F5C518;
+    border-radius: 6px;
+    color: #92400E;
+    font-size: 12px;
+  }
 `;
