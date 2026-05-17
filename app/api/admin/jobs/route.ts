@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
+import { DANGGEUN_SYSTEM_JOB_TITLE } from "@/lib/agent/danggeun-job";
 
 export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("jobs")
     .select("id, title, body, branch, slot, start_date, vehicle_required, pickup_address, capacity, status, site_manager_id, created_at, updated_at, closed_at")
+    .neq("title", DANGGEUN_SYSTEM_JOB_TITLE) // 시스템 더미 공고는 칸반에서 숨김
     .order("created_at", { ascending: false });
 
   if (statusFilter && statusFilter !== "all") {

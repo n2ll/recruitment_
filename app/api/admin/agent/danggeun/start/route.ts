@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { sendSms } from "@/lib/solapi";
+import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 시스템 더미 공고 + job_candidates row 생성 — 인입 SMS가 라우터를 타게 함
+    let jobIdForMsg: number | null = null;
+    try {
+      const danggeunJobId = await ensureDanggeunSystemJob(supabase);
+      jobIdForMsg = danggeunJobId;
+      const { error: jcErr } = await supabase.from("job_candidates").insert({
+        job_id: danggeunJobId,
+        applicant_id: inserted.id,
+        agent_stage: "exploration",
+        agent_state: {},
+      });
+      if (jcErr) {
+        console.error("[danggeun start] job_candidates insert error", jcErr);
+      }
+    } catch (e) {
+      console.error("[danggeun start] system job ensure failed", e);
+    }
+
     // messages 기록 (outbound)
     await supabase.from("messages").insert({
       applicant_id: inserted.id,
@@ -89,6 +108,7 @@ export async function POST(req: NextRequest) {
       status: "sent",
       sent_by: "danggeun-start",
       solapi_msg_id: sendResult.messageId || null,
+      job_id: jobIdForMsg,
     });
 
     return NextResponse.json({ success: true, applicant: inserted });
