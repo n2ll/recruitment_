@@ -195,6 +195,7 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
     current_stage: stageName,
     state_update: result.state_update,
     transition: result.transition,
+    simulate,
   });
 
   return {

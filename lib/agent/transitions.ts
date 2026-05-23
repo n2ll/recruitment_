@@ -24,6 +24,8 @@ interface ApplyTransitionInput {
   current_stage: StageName;
   state_update: AgentState;        // stage.process가 만든 새 state (이미 merge 완료된 형태)
   transition: StageTransition;
+  /** true면 SOLAPI 발송과 Slack 알림 건너뛰고 DB outbound 기록만 — 연습용 빙의 모드. */
+  simulate?: boolean;
 }
 
 export interface ApplyTransitionResult {
@@ -43,7 +45,19 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     current_stage,
     state_update,
     transition,
+    simulate = false,
   } = input;
+
+  // 연습용 빙의 모드에선 실제 SMS·Slack 발송을 건너뛰고 fake-success로 처리해
+  // DB outbound 기록과 체크리스트 갱신은 그대로 진행되게 한다.
+  const maybeSendNotification: typeof sendNotification = simulate
+    ? async () => ({
+        success: true,
+        via: "sms" as const,
+        messageId: undefined,
+        templateId: undefined,
+      })
+    : sendNotification;
 
   let nextStage: StageName | null = current_stage;
   let extraStateUpdate: AgentState = {};
@@ -91,7 +105,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 1) 안내 묶음 (정산/프로모션/업무시간) 1통 발송
         try {
           const announceText = buildScreeningAnnouncement(applicant_name);
-          const r = await sendNotification(
+          const r = await maybeSendNotification(
             applicant_phone,
             "SCREENING_ANNOUNCE",
             { "#{이름}": applicant_name ?? "지원자" },
@@ -161,13 +175,15 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
               .maybeSingle();
             smName = (sm?.name as string | null) ?? null;
           }
-          await sendSlackConfirmedAlert({
-            job_title: job?.title ?? "(공고 정보 없음)",
-            applicant_name,
-            applicant_phone,
-            branch: job?.branch ?? null,
-            site_manager_name: smName,
-          });
+          if (!simulate) {
+            await sendSlackConfirmedAlert({
+              job_title: job?.title ?? "(공고 정보 없음)",
+              applicant_name,
+              applicant_phone,
+              branch: job?.branch ?? null,
+              site_manager_name: smName,
+            });
+          }
         } catch (e) {
           console.error("[transitions] slack confirmed alert failed", e);
         }
@@ -175,7 +191,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {
           const guideText = buildOnboardingGuideText(applicant_name);
-          const r2 = await sendNotification(
+          const r2 = await maybeSendNotification(
             applicant_phone,
             "GUIDE",
             { "#{이름}": applicant_name ?? "지원자" },
@@ -221,7 +237,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 첫 출근 룰 안내 자동 발송 (screening-examples.txt 마지막 단락)
         try {
           const rulesText = buildFirstDayRules(applicant_name);
-          const r = await sendNotification(
+          const r = await maybeSendNotification(
             applicant_phone,
             "ATTENDANCE",
             { "#{이름}": applicant_name ?? "지원자" },
@@ -347,6 +363,7 @@ async function sendVenueGuide(input: SendVenueGuideInput): Promise<boolean> {
     site_manager_phone: smPhone,
   });
 
+  // sendVenueGuide는 onboarding 완료 시점 호출 — 연습 모드에선 도달 안 함
   const r = await sendNotification(
     applicant_phone,
     "VENUE_GUIDE",
