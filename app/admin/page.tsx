@@ -63,7 +63,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "prompts";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "prompts" | "facts";
 
 interface RecommendResponse {
   success: boolean;
@@ -1040,6 +1040,11 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4h12M3 9h12M3 14h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             <span className="nav-label">톤 가이드</span>
           </button>
+          <button className={`nav-btn ${tab === "facts" ? "nav-active" : ""}`}
+            onClick={() => setTab("facts")} title="AI 참고자료">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 2h9l3 3v11H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 8h6M6 11h6M6 5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <span className="nav-label">AI 참고자료</span>
+          </button>
 
           <div className="nav-group-label">운영</div>
           <button className={`nav-btn ${tab === "dashboard" ? "nav-active" : ""}`}
@@ -1911,6 +1916,13 @@ export default function AdminPage() {
             <DanggeunView branches={activeBranchNames} mode="practice" />
           ) : tab === "prompts" ? (
             <PromptExamplesView />
+          ) : tab === "facts" ? (
+            <PromptExamplesView
+              categories={["facts"]}
+              pageTitle="AI 참고자료"
+              pageDesc="AI가 지원자에게 사실로 인용할 운영 정보. 예) 지점별 시급, 구인 상태, 정책 등. 60초 이내 모든 AI 응답에 반영됩니다."
+              showSeed={false}
+            />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>

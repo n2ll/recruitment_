@@ -1,16 +1,19 @@
 "use client";
 
 /**
- * 톤 가이드 — 퓨샷 예시 라이브러리.
+ * 톤 가이드 / AI 참고자료 — prompt_examples 테이블 CRUD.
  *
  * 매니저가 자유롭게 추가/수정/삭제. 같은 데이터가 AI 프롬프트에도 자동 주입됨.
  * - conversation: 일반 대화 예시 (모든 stage에 톤 가이드로)
  * - screening: 스크리닝 단계 운영 항목/문구
+ * - facts: AI가 사실로 인용 가능한 운영 정보 (지점·시급·정책 등)
+ *
+ * categories prop으로 표시 카테고리를 제한 가능 (탭 분리용).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Category = "conversation" | "screening";
+type Category = "conversation" | "screening" | "facts";
 
 interface PromptExample {
   id: number;
@@ -25,6 +28,7 @@ interface PromptExample {
 const CATEGORY_LABELS: Record<Category, string> = {
   conversation: "대화 톤",
   screening: "스크리닝 운영 문구",
+  facts: "운영 정보",
 };
 
 const CATEGORY_DESC: Record<Category, string> = {
@@ -32,6 +36,8 @@ const CATEGORY_DESC: Record<Category, string> = {
     "매니저가 실제로 보낸 메시지 예시. AI가 이 톤·길이·말투를 그대로 모방합니다.",
   screening:
     "지원/스크리닝/온보딩 단계의 운영 문구 모음. AI가 톤을 흡수해 자연스럽게 풀어냅니다.",
+  facts:
+    "AI가 지원자에게 사실로 인용 가능한 운영 정보. 예) '마포상암 — 평일오전 구인중, 시급 15,000원, 픽업 마포구 ...' 형태로 행마다 하나의 사실 단위.",
 };
 
 interface EditorState {
@@ -42,13 +48,26 @@ interface EditorState {
   body: string;
 }
 
-export default function PromptExamplesView() {
+interface PromptExamplesViewProps {
+  categories?: Category[];
+  pageTitle?: string;
+  pageDesc?: string;
+  showSeed?: boolean;
+}
+
+export default function PromptExamplesView({
+  categories = ["conversation", "screening"],
+  pageTitle = "톤 가이드",
+  pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
+  showSeed = true,
+}: PromptExamplesViewProps) {
   const [items, setItems] = useState<PromptExample[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Category>("conversation");
+  const [tab, setTab] = useState<Category>(categories[0]);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const singleCategory = categories.length === 1;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -184,13 +203,11 @@ export default function PromptExamplesView() {
 
       <div className="pe-header">
         <div>
-          <h2 className="page-title">톤 가이드</h2>
-          <p className="page-desc">
-            AI 프롬프트에 자동 주입되는 퓨샷 예시입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.
-          </p>
+          <h2 className="page-title">{pageTitle}</h2>
+          <p className="page-desc">{pageDesc}</p>
         </div>
         <div className="pe-header-actions">
-          {items.length === 0 && !loading && (
+          {showSeed && items.length === 0 && !loading && (
             <button className="pe-btn pe-btn-primary" onClick={handleSeed} disabled={seeding}>
               {seeding ? "추가 중..." : "기본 예시 가져오기"}
             </button>
@@ -201,25 +218,27 @@ export default function PromptExamplesView() {
               setEditor({ mode: "create", category: tab, title: "", body: "" })
             }
           >
-            + 새 예시
+            + 새 항목
           </button>
         </div>
       </div>
 
-      <div className="pe-tabs">
-        {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-          <button
-            key={c}
-            className={`pe-tab ${tab === c ? "pe-tab-active" : ""}`}
-            onClick={() => setTab(c)}
-          >
-            {CATEGORY_LABELS[c]}{" "}
-            <span className="pe-tab-count">
-              {items.filter((x) => x.category === c).length}
-            </span>
-          </button>
-        ))}
-      </div>
+      {!singleCategory && (
+        <div className="pe-tabs">
+          {categories.map((c) => (
+            <button
+              key={c}
+              className={`pe-tab ${tab === c ? "pe-tab-active" : ""}`}
+              onClick={() => setTab(c)}
+            >
+              {CATEGORY_LABELS[c]}{" "}
+              <span className="pe-tab-count">
+                {items.filter((x) => x.category === c).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <p className="pe-cat-desc">{CATEGORY_DESC[tab]}</p>
 
@@ -294,26 +313,28 @@ export default function PromptExamplesView() {
               </button>
             </div>
 
-            <div className="pe-field">
-              <label className="pe-label">카테고리</label>
-              {editor.mode === "create" ? (
-                <select
-                  className="pe-input"
-                  value={editor.category}
-                  onChange={(e) =>
-                    setEditor({ ...editor, category: e.target.value as Category })
-                  }
-                >
-                  {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-                    <option key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="pe-readonly">{CATEGORY_LABELS[editor.category]}</div>
-              )}
-            </div>
+            {!singleCategory ? (
+              <div className="pe-field">
+                <label className="pe-label">카테고리</label>
+                {editor.mode === "create" ? (
+                  <select
+                    className="pe-input"
+                    value={editor.category}
+                    onChange={(e) =>
+                      setEditor({ ...editor, category: e.target.value as Category })
+                    }
+                  >
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABELS[c]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="pe-readonly">{CATEGORY_LABELS[editor.category]}</div>
+                )}
+              </div>
+            ) : null}
 
             <div className="pe-field">
               <label className="pe-label">제목</label>

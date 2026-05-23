@@ -1,8 +1,9 @@
 /**
- * 퓨샷 예시 로더 — Supabase `prompt_examples` 테이블에서 동적 로드.
+ * 퓨샷 예시 + 사실 정보 로더 — Supabase `prompt_examples` 테이블에서 동적 로드.
  *
  * - category='conversation' : 일반 대화 톤 (모든 stage)
  * - category='screening'    : 스크리닝 단계 운영 항목/문구
+ * - category='facts'        : AI가 사실로 인용 가능한 운영 정보 (지점별 시급/구인 상태/정책 등)
  *
  * 매니저가 admin UI에서 편집하면 다음 캐시 만료(60초) 이후 자동 반영.
  */
@@ -17,7 +18,7 @@ interface CachedCategory {
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, CachedCategory>();
 
-async function fetchCategory(category: "conversation" | "screening"): Promise<string> {
+async function fetchCategory(category: "conversation" | "screening" | "facts"): Promise<string> {
   const cached = cache.get(category);
   if (cached && cached.expiresAt > Date.now()) return cached.text;
 
@@ -54,13 +55,20 @@ export async function loadScreeningExamples(): Promise<string> {
   return fetchCategory("screening");
 }
 
+export async function loadFacts(): Promise<string> {
+  return fetchCategory("facts");
+}
+
 /**
  * 시스템 프롬프트 끝에 붙일 톤 가이드 블록.
  */
 export async function buildToneGuide(
   opts: { includeScreening?: boolean } = {}
 ): Promise<string> {
-  const conv = await loadConversationExamples();
+  const [conv, facts] = await Promise.all([
+    loadConversationExamples(),
+    loadFacts(),
+  ]);
   const lines = [
     "## 매니저 실제 대화 톤 — 반드시 모방",
     "아래는 매니저 홍석범이 실제로 지원자에게 보낸 메시지 모음이다.",
@@ -73,6 +81,17 @@ export async function buildToneGuide(
     "[예시 — 매니저 실제 메시지]",
     conv,
   ];
+
+  if (facts) {
+    lines.push(
+      "",
+      "## AI 참고자료 — 사실 (지점·시급·구인 상태·정책 등)",
+      "아래 정보는 매니저가 관리하는 최신 운영 정보다. 지원자가 질문하면 이 정보 안에서만 답해라.",
+      "여기에 없는 사실(시급·시간대·인근 지하철역·시작일 등)은 추측하지 말고 매니저에게 인계해라.",
+      "",
+      facts
+    );
+  }
 
   if (opts.includeScreening) {
     const screening = await loadScreeningExamples();

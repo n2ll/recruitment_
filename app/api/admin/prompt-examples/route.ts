@@ -5,7 +5,7 @@ import { PROMPT_EXAMPLES_SEED } from "@/lib/agent/prompt-examples-seed";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["conversation", "screening"] as const;
+const CATEGORIES = ["conversation", "screening", "facts"] as const;
 type Category = (typeof CATEGORIES)[number];
 
 function isValidCategory(v: unknown): v is Category {
