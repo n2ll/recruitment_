@@ -59,6 +59,19 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       })
     : sendNotification;
 
+  // 직전 outbound와 동일 본문이 이미 발송된 상태면 중복 발송 방지.
+  // 시뮬 모드 등에서 transitions가 두 번 도는 케이스 가드.
+  const isAlreadySentRecently = async (body: string): Promise<boolean> => {
+    const { data: recent } = await supabase
+      .from("messages")
+      .select("body, created_at")
+      .eq("applicant_id", applicant_id)
+      .eq("direction", "outbound")
+      .order("created_at", { ascending: false })
+      .limit(3);
+    return (recent ?? []).some((m) => (m.body as string) === body);
+  };
+
   let nextStage: StageName | null = current_stage;
   let extraStateUpdate: AgentState = {};
   let autoSent = 0;
@@ -105,6 +118,9 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 1) 안내 묶음 (정산/프로모션/업무시간) 1통 발송
         try {
           const announceText = buildScreeningAnnouncement(applicant_name);
+          if (await isAlreadySentRecently(announceText)) {
+            // 이미 발송됨 — 중복 방지
+          } else {
           const r = await maybeSendNotification(
             applicant_phone,
             "SCREENING_ANNOUNCE",
@@ -125,6 +141,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
               job_id,
             });
             autoSent++;
+          }
           }
         } catch (e) {
           console.error("[transitions] SCREENING_ANNOUNCE send failed", e);
@@ -191,6 +208,9 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {
           const guideText = buildOnboardingGuideText(applicant_name);
+          if (await isAlreadySentRecently(guideText)) {
+            // 이미 발송됨 — 중복 방지
+          } else {
           const r2 = await maybeSendNotification(
             applicant_phone,
             "GUIDE",
@@ -217,6 +237,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
               onboarding: { 앱설치_교육_안내발송됨: true },
               meta: { onboarding_entered_at: now },
             };
+          }
           }
         } catch (e) {
           console.error("[transitions] GUIDE send failed", e);

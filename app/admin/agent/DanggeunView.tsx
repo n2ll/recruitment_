@@ -207,6 +207,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   const [msgLoading, setMsgLoading] = useState(false);
   const [outbound, setOutbound] = useState("");
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [agentStage, setAgentStage] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<AgentState>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -400,8 +401,14 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
 
   const handleSendReply = async () => {
     if (!outbound.trim() || selectedId == null) return;
+    // 빠른 더블 클릭/엔터 동기 차단 — setSending은 비동기라 그 사이에 두 번 호출 가능
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     const selected = candidates.find((c) => c.id === selectedId);
-    if (!selected) return;
+    if (!selected) {
+      sendingRef.current = false;
+      return;
+    }
     setSending(true);
     try {
       let res: Response;
@@ -441,6 +448,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
       alert(e instanceof Error ? e.message : "발송 실패");
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 

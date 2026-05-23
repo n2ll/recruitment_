@@ -77,16 +77,12 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   }
 
   const stageName = jc.agent_stage as StageName | null;
-  // onboarding에 진입하면 AI 응답은 끈다 — 자동 발송(앱설치·만남장소 안내 등)은 transitions.ts가 별도로 수행.
-  // 사용자 정책: 온보딩부터는 매니저가 직접 응대.
-  if (
-    !stageName ||
-    stageName === "paused" ||
-    stageName === "abort" ||
-    stageName === "onboarding"
-  ) {
+  if (!stageName || stageName === "paused" || stageName === "abort") {
     return { ok: true, skipped: `stage=${stageName ?? "null"} — agent skipped` };
   }
+  // onboarding은 stage 모듈을 호출해 체크리스트(배민 아이디·차량번호) 갱신은 진행하되,
+  // AI 응답 발송은 매니저 인계 정책에 따라 차단한다. transitions의 자동 발송(만남장소 등)은 그대로.
+  const blockReplyForStage = stageName === "onboarding";
 
   const stage = STAGES[stageName];
   if (!stage) {
@@ -134,7 +130,7 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
     result.transition.kind === "advance" && !!result.reply_text;
   let replySent = false;
   let outboundId: string | null = null;
-  if (result.reply_text && !skipReplyDueToAdvance) {
+  if (result.reply_text && !skipReplyDueToAdvance && !blockReplyForStage) {
     let sendOk = simulate;
     let sendMessageId: string | null = null;
     if (!simulate) {
