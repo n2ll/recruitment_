@@ -61,6 +61,12 @@ export default function PromptExamplesView({
   pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
   showSeed = true,
 }: PromptExamplesViewProps) {
+  const isFactsOnly = categories.length === 1 && categories[0] === "facts";
+  const themeColor = isFactsOnly ? "#2563EB" : "#D97706"; // facts=파랑 / 톤가이드=주황
+  const themeBg = isFactsOnly ? "#EFF6FF" : "#FFFBEB";
+  const themeBorder = isFactsOnly ? "#BFDBFE" : "#F5C518";
+  const themeEmoji = isFactsOnly ? "📋" : "🎨";
+  const themeKind = isFactsOnly ? "사실 데이터" : "퓨샷 예시 / 말투";
   const [items, setItems] = useState<PromptExample[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Category>(categories[0]);
@@ -200,6 +206,21 @@ export default function PromptExamplesView({
   return (
     <div className="content">
       <style>{css}</style>
+
+      <div
+        className="pe-banner"
+        style={{ background: themeBg, borderColor: themeBorder, color: themeColor }}
+      >
+        <span className="pe-banner-emoji">{themeEmoji}</span>
+        <div>
+          <div className="pe-banner-kind">{themeKind}</div>
+          <div className="pe-banner-msg">
+            {isFactsOnly
+              ? "여기는 AI가 사실로 인용할 운영 정보(지점·시급·정책 등) 전용입니다. 말투/대화 예시는 [톤 가이드] 탭에서 관리하세요."
+              : "여기는 AI 말투/대화 톤 예시 전용입니다. 시급·정책 같은 사실 정보는 [AI 참고자료] 탭에서 관리하세요."}
+          </div>
+        </div>
+      </div>
 
       <div className="pe-header">
         <div>
@@ -381,6 +402,26 @@ export default function PromptExamplesView({
 }
 
 const css = `
+  .pe-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  .pe-banner-emoji { font-size: 22px; }
+  .pe-banner-kind {
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
+  .pe-banner-msg { font-size: 12px; opacity: 0.85; line-height: 1.5; }
+
   .pe-header {
     display: flex;
     align-items: flex-start;
