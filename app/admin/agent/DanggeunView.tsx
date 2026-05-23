@@ -50,7 +50,8 @@ const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
   },
   practice: {
     source: "danggeun_practice",
-    storageKey: "danggeun_practice_start_message_v1",
+    // 시작 멘트는 라이브와 동일 키를 공유해 연습용에서 다듬은 멘트가 실전에 자동 반영되게 함.
+    storageKey: "danggeun_start_message_v1",
     startApi: "/api/admin/agent/danggeun-practice/start",
     title: "연습 후보",
     emoji: "🧪",
@@ -248,7 +249,16 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   // ── 초기 로드 ─────────────────────────────────────────
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY) ?? "";
+      let saved = localStorage.getItem(STORAGE_KEY) ?? "";
+      // 1회용 마이그레이션 — 통합 이전 연습용 전용 키에 저장된 멘트를 새 통합 키로 옮김
+      if (!saved) {
+        const legacyPractice = localStorage.getItem("danggeun_practice_start_message_v1");
+        if (legacyPractice) {
+          localStorage.setItem(STORAGE_KEY, legacyPractice);
+          localStorage.removeItem("danggeun_practice_start_message_v1");
+          saved = legacyPractice;
+        }
+      }
       setStartMsg(saved);
       setStartMsgDraft(saved);
     } catch {
@@ -969,14 +979,42 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
               <button className="dg-btn-ghost" onClick={() => setShowRecommendModal(false)}>×</button>
             </div>
             <p className="dg-modal-desc">
-              공고 메모를 입력하면 source='danggeun' 후보 풀에서 점수순(거리/차량/최신성)으로 추천합니다.
-              결과에서 한 명을 클릭하면 저장된 시작 멘트가 그 사람에게 실 발송됩니다.
+              AI 참고자료에서 공고를 선택하거나 직접 메모를 입력하세요.
+              source='danggeun' 후보 풀에서 점수순(거리/차량/최신성)으로 추천합니다.
+              한 명을 클릭하면 저장된 시작 멘트가 그 사람에게 실 발송됩니다.
             </p>
+            <div className="dg-field">
+              <label className="dg-label">
+                AI 참고자료에서 공고 불러오기 <span style={{ color: "#9CA3AF", fontWeight: 400 }}>(선택 안 해도 됨)</span>
+              </label>
+              <select
+                className="dg-input"
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  if (id == null) return;
+                  const f = factsList.find((x) => x.id === id);
+                  if (f) setRecommendMemo(`[${f.title}]\n${f.body}`);
+                }}
+              >
+                <option value="">— 직접 입력하거나 facts 선택 —</option>
+                {factsList.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.title}
+                  </option>
+                ))}
+              </select>
+              {factsList.length === 0 && (
+                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0" }}>
+                  AI 참고자료 탭에서 공고 정보를 먼저 추가하면 여기서 빠르게 불러올 수 있습니다.
+                </p>
+              )}
+            </div>
             <div className="dg-field">
               <label className="dg-label">공고 메모</label>
               <textarea
                 className="dg-textarea"
-                rows={4}
+                rows={6}
                 placeholder="예) 강북미아 평일오전 자차, 시급 1.5~2만 / 픽업 서울 강북구 도봉로 34"
                 value={recommendMemo}
                 onChange={(e) => setRecommendMemo(e.target.value)}
