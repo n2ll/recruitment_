@@ -17,7 +17,51 @@ import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
 
 interface DanggeunViewProps {
   branches: string[];
+  mode?: "live" | "practice";
 }
+
+interface ModeConfig {
+  source: string;
+  storageKey: string;
+  startApi: string;
+  title: string;
+  emoji: string;
+  helpLine: string;
+  newCandidateLabel: string;
+  newCandidateNote: string;
+  replyPlaceholder: string;
+  sendButtonLabel: string;
+  practice: boolean;
+}
+
+const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
+  live: {
+    source: "danggeun",
+    storageKey: "danggeun_start_message_v1",
+    startApi: "/api/admin/agent/danggeun/start",
+    title: "당근 후보",
+    emoji: "🥕",
+    helpLine: "당근 유입 후보 — 실 SMS 발송 / Realtime",
+    newCandidateLabel: "+ 새 당근 후보",
+    newCandidateNote: "등록과 동시에 저장된 시작 멘트가 실제로 발송됩니다.",
+    replyPlaceholder: "매니저 답장을 직접 작성하면 즉시 실 발송됩니다",
+    sendButtonLabel: "보내기",
+    practice: false,
+  },
+  practice: {
+    source: "danggeun_practice",
+    storageKey: "danggeun_practice_start_message_v1",
+    startApi: "/api/admin/agent/danggeun-practice/start",
+    title: "연습 후보",
+    emoji: "🧪",
+    helpLine: "연습 모드 — 실 SMS 발송 X. 입력은 지원자 빙의 (AI 자동 응답)",
+    newCandidateLabel: "+ 새 연습 후보",
+    newCandidateNote: "실 SMS 발송 X. 시작 멘트는 DB에 기록만 됩니다.",
+    replyPlaceholder: "지원자가 보낸 문자처럼 입력 → AI가 자동 응답합니다",
+    sendButtonLabel: "지원자로 보내기",
+    practice: true,
+  },
+};
 
 interface Candidate {
   id: number;
@@ -48,7 +92,6 @@ type AgentState = {
   onboarding?: Record<string, boolean>;
 };
 
-const STORAGE_KEY = "danggeun_start_message_v1";
 
 const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
@@ -134,7 +177,9 @@ function timeAgo(iso: string | null): string {
   return d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
 }
 
-export default function DanggeunView({ branches }: DanggeunViewProps) {
+export default function DanggeunView({ branches, mode = "live" }: DanggeunViewProps) {
+  const cfg = MODE_CONFIG[mode];
+  const STORAGE_KEY = cfg.storageKey;
   // ── 시작 멘트 ──────────────────────────────────────────
   const [startMsg, setStartMsg] = useState("");
   const [startMsgDraft, setStartMsgDraft] = useState("");
@@ -185,7 +230,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
   const fetchCandidates = useCallback(async () => {
     setListLoading(true);
     try {
-      const res = await fetch("/api/admin/applicants?source=danggeun", { cache: "no-store" });
+      const res = await fetch(`/api/admin/applicants?source=${cfg.source}`, { cache: "no-store" });
       const json = await res.json();
       if (res.ok) {
         setCandidates(Array.isArray(json.data) ? json.data : []);
@@ -195,7 +240,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [cfg.source]);
 
   useEffect(() => {
     fetchCandidates();
@@ -216,13 +261,13 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
         (payload) => {
           if (payload.eventType === "INSERT") {
             const row = payload.new as Candidate & { source?: string };
-            if (row.source !== "danggeun") return;
+            if (row.source !== cfg.source) return;
             setCandidates((prev) =>
               prev.some((c) => c.id === row.id) ? prev : [row, ...prev]
             );
           } else if (payload.eventType === "UPDATE") {
             const row = payload.new as Candidate & { source?: string };
-            if (row.source !== "danggeun") return;
+            if (row.source !== cfg.source) return;
             setCandidates((prev) =>
               prev.map((c) => (c.id === row.id ? { ...c, ...row } : c))
             );
@@ -256,7 +301,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchCandidates]);
+  }, [fetchCandidates, cfg.source]);
 
   // ── 대화창 로드 ────────────────────────────────────────
   const fetchMessages = useCallback(async (id: number) => {
@@ -316,12 +361,15 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       alert("시작 멘트를 먼저 저장해주세요.");
       return;
     }
-    if (!confirm(`${newName}(${newPhone})에게 시작 멘트를 실제로 발송합니다. 진행할까요?`)) {
+    const confirmMsg = cfg.practice
+      ? `${newName}(${newPhone})을 연습용 후보로 등록합니다. (실 SMS 발송 X) 진행할까요?`
+      : `${newName}(${newPhone})에게 시작 멘트를 실제로 발송합니다. 진행할까요?`;
+    if (!confirm(confirmMsg)) {
       return;
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/agent/danggeun/start", {
+      const res = await fetch(cfg.startApi, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -354,16 +402,30 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
     if (!selected) return;
     setSending(true);
     try {
-      const res = await fetch("/api/admin/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicant_id: selectedId,
-          phone: selected.phone,
-          body: outbound,
-          sent_by: "danggeun-manual",
-        }),
-      });
+      let res: Response;
+      if (cfg.practice) {
+        // 연습 모드: 지원자 빙의 — inbound로 기록 + router 호출 (실 SMS X)
+        res = await fetch("/api/admin/agent/danggeun/impersonate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicant_id: selectedId,
+            text: outbound,
+          }),
+        });
+      } else {
+        // 라이브: 매니저로 실 발송
+        res = await fetch("/api/admin/messages/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicant_id: selectedId,
+            phone: selected.phone,
+            body: outbound,
+            sent_by: "danggeun-manual",
+          }),
+        });
+      }
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(j.error || "발송 실패");
@@ -403,8 +465,10 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       <div className="dg-toolbar">
         <div className="dg-toolbar-left">
           <h2 className="dg-title">
-            당근 후보 <span className="dg-count">{candidates.length}명</span>
+            <span style={{ marginRight: 6 }}>{cfg.emoji}</span>
+            {cfg.title} <span className="dg-count">{candidates.length}명</span>
           </h2>
+          <span className="dg-help">{cfg.helpLine}</span>
         </div>
         <div className="dg-toolbar-actions">
           <button
@@ -414,7 +478,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
             {startMsg ? "시작 멘트 ✓" : "시작 멘트 설정 필요"}
           </button>
           <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
-            + 새 당근 후보
+            {cfg.newCandidateLabel}
           </button>
           <button className="dg-btn-ghost" onClick={fetchCandidates} disabled={listLoading}>
             {listLoading ? "..." : "새로고침"}
@@ -577,11 +641,11 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                 <div ref={messagesEndRef} />
               </div>
 
-              <div className="dg-conv-input">
+              <div className={`dg-conv-input ${cfg.practice ? "dg-conv-input-practice" : ""}`}>
                 <textarea
                   className="dg-textarea"
                   rows={3}
-                  placeholder="매니저 답장을 직접 작성하면 즉시 실 발송됩니다"
+                  placeholder={cfg.replyPlaceholder}
                   value={outbound}
                   onChange={(e) => setOutbound(e.target.value)}
                   onKeyDown={(e) => {
@@ -593,7 +657,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                   onClick={handleSendReply}
                   disabled={sending || !outbound.trim()}
                 >
-                  {sending ? "발송 중..." : "보내기"}
+                  {sending ? "처리 중..." : cfg.sendButtonLabel}
                 </button>
               </div>
             </>
@@ -655,9 +719,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                 ×
               </button>
             </div>
-            <p className="dg-modal-desc">
-              등록과 동시에 저장된 시작 멘트가 <b>실제로 발송</b>되고 messages에 기록됩니다.
-            </p>
+            <p className="dg-modal-desc">{cfg.newCandidateNote}</p>
             {!startMsg && (
               <div className="dg-warn">
                 ⚠ 시작 멘트가 아직 저장되지 않았습니다. 먼저 우측 상단에서 시작 멘트를 설정해주세요.
@@ -731,6 +793,14 @@ const css = `
   .dg-toolbar-actions { display: flex; gap: 8px; align-items: center; }
   .dg-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0; }
   .dg-count { color: #6b7280; font-weight: 500; margin-left: 4px; }
+  .dg-help { font-size: 11px; color: #6b7280; margin-left: 10px; }
+  .dg-conv-input-practice {
+    background: linear-gradient(to bottom, #FEF3C7, #fff);
+  }
+  .dg-conv-input-practice .dg-textarea {
+    border-color: #F5C518;
+    background: #FFFEF7;
+  }
 
   .dg-body {
     display: flex;

@@ -63,7 +63,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "prompts";
+type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "prompts";
 
 interface RecommendResponse {
   success: boolean;
@@ -1030,6 +1030,11 @@ export default function AdminPage() {
             <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
             <span className="nav-label">당근마켓구인</span>
           </button>
+          <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
+            onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)">
+            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
+            <span className="nav-label">당근마켓구인 (연습용)</span>
+          </button>
           <button className={`nav-btn ${tab === "prompts" ? "nav-active" : ""}`}
             onClick={() => setTab("prompts")} title="톤 가이드">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4h12M3 9h12M3 14h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1901,7 +1906,9 @@ export default function AdminPage() {
           ) : tab === "playground" ? (
             <PlaygroundView branches={activeBranchNames} />
           ) : tab === "danggeun" ? (
-            <DanggeunView branches={activeBranchNames} />
+            <DanggeunView branches={activeBranchNames} mode="live" />
+          ) : tab === "danggeun-practice" ? (
+            <DanggeunView branches={activeBranchNames} mode="practice" />
           ) : tab === "prompts" ? (
             <PromptExamplesView />
           ) : tab === "contact" ? (
