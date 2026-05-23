@@ -134,8 +134,30 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
 const ACTIVE_STATUSES = ["서류심사", "스크리닝 완료", "확정"];
 const CONFIRMED_STATUSES = ["확정"];
 
+const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
+
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [sidebarPinned, setSidebarPinned] = useState(true);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const sidebarExpanded = sidebarPinned || sidebarHovered;
+
+  // 사이드바 핀 상태 — localStorage 복구
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_PIN_KEY);
+      if (saved !== null) setSidebarPinned(saved === "true");
+    } catch {
+      // ignore
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_PIN_KEY, String(sidebarPinned));
+    } catch {
+      // ignore
+    }
+  }, [sidebarPinned]);
   const [data, setData] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -985,79 +1007,104 @@ export default function AdminPage() {
   return (
     <>
       <style>{css}</style>
-      <div className="admin">
+      <div className={`admin ${sidebarPinned ? "pinned" : ""}`}>
         {/* 사이드바 */}
-        <nav className="sidebar">
+        <nav
+          className={`sidebar ${sidebarExpanded ? "sidebar-expanded" : "sidebar-collapsed"}`}
+          onMouseEnter={() => setSidebarHovered(true)}
+          onMouseLeave={() => setSidebarHovered(false)}
+        >
           <div className="sidebar-logo">
             <img src="/logo.png" alt="옹고잉" className="logo-sm-img" />
             <span className="sidebar-title">옹고잉 관리자</span>
           </div>
-          <button className={`nav-btn ${tab === "dashboard" ? "nav-active" : ""}`}
-            onClick={() => setTab("dashboard")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="1" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/></svg>
-            대시보드
-          </button>
-          <button className={`nav-btn ${tab === "applicants" ? "nav-active" : ""}`}
-            onClick={() => setTab("applicants")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 15v-1.5a3 3 0 00-3-3H8a3 3 0 00-3 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/></svg>
-            지원자 목록
-            {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
-          </button>
-          <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
-            onClick={() => setTab("hope-slots")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
-            희망 슬롯
-          </button>
-          <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
-            onClick={() => setTab("confirmed-slots")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
-            확정 슬롯
-          </button>
-          <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
-            onClick={() => setTab("recommend")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-            추천 받기
-          </button>
-          <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
-            onClick={() => setTab("contact")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            배송원 컨택
-            {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
-          </button>
-          <button className={`nav-btn ${tab === "branches" ? "nav-active" : ""}`}
-            onClick={() => setTab("branches")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-            지점 관리
-          </button>
-          <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
-            onClick={() => setTab("site-managers")}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            현장 매니저
-          </button>
+
+          <div className="nav-group-label">AI 에이전트</div>
           <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
-            onClick={() => setTab("agent")}>
+            onClick={() => setTab("agent")} title="구인 에이전트">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            구인 에이전트
+            <span className="nav-label">구인 에이전트</span>
           </button>
           <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
-            onClick={() => setTab("playground")}>
+            onClick={() => setTab("playground")} title="플레이그라운드">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
-            플레이그라운드
+            <span className="nav-label">플레이그라운드</span>
           </button>
           <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
-            onClick={() => setTab("danggeun")}>
+            onClick={() => setTab("danggeun")} title="당근마켓구인">
             <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
-            당근마켓구인
+            <span className="nav-label">당근마켓구인</span>
           </button>
           <button className={`nav-btn ${tab === "prompts" ? "nav-active" : ""}`}
-            onClick={() => setTab("prompts")}>
+            onClick={() => setTab("prompts")} title="톤 가이드">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4h12M3 9h12M3 14h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            톤 가이드
+            <span className="nav-label">톤 가이드</span>
           </button>
+
+          <div className="nav-group-label">운영</div>
+          <button className={`nav-btn ${tab === "dashboard" ? "nav-active" : ""}`}
+            onClick={() => setTab("dashboard")} title="대시보드">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="1" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/></svg>
+            <span className="nav-label">대시보드</span>
+          </button>
+          <button className={`nav-btn ${tab === "applicants" ? "nav-active" : ""}`}
+            onClick={() => setTab("applicants")} title="지원자 목록">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 15v-1.5a3 3 0 00-3-3H8a3 3 0 00-3 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/></svg>
+            <span className="nav-label">지원자 목록</span>
+            {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
+          </button>
+          <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
+            onClick={() => setTab("contact")} title="배송원 컨택">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <span className="nav-label">배송원 컨택</span>
+            {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
+          </button>
+
+          <div className="nav-group-label">매트릭스</div>
+          <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
+            onClick={() => setTab("hope-slots")} title="희망 슬롯">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
+            <span className="nav-label">희망 슬롯</span>
+          </button>
+          <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
+            onClick={() => setTab("confirmed-slots")} title="확정 슬롯">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+            <span className="nav-label">확정 슬롯</span>
+          </button>
+          <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
+            onClick={() => setTab("recommend")} title="추천 받기">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            <span className="nav-label">추천 받기</span>
+          </button>
+
+          <div className="nav-group-label">관리</div>
+          <button className={`nav-btn ${tab === "branches" ? "nav-active" : ""}`}
+            onClick={() => setTab("branches")} title="지점 관리">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            <span className="nav-label">지점 관리</span>
+          </button>
+          <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
+            onClick={() => setTab("site-managers")} title="현장 매니저">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <span className="nav-label">현장 매니저</span>
+          </button>
+
           <div className="sidebar-footer">
-            <button className="nav-btn" onClick={() => fetchData()}>
+            <button className="nav-btn" onClick={() => fetchData()} title="새로고침">
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              새로고침
+              <span className="nav-label">새로고침</span>
+            </button>
+            <button
+              className="nav-btn nav-pin"
+              onClick={() => setSidebarPinned((p) => !p)}
+              title={sidebarPinned ? "사이드바 펼침 고정 해제" : "사이드바 펼침 고정"}
+            >
+              {sidebarPinned ? (
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2l-2 4-4 1 3 3-1 5 4-2 4 2-1-5 3-3-4-1z" fill="currentColor"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2l-2 4-4 1 3 3-1 5 4-2 4 2-1-5 3-3-4-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+              )}
+              <span className="nav-label">{sidebarPinned ? "고정됨" : "사이드바 고정"}</span>
             </button>
           </div>
         </nav>
@@ -2045,32 +2092,79 @@ const css = `
   .admin { display: flex; min-height: 100vh; }
 
   .sidebar {
-    width: 220px; background: #1a1a1a; color: #fff;
-    padding: 20px 12px; display: flex; flex-direction: column; gap: 4px;
+    background: #1a1a1a; color: #fff;
+    padding: 20px 12px; display: flex; flex-direction: column; gap: 2px;
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
+    transition: width 0.15s ease;
+    overflow: hidden;
   }
-  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 20px; }
+  .sidebar-collapsed { width: 60px; padding: 20px 8px; }
+  .sidebar-expanded { width: 220px; padding: 20px 12px; box-shadow: 4px 0 16px rgba(0,0,0,0.15); }
+
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 20px; min-height: 36px; }
   .logo-sm-img {
     height: 28px; width: auto; max-width: 80px;
     object-fit: contain;
     background: #fff; border-radius: 6px; padding: 3px 6px;
+    flex-shrink: 0;
   }
-  .sidebar-title { font-size: 14px; font-weight: 700; }
+  .sidebar-title {
+    font-size: 14px; font-weight: 700;
+    white-space: nowrap;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .sidebar-expanded .sidebar-title { opacity: 1; }
+
+  .nav-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 14px 12px 4px;
+    white-space: nowrap;
+    opacity: 0; transition: opacity 0.15s;
+    height: 0; overflow: hidden;
+  }
+  .sidebar-expanded .nav-group-label { opacity: 1; height: auto; }
+
   .nav-btn {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px;
     border: none; background: none; color: #9ca3af; font-size: 13px;
     font-family: inherit; cursor: pointer; border-radius: 8px;
     transition: all 0.15s; width: 100%; text-align: left; font-weight: 500;
+    white-space: nowrap;
   }
+  .sidebar-collapsed .nav-btn { padding: 10px 8px; justify-content: center; }
+  .sidebar-collapsed .nav-btn { gap: 0; }
+  .nav-btn svg { flex-shrink: 0; }
+  .nav-label {
+    opacity: 0; transition: opacity 0.15s;
+    overflow: hidden;
+  }
+  .sidebar-expanded .nav-label { opacity: 1; }
+  .sidebar-collapsed .nav-label { width: 0; }
+
   .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
   .nav-active { background: rgba(245,197,24,0.15); color: #F5C518; }
+  .nav-active:hover { background: rgba(245,197,24,0.2); color: #F5C518; }
+  .nav-pin { color: #6b7280; }
   .badge {
     background: #ef4444; color: #fff; font-size: 11px; font-weight: 700;
     padding: 1px 6px; border-radius: 10px; margin-left: auto;
   }
+  .sidebar-collapsed .badge {
+    position: absolute;
+    margin-left: 0;
+    transform: translate(8px, -12px);
+    font-size: 9px;
+    padding: 1px 4px;
+  }
   .sidebar-footer { margin-top: auto; }
 
-  .main { margin-left: 220px; flex: 1; min-height: 100vh; }
+  .main { flex: 1; min-height: 100vh; transition: margin-left 0.15s ease; }
+  .admin.pinned .main { margin-left: 220px; }
+  .admin:not(.pinned) .main { margin-left: 60px; }
   .content { padding: 32px; max-width: 1200px; }
   .loading { padding: 100px; text-align: center; color: #9ca3af; font-size: 15px; }
 
@@ -2706,10 +2800,13 @@ const css = `
   .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   @media (max-width: 768px) {
-    .sidebar { width: 60px; padding: 12px 6px; }
-    .sidebar-title, .nav-btn span:not(.badge) { display: none; }
-    .nav-btn { justify-content: center; padding: 10px; }
-    .main { margin-left: 60px; }
+    /* 좁은 화면은 자동으로 collapsed 형태 강제 (핀 무시) */
+    .admin.pinned .sidebar { width: 60px; padding: 20px 8px; box-shadow: none; }
+    .admin.pinned .sidebar .sidebar-title,
+    .admin.pinned .sidebar .nav-label,
+    .admin.pinned .sidebar .nav-group-label { opacity: 0; width: 0; height: 0; }
+    .admin.pinned .sidebar .nav-btn { padding: 10px 8px; justify-content: center; gap: 0; }
+    .admin.pinned .main { margin-left: 60px; }
     .content { padding: 16px; }
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
     .detail-grid { grid-template-columns: 1fr; }
