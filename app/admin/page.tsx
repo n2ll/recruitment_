@@ -1025,11 +1025,6 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             <span className="nav-label">구인 에이전트</span>
           </button>
-          <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
-            onClick={() => setTab("playground")} title="플레이그라운드">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
-            <span className="nav-label">플레이그라운드</span>
-          </button>
           <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
             onClick={() => setTab("danggeun")} title="당근마켓구인">
             <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
@@ -1087,6 +1082,11 @@ export default function AdminPage() {
             onClick={() => setTab("site-managers")} title="현장 매니저">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             <span className="nav-label">현장 매니저</span>
+          </button>
+          <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
+            onClick={() => setTab("playground")} title="플레이그라운드">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
+            <span className="nav-label">플레이그라운드</span>
           </button>
 
           <div className="sidebar-footer">
