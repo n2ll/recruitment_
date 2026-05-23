@@ -39,6 +39,8 @@ export interface RunAgentInput {
   candidate_id: number;
   inbound_message_id: string;
   inbound_text: string;
+  /** true면 SOLAPI 발송을 건너뛰고 DB(messages)에만 outbound 기록 — 연습용 빙의 모드에서 사용. */
+  simulate?: boolean;
 }
 
 export interface RunAgentResult {
@@ -52,7 +54,7 @@ export interface RunAgentResult {
 }
 
 export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAgentResult> {
-  const { supabase, candidate_id, inbound_message_id, inbound_text } = input;
+  const { supabase, candidate_id, inbound_message_id, inbound_text, simulate = false } = input;
 
   // 1) job_candidate + 관련 데이터 로드
   const { data: jc, error: jcErr } = await supabase
@@ -120,12 +122,22 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   const ctx: StageContext = { job, applicant, history, state };
   const result = await stage.process(ctx, cleanInbound);
 
-  // 4) 응답 발송
+  // 4) 응답 발송 (simulate=true면 SOLAPI 건너뛰고 DB만 기록)
   let replySent = false;
   let outboundId: string | null = null;
   if (result.reply_text) {
-    const send = await sendSms(applicant.phone, result.reply_text);
-    if (send.success) {
+    let sendOk = simulate;
+    let sendMessageId: string | null = null;
+    if (!simulate) {
+      const send = await sendSms(applicant.phone, result.reply_text);
+      sendOk = send.success;
+      sendMessageId = send.messageId ?? null;
+      if (!send.success) {
+        result.transition = { kind: "pause", reason: `SMS 발송 실패: ${send.error ?? "unknown"}` };
+        console.error("[router] SMS send failed", send.error);
+      }
+    }
+    if (sendOk) {
       const { data: outMsg } = await supabase
         .from("messages")
         .insert({
@@ -133,9 +145,9 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
           applicant_phone: applicant.phone,
           direction: "outbound",
           body: result.reply_text,
-          status: "sent",
-          sent_by: "agent",
-          solapi_msg_id: send.messageId ?? null,
+          status: simulate ? "simulated" : "sent",
+          sent_by: simulate ? "agent-practice" : "agent",
+          solapi_msg_id: sendMessageId,
           message_type: "sms",
           job_id: jc.job_id,
         })
@@ -168,10 +180,6 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
           resolved_at: new Date().toISOString(),
         });
       }
-    } else {
-      // 발송 실패 — pause로 강제 전환
-      result.transition = { kind: "pause", reason: `SMS 발송 실패: ${send.error ?? "unknown"}` };
-      console.error("[router] SMS send failed", send.error);
     }
   }
 

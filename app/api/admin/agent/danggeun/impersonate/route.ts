@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const { data: applicant } = await supabase
       .from("applicants")
-      .select("id, phone")
+      .select("id, phone, source")
       .eq("id", applicant_id)
       .single();
 
@@ -106,11 +106,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const isPractice = applicant.source === "danggeun_practice";
     const agentResult = await runAgentForCandidate({
       supabase,
       candidate_id: jc.id as number,
       inbound_message_id: inserted.id as string,
       inbound_text: text.trim(),
+      simulate: isPractice,
     });
 
     return NextResponse.json({
