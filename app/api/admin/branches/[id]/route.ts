@@ -7,6 +7,7 @@ interface PatchBody {
   name?: string;
   sort_order?: number;
   active?: boolean;
+  slot_capacity?: Record<string, number>;
 }
 
 export async function PATCH(
@@ -39,6 +40,15 @@ export async function PATCH(
     }
     if (typeof body.sort_order === "number") update.sort_order = body.sort_order;
     if (typeof body.active === "boolean") update.active = body.active;
+    if (body.slot_capacity && typeof body.slot_capacity === "object") {
+      // 안전: 숫자만 통과시키고 0 이상으로 클램프
+      const sanitized: Record<string, number> = {};
+      for (const [k, v] of Object.entries(body.slot_capacity)) {
+        const n = Number(v);
+        if (Number.isFinite(n)) sanitized[k] = Math.max(0, Math.floor(n));
+      }
+      update.slot_capacity = sanitized;
+    }
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json(
@@ -52,7 +62,7 @@ export async function PATCH(
       .from("branches")
       .update(update)
       .eq("id", id)
-      .select("id, name, sort_order, active")
+      .select("id, name, sort_order, active, slot_capacity")
       .single();
 
     if (error) {
@@ -112,7 +122,7 @@ export async function DELETE(
         .from("branches")
         .update({ active: false })
         .eq("id", id)
-        .select("id, name, sort_order, active")
+        .select("id, name, sort_order, active, slot_capacity")
         .single();
       if (error) {
         console.error("[admin/branches/:id] soft-delete error", error);

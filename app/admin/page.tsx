@@ -114,10 +114,23 @@ interface Branch {
   name: string;
   sort_order: number;
   active: boolean;
+  slot_capacity?: Record<string, number>;
 }
 
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 type SlotKey = typeof SLOTS[number];
+
+const DEFAULT_SLOT_CAPACITY: Record<SlotKey, number> = {
+  평일오전: 2,
+  평일오후: 2,
+  주말오전: 2,
+  주말오후: 2,
+};
+
+function getSlotCapacity(branch: Branch | undefined, slot: SlotKey): number {
+  const v = branch?.slot_capacity?.[slot];
+  return typeof v === "number" ? v : DEFAULT_SLOT_CAPACITY[slot];
+}
 
 // work_hours 텍스트(콤마 join된 4슬롯 중 선택값) → 슬롯 매칭
 function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boolean {
@@ -510,6 +523,10 @@ export default function AdminPage() {
       if (!sb) return true;
       if (lb.id !== sb.id) return true;
       if (lb.name !== sb.name || lb.active !== sb.active) return true;
+      // slot_capacity 변경 감지
+      for (const k of SLOTS) {
+        if (getSlotCapacity(lb, k) !== getSlotCapacity(sb, k)) return true;
+      }
     }
     return false;
   })();
@@ -568,6 +585,15 @@ export default function AdminPage() {
       if (lb.name !== sb.name) updates.name = lb.name;
       if (lb.active !== sb.active) updates.active = lb.active;
       if (newSortOrder !== sb.sort_order) updates.sort_order = newSortOrder;
+      // slot_capacity 변경 감지
+      const capDiff = SLOTS.some(
+        (k) => getSlotCapacity(lb, k) !== getSlotCapacity(sb, k)
+      );
+      if (capDiff) {
+        const cap: Record<string, number> = {};
+        for (const k of SLOTS) cap[k] = getSlotCapacity(lb, k);
+        updates.slot_capacity = cap;
+      }
       if (Object.keys(updates).length === 0) return;
 
       // 이름 변경 시 사용 중이면 사전 확인
@@ -1479,13 +1505,13 @@ export default function AdminPage() {
             <div className="content">
               <h2 className="page-title">확정 슬롯 현황</h2>
               <p className="page-desc">
-                <strong>status='확정'</strong> 지원자 기준 현황입니다. 각 슬롯 정원: <strong>2명</strong>.
+                <strong>status='확정'</strong> 지원자 기준 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
                 셀을 클릭하면 배치된 인원이 표시됩니다.
               </p>
 
               <div className="matrix-legend">
-                <span className="lg-dot lg-full" /> 정원 충족 (2+)
-                <span className="lg-dot lg-half" /> 1명 (1/2)
+                <span className="lg-dot lg-full" /> 정원 충족
+                <span className="lg-dot lg-half" /> 정원 미달 (1명 이상)
                 <span className="lg-dot lg-zero" /> 빈 슬롯
               </div>
 
@@ -1498,10 +1524,13 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeBranchNames.map((b) => (
+                    {branches.filter((b) => b.active).map((branch) => {
+                      const b = branch.name;
+                      return (
                       <tr key={b}>
                         <td className="td-bold">{b}</td>
                         {SLOTS.map((s) => {
+                          const capacity = getSlotCapacity(branch, s);
                           const confirmed = data.filter(
                             (a) =>
                               a.status === "확정" &&
@@ -1509,8 +1538,8 @@ export default function AdminPage() {
                               a.confirmed_branch === b
                           ).length;
                           const cellClass =
-                            confirmed >= 2 ? "cell-full"
-                            : confirmed === 1 ? "cell-half"
+                            capacity > 0 && confirmed >= capacity ? "cell-full"
+                            : confirmed >= 1 ? "cell-half"
                             : "cell-zero";
                           const active = slotCell?.branch === b && slotCell?.slot === s;
                           return (
@@ -1519,12 +1548,13 @@ export default function AdminPage() {
                               className={`matrix-cell ${cellClass} ${active ? "cell-active" : ""}`}
                               onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
                             >
-                              <div className="conf-main">{confirmed}/2</div>
+                              <div className="conf-main">{confirmed}/{capacity}</div>
                             </td>
                           );
                         })}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1901,6 +1931,57 @@ export default function AdminPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* 슬롯 정원 매트릭스 */}
+              {!branchesLoading && localBranches.length > 0 && (
+                <div className="slot-capacity-card">
+                  <h3 className="slot-capacity-title">슬롯 정원 매트릭스</h3>
+                  <p className="page-desc" style={{ marginTop: 0 }}>
+                    지점별 슬롯 정원을 직접 편집합니다. 확정 슬롯 매트릭스와 추천·확정 로직이 이 값을 기준으로 동작합니다.
+                  </p>
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: 120 }}>지점</th>
+                          {SLOTS.map((s) => (
+                            <th key={s} style={{ textAlign: "center", width: 100 }}>{s}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {localBranches.filter((b) => b.active).map((b) => (
+                          <tr key={b.id}>
+                            <td><b>{b.name}</b></td>
+                            {SLOTS.map((s) => (
+                              <td key={s} style={{ textAlign: "center" }}>
+                                <input
+                                  type="number"
+                                  className="slot-cap-input"
+                                  min={0}
+                                  max={99}
+                                  value={getSlotCapacity(b, s)}
+                                  disabled={branchSaving}
+                                  onChange={(e) => {
+                                    const n = Math.max(0, Math.min(99, Number(e.target.value) || 0));
+                                    const prevCap = {
+                                      ...DEFAULT_SLOT_CAPACITY,
+                                      ...(b.slot_capacity ?? {}),
+                                    };
+                                    updateLocalBranch(b.id, {
+                                      slot_capacity: { ...prevCap, [s]: n },
+                                    });
+                                  }}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -2448,6 +2529,31 @@ const css = `
   .branch-drag-handle {
     color: #9ca3af; font-size: 14px; letter-spacing: -2px; user-select: none;
     cursor: grab; width: 32px; text-align: center;
+  }
+
+  .slot-capacity-card {
+    margin-top: 24px;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #e8e8e0;
+    border-radius: 12px;
+  }
+  .slot-capacity-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; color: #111827; }
+  .slot-cap-input {
+    width: 64px;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    text-align: center;
+    color: #111827;
+    background: #fff;
+  }
+  .slot-cap-input:focus {
+    outline: none;
+    border-color: #F5C518;
+    box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
   }
 
   .toggle {
