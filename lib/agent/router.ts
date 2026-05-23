@@ -143,6 +143,31 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
         .single();
       replySent = true;
       outboundId = outMsg?.id ?? null;
+
+      // AI 응답의 reasoning + transition을 message_drafts에 status='auto_sent'로 보관.
+      // 매니저가 UI에서 메시지별로 왜 그렇게 답했는지 사후 조회할 수 있게 한다.
+      if (outboundId) {
+        const transitionLabel =
+          result.transition.kind === "advance"
+            ? `→ ${result.transition.to} (${result.transition.reason})`
+            : result.transition.kind === "pause"
+            ? `⏸ pause: ${result.transition.reason}`
+            : result.transition.kind === "abort"
+            ? `⛔ abort: ${result.transition.reason}`
+            : "";
+        const reasoningWithTransition = transitionLabel
+          ? `[${transitionLabel}]\n${result.reasoning ?? ""}`
+          : (result.reasoning ?? "");
+        await supabase.from("message_drafts").insert({
+          applicant_id: applicant.id,
+          inbound_message_id,
+          draft_text: result.reply_text,
+          reasoning: reasoningWithTransition,
+          status: "auto_sent",
+          used_message_id: outboundId,
+          resolved_at: new Date().toISOString(),
+        });
+      }
     } else {
       // 발송 실패 — pause로 강제 전환
       result.transition = { kind: "pause", reason: `SMS 발송 실패: ${send.error ?? "unknown"}` };

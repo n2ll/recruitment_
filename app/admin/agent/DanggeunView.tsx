@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
+import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
 
 interface DanggeunViewProps {
   branches: string[];
@@ -39,7 +40,13 @@ interface Message {
   status: string;
   sent_by: string | null;
   created_at: string;
+  reasoning?: string | null;
 }
+
+type AgentState = {
+  screening?: Record<string, boolean>;
+  onboarding?: Record<string, boolean>;
+};
 
 const STORAGE_KEY = "danggeun_start_message_v1";
 
@@ -116,6 +123,8 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
   const [msgLoading, setMsgLoading] = useState(false);
   const [outbound, setOutbound] = useState("");
   const [sending, setSending] = useState(false);
+  const [agentStage, setAgentStage] = useState<string | null>(null);
+  const [agentState, setAgentState] = useState<AgentState>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── 모달 ──────────────────────────────────────────────
@@ -218,6 +227,8 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
       const json = await res.json();
       if (res.ok) {
         setMessages(Array.isArray(json.messages) ? json.messages : []);
+        setAgentStage(json.agent_stage ?? null);
+        setAgentState((json.agent_state ?? {}) as AgentState);
       }
     } catch (e) {
       console.error("[danggeun messages error]", e);
@@ -461,6 +472,39 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                 </button>
               </header>
 
+              {(agentStage === "screening" || agentStage === "onboarding") && (
+                <div className="dg-checklist">
+                  <div className="dg-checklist-title">
+                    {agentStage === "screening" ? "스크리닝 체크리스트" : "온보딩 체크리스트"}
+                    {(() => {
+                      const keys = agentStage === "screening" ? SCREENING_KEYS : ONBOARDING_KEYS;
+                      const cl = (agentStage === "screening"
+                        ? agentState.screening
+                        : agentState.onboarding) ?? {};
+                      const done = keys.filter((k) => cl[k] === true).length;
+                      return (
+                        <span className="dg-checklist-count">
+                          {done} / {keys.length}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="dg-checklist-items">
+                    {(agentStage === "screening" ? SCREENING_KEYS : ONBOARDING_KEYS).map((k) => {
+                      const cl = (agentStage === "screening"
+                        ? agentState.screening
+                        : agentState.onboarding) ?? {};
+                      const done = cl[k] === true;
+                      return (
+                        <span key={k} className={`dg-checklist-item ${done ? "dg-chk-done" : ""}`}>
+                          {done ? "✓" : "·"} {k.replace(/_/g, " ")}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="dg-conv-body">
                 {msgLoading ? (
                   <div className="dg-empty">로딩 중...</div>
@@ -473,6 +517,11 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                       className={`dg-msg ${m.direction === "outbound" ? "dg-msg-out" : "dg-msg-in"}`}
                     >
                       <div className="dg-msg-bubble">{m.body}</div>
+                      {m.reasoning && (
+                        <div className="dg-msg-reasoning">
+                          🤖 {m.reasoning}
+                        </div>
+                      )}
                       <div className="dg-msg-meta">
                         {m.direction === "outbound" && m.sent_by ? `${m.sent_by} · ` : ""}
                         {new Date(m.created_at).toLocaleString("ko-KR", {
@@ -805,6 +854,50 @@ const css = `
   .dg-msg-in .dg-msg-bubble { background: #fff; border: 1px solid #e5e7eb; }
   .dg-msg-out .dg-msg-bubble { background: #FEF3C7; color: #1f2937; }
   .dg-msg-meta { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+  .dg-msg-reasoning {
+    font-size: 11px;
+    color: #6b7280;
+    background: #F9FAFB;
+    border-left: 2px solid #D1D5DB;
+    padding: 4px 8px;
+    margin-top: 4px;
+    border-radius: 0 4px 4px 0;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .dg-checklist {
+    padding: 10px 16px;
+    background: #FFFBEB;
+    border-bottom: 1px solid #F5C518;
+    font-size: 11px;
+  }
+  .dg-checklist-title {
+    font-weight: 700;
+    color: #92400E;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dg-checklist-count {
+    font-weight: 600;
+    color: #92650A;
+    background: #FEF3C7;
+    padding: 1px 8px;
+    border-radius: 99px;
+  }
+  .dg-checklist-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  .dg-checklist-item {
+    color: #9ca3af;
+    font-weight: 500;
+  }
+  .dg-chk-done { color: #065F46; font-weight: 700; }
   .dg-conv-input {
     display: flex;
     gap: 8px;

@@ -52,6 +52,7 @@ interface Message {
   sent_by: string | null;
   solapi_msg_id: string | null;
   created_at: string;
+  reasoning?: string | null;
 }
 
 interface Heartbeat {
@@ -1936,6 +1937,9 @@ export default function AdminPage() {
                       <div key={msg.id} className={`chat-bubble-wrap ${msg.direction === "outbound" ? "bubble-right" : "bubble-left"}`}>
                         <div className={`chat-bubble ${msg.direction === "outbound" ? "bubble-out" : "bubble-in"}`}>
                           <p className="bubble-body">{msg.body}</p>
+                          {msg.reasoning && (
+                            <div className="bubble-reasoning">🤖 {msg.reasoning}</div>
+                          )}
                           <div className="bubble-meta">
                             {msg.sent_by && <span>{msg.sent_by}</span>}
                             <span>{new Date(msg.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
@@ -2515,6 +2519,19 @@ const css = `
     border-top-right-radius: 4px;
   }
   .bubble-body { margin: 0; white-space: pre-wrap; }
+  .bubble-reasoning {
+    font-size: 11px;
+    color: #6b7280;
+    background: rgba(255,255,255,0.7);
+    border-left: 2px solid rgba(0,0,0,0.15);
+    padding: 4px 8px;
+    margin-top: 6px;
+    border-radius: 0 4px 4px 0;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bubble-in .bubble-reasoning { background: #F9FAFB; }
   .bubble-meta {
     display: flex; gap: 8px; justify-content: flex-end;
     font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 4px;

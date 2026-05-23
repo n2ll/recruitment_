@@ -84,10 +84,52 @@ export async function GET(
       .limit(1)
       .maybeSingle();
 
+    // 메시지별 reasoning 매핑 — message_drafts.used_message_id 기준
+    // (router.ts가 자동 발송 시 status='auto_sent'로 함께 insert함)
+    const messagesList = messages ?? [];
+    const outboundIds = messagesList
+      .filter((m) => m.direction === "outbound")
+      .map((m) => m.id);
+    const reasoningByMessageId = new Map<string, string>();
+    if (outboundIds.length > 0) {
+      const { data: drafts } = await supabase
+        .from("message_drafts")
+        .select("used_message_id, reasoning")
+        .in("used_message_id", outboundIds);
+      for (const d of drafts ?? []) {
+        if (d.used_message_id && d.reasoning) {
+          reasoningByMessageId.set(d.used_message_id as string, d.reasoning as string);
+        }
+      }
+    }
+    const messagesWithReasoning = messagesList.map((m) => ({
+      ...m,
+      reasoning: m.direction === "outbound" ? reasoningByMessageId.get(m.id) ?? null : null,
+    }));
+
+    // 현재 후보의 agent_stage + agent_state (체크리스트)
+    let agentStage: string | null = null;
+    let agentState: Record<string, unknown> | null = null;
+    const jcQuery = supabase
+      .from("job_candidates")
+      .select("agent_stage, agent_state, created_at")
+      .eq("applicant_id", applicantId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const { data: jc } = jobIdFilter !== null && Number.isFinite(jobIdFilter)
+      ? await jcQuery.eq("job_id", jobIdFilter).maybeSingle()
+      : await jcQuery.maybeSingle();
+    if (jc) {
+      agentStage = (jc.agent_stage as string | null) ?? null;
+      agentState = (jc.agent_state as Record<string, unknown> | null) ?? null;
+    }
+
     return NextResponse.json({
-      data: messages || [],
-      messages: messages || [],   // alias — 신규 호출자가 사용
+      data: messagesWithReasoning,
+      messages: messagesWithReasoning,
       draft: latestDraft || null,
+      agent_stage: agentStage,
+      agent_state: agentState,
     });
   } catch (err) {
     console.error("[messages API error]", err);

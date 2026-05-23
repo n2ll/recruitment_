@@ -34,6 +34,7 @@ interface ChatMessage {
   applicant_phone: string;
   direction: "inbound" | "outbound";
   body: string;
+  reasoning?: string | null;
   status: string;
   sent_by: string | null;
   created_at: string;
@@ -910,6 +911,7 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
             <div key={m.id} className={`ch-row ${m.direction === "outbound" ? "ch-r" : "ch-l"}`}>
               <div className={`ch-bub ${m.direction === "outbound" ? "ch-out" : "ch-in"}`}>
                 <p>{m.body}</p>
+                {m.reasoning && <div className="ch-reason">🤖 {m.reasoning}</div>}
                 <div className="ch-time">
                   {m.sent_by && <span>{m.sent_by} · </span>}
                   {new Date(m.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -937,6 +939,19 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
         .ch-in { background: #fff; border: 1px solid #e8e8e0; }
         .ch-out { background: #FFEB99; }
         .ch-bub p { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+        .ch-reason {
+          font-size: 10px;
+          color: #6b7280;
+          background: rgba(255,255,255,0.7);
+          border-left: 2px solid rgba(0,0,0,0.15);
+          padding: 3px 6px;
+          margin-top: 4px;
+          border-radius: 0 3px 3px 0;
+          line-height: 1.4;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .ch-in .ch-reason { background: #F9FAFB; }
         .ch-time { font-size: 10px; color: #9ca3af; margin-top: 3px; }
       `}</style>
     </div>
