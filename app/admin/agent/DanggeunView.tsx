@@ -77,6 +77,45 @@ function stageBadge(stage: string | null) {
   };
 }
 
+const STAGE_FLOW = ["exploration", "screening", "onboarding", "active"] as const;
+type FlowStage = (typeof STAGE_FLOW)[number];
+
+function StageProgress({ stage }: { stage: string | null }) {
+  // paused / abort는 별도 표시
+  const isPaused = stage === "paused";
+  const isAbort = stage === "abort";
+  const currentIdx = STAGE_FLOW.indexOf(stage as FlowStage);
+
+  return (
+    <div className="dg-progress">
+      {STAGE_FLOW.map((s, i) => {
+        const done = currentIdx > i;
+        const current = currentIdx === i;
+        return (
+          <div key={s} className="dg-progress-step">
+            <div
+              className={`dg-progress-node ${done ? "dg-node-done" : current ? "dg-node-current" : "dg-node-pending"}`}
+            >
+              {done ? "✓" : i + 1}
+            </div>
+            <div className={`dg-progress-label ${current ? "dg-label-current" : done ? "dg-label-done" : ""}`}>
+              {STAGE_LABEL[s]}
+            </div>
+            {i < STAGE_FLOW.length - 1 && (
+              <div className={`dg-progress-line ${done ? "dg-line-done" : ""}`} />
+            )}
+          </div>
+        );
+      })}
+      {(isPaused || isAbort) && (
+        <div className={`dg-progress-flag ${isAbort ? "dg-flag-abort" : "dg-flag-pause"}`}>
+          {isPaused ? "⏸ 매니저 인계" : "⛔ 중단"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatPhone(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
   if (d.length < 4) return d;
@@ -471,6 +510,8 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                   새로고침
                 </button>
               </header>
+
+              <StageProgress stage={agentStage} />
 
               {(agentStage === "screening" || agentStage === "onboarding") && (
                 <div className="dg-checklist">
@@ -898,6 +939,76 @@ const css = `
     font-weight: 500;
   }
   .dg-chk-done { color: #065F46; font-weight: 700; }
+
+  .dg-progress {
+    display: flex;
+    align-items: center;
+    padding: 14px 24px 10px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    gap: 0;
+    position: relative;
+  }
+  .dg-progress-step {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    position: relative;
+  }
+  .dg-progress-step:last-child { flex: 0; }
+  .dg-progress-node {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .dg-node-done {
+    background: #10B981;
+    color: #fff;
+  }
+  .dg-node-current {
+    background: #F5C518;
+    color: #3D2B00;
+    box-shadow: 0 0 0 3px rgba(245,197,24,0.25);
+  }
+  .dg-node-pending {
+    background: #E5E7EB;
+    color: #9CA3AF;
+  }
+  .dg-progress-label {
+    margin-left: 6px;
+    font-size: 12px;
+    color: #9CA3AF;
+    font-weight: 500;
+  }
+  .dg-label-done { color: #065F46; font-weight: 600; }
+  .dg-label-current { color: #92650A; font-weight: 700; }
+  .dg-progress-line {
+    flex: 1;
+    height: 2px;
+    background: #E5E7EB;
+    margin: 0 8px;
+    min-width: 20px;
+  }
+  .dg-line-done { background: #10B981; }
+  .dg-progress-flag {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .dg-flag-pause { background: #FEE2E2; color: #991B1B; }
+  .dg-flag-abort { background: #1F2937; color: #fff; }
   .dg-conv-input {
     display: flex;
     gap: 8px;
