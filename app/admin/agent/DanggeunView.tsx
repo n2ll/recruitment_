@@ -304,8 +304,9 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   }, [fetchCandidates, cfg.source]);
 
   // ── 대화창 로드 ────────────────────────────────────────
-  const fetchMessages = useCallback(async (id: number) => {
-    setMsgLoading(true);
+  // silent=true: 로딩 스피너 안 띄우고 조용히 데이터만 갱신 (발송 직후 reasoning 매핑용)
+  const fetchMessages = useCallback(async (id: number, opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setMsgLoading(true);
     try {
       const res = await fetch(`/api/admin/messages/${id}`, { cache: "no-store" });
       const json = await res.json();
@@ -317,7 +318,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     } catch (e) {
       console.error("[danggeun messages error]", e);
     } finally {
-      setMsgLoading(false);
+      if (!opts.silent) setMsgLoading(false);
     }
   }, []);
 
@@ -432,7 +433,9 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
         return;
       }
       setOutbound("");
-      await fetchMessages(selectedId);
+      // Realtime이 새 메시지를 자동 추가하지만 reasoning/agent_state 매핑을 위해 silent fetch.
+      // 로딩 스피너는 안 띄움 — 깜빡임 방지.
+      await fetchMessages(selectedId, { silent: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : "발송 실패");
     } finally {
