@@ -162,7 +162,6 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
   const [msgLoading, setMsgLoading] = useState(false);
   const [outbound, setOutbound] = useState("");
   const [sending, setSending] = useState(false);
-  const [impersonate, setImpersonate] = useState(false);
   const [agentStage, setAgentStage] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<AgentState>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -355,37 +354,22 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
     if (!selected) return;
     setSending(true);
     try {
-      let res: Response;
-      if (impersonate) {
-        // 지원자로 빙의: inbound로 기록 + router 호출 (실 SMS 발송 X)
-        res = await fetch("/api/admin/agent/danggeun/impersonate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            applicant_id: selectedId,
-            text: outbound,
-          }),
-        });
-      } else {
-        // 매니저로 실 발송
-        res = await fetch("/api/admin/messages/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            applicant_id: selectedId,
-            phone: selected.phone,
-            body: outbound,
-            sent_by: "danggeun-manual",
-          }),
-        });
-      }
+      const res = await fetch("/api/admin/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicant_id: selectedId,
+          phone: selected.phone,
+          body: outbound,
+          sent_by: "danggeun-manual",
+        }),
+      });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(j.error || "발송 실패");
         return;
       }
       setOutbound("");
-      // Realtime이 메시지를 추가하지만 즉시 반영 위해 한 번 fetch
       await fetchMessages(selectedId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "발송 실패");
@@ -412,7 +396,7 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
 
   // ── 렌더 ───────────────────────────────────────────────
   return (
-    <div className="content" style={{ display: "flex", flexDirection: "column", gap: 12, height: "calc(100vh - 120px)", padding: 0 }}>
+    <div className="content" style={{ display: "flex", flexDirection: "column", gap: 12, height: "calc(100vh - 60px)", boxSizing: "border-box" }}>
       <style>{css}</style>
 
       {/* 상단 툴바 */}
@@ -593,49 +577,24 @@ export default function DanggeunView({ branches }: DanggeunViewProps) {
                 <div ref={messagesEndRef} />
               </div>
 
-              <div className={`dg-conv-input-wrap ${impersonate ? "dg-impersonate-on" : ""}`}>
-                <div className="dg-impersonate-row">
-                  <label className="dg-toggle">
-                    <input
-                      type="checkbox"
-                      checked={impersonate}
-                      onChange={(e) => setImpersonate(e.target.checked)}
-                    />
-                    <span className="dg-toggle-slider" />
-                  </label>
-                  <span className="dg-toggle-label">
-                    {impersonate ? (
-                      <>
-                        🎭 <b>지원자 빙의 모드</b> — 입력 내용이 인입 SMS로 처리되고 AI가 응답합니다 (실 발송 X)
-                      </>
-                    ) : (
-                      <>👔 매니저 모드 — 입력 내용이 실제 SMS로 발송됩니다</>
-                    )}
-                  </span>
-                </div>
-                <div className="dg-conv-input">
-                  <textarea
-                    className="dg-textarea"
-                    rows={3}
-                    placeholder={
-                      impersonate
-                        ? "지원자가 보낸 문자처럼 입력 → AI가 자동 응답합니다"
-                        : "매니저 답장을 직접 작성하면 즉시 실 발송됩니다"
-                    }
-                    value={outbound}
-                    onChange={(e) => setOutbound(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendReply();
-                    }}
-                  />
-                  <button
-                    className={`dg-btn ${impersonate ? "dg-btn-impersonate" : "dg-btn-primary"}`}
-                    onClick={handleSendReply}
-                    disabled={sending || !outbound.trim()}
-                  >
-                    {sending ? "처리 중..." : impersonate ? "지원자로 보내기" : "보내기"}
-                  </button>
-                </div>
+              <div className="dg-conv-input">
+                <textarea
+                  className="dg-textarea"
+                  rows={3}
+                  placeholder="매니저 답장을 직접 작성하면 즉시 실 발송됩니다"
+                  value={outbound}
+                  onChange={(e) => setOutbound(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendReply();
+                  }}
+                />
+                <button
+                  className="dg-btn dg-btn-primary"
+                  onClick={handleSendReply}
+                  disabled={sending || !outbound.trim()}
+                >
+                  {sending ? "발송 중..." : "보내기"}
+                </button>
               </div>
             </>
           )}
@@ -1049,76 +1008,16 @@ const css = `
   }
   .dg-flag-pause { background: #FEE2E2; color: #991B1B; }
   .dg-flag-abort { background: #1F2937; color: #fff; }
-  .dg-conv-input-wrap {
-    border-top: 1px solid #e5e7eb;
-    background: #fff;
-    transition: background 0.15s;
-  }
-  .dg-conv-input-wrap.dg-impersonate-on {
-    background: linear-gradient(to bottom, #FEF3C7, #fff);
-  }
-  .dg-impersonate-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px 4px;
-    font-size: 12px;
-    color: #6b7280;
-  }
-  .dg-impersonate-on .dg-impersonate-row {
-    color: #92400E;
-  }
-  .dg-toggle {
-    position: relative;
-    display: inline-block;
-    width: 36px;
-    height: 20px;
-    flex-shrink: 0;
-  }
-  .dg-toggle input { opacity: 0; width: 0; height: 0; }
-  .dg-toggle-slider {
-    position: absolute;
-    inset: 0;
-    cursor: pointer;
-    background: #d1d5db;
-    border-radius: 99px;
-    transition: 0.2s;
-  }
-  .dg-toggle-slider::before {
-    content: "";
-    position: absolute;
-    height: 14px;
-    width: 14px;
-    left: 3px;
-    bottom: 3px;
-    background: #fff;
-    border-radius: 50%;
-    transition: 0.2s;
-  }
-  .dg-toggle input:checked + .dg-toggle-slider { background: #F5C518; }
-  .dg-toggle input:checked + .dg-toggle-slider::before { transform: translateX(16px); }
-  .dg-toggle-label {
-    flex: 1;
-    line-height: 1.4;
-  }
   .dg-conv-input {
     display: flex;
     gap: 8px;
-    padding: 8px 16px 12px;
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
     align-items: flex-end;
+    background: #fff;
   }
   .dg-conv-input .dg-textarea { flex: 1; }
   .dg-conv-input .dg-btn { white-space: nowrap; }
-  .dg-impersonate-on .dg-conv-input .dg-textarea {
-    border-color: #F5C518;
-    background: #FFFEF7;
-  }
-  .dg-btn-impersonate {
-    background: #92400E;
-    color: #fff;
-  }
-  .dg-btn-impersonate:hover:not(:disabled) { background: #78350F; }
-  .dg-btn-impersonate:disabled { background: #9ca3af; cursor: not-allowed; }
 
   /* 모달 */
   .dg-modal-bg {
