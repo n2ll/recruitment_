@@ -227,8 +227,8 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     setStartMsgLoaded(true);
   }, []);
 
-  const fetchCandidates = useCallback(async () => {
-    setListLoading(true);
+  const fetchCandidates = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setListLoading(true);
     try {
       const res = await fetch(`/api/admin/applicants?source=${cfg.source}`, { cache: "no-store" });
       const json = await res.json();
@@ -238,7 +238,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     } catch (e) {
       console.error("[danggeun list error]", e);
     } finally {
-      setListLoading(false);
+      if (!opts.silent) setListLoading(false);
     }
   }, [cfg.source]);
 
@@ -294,7 +294,8 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
         "postgres_changes",
         { event: "*", schema: "public", table: "job_candidates" },
         () => {
-          fetchCandidates();
+          // Realtime이 잡은 job_candidates 변경은 stage badge만 갱신 — 로딩 스피너 X
+          fetchCandidates({ silent: true });
         }
       )
       .subscribe();
@@ -483,7 +484,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
           <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
             {cfg.newCandidateLabel}
           </button>
-          <button className="dg-btn-ghost" onClick={fetchCandidates} disabled={listLoading}>
+          <button className="dg-btn-ghost" onClick={() => fetchCandidates()} disabled={listLoading}>
             {listLoading ? "..." : "새로고침"}
           </button>
         </div>
