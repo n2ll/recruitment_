@@ -15,6 +15,8 @@ interface RecommendBody {
   manualAddress?: string;
   manualVehicleRequired?: boolean;
   topN?: number;
+  /** applicants.source 컬럼 필터 — 'danggeun' 지정 시 당근 유입 후보만 풀에 포함하고 legacy는 제외 */
+  sourceFilter?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -64,28 +66,30 @@ export async function POST(req: NextRequest) {
     const supabase = createServiceClient();
 
     // applicants(B마트) 중 status가 '확정'/'부적합'이 아니면 모두 풀에 포함
-    const { data: activeRows, error: aErr } = await supabase
+    let activeQuery = supabase
       .from("applicants")
       .select("id, name, phone, lat, lng, own_vehicle, created_at, sigungu, location, status, birth_date")
       .not("status", "in", "(확정,부적합)")
       .not("lat", "is", null);
+    if (body.sourceFilter) {
+      activeQuery = activeQuery.eq("source", body.sourceFilter);
+    }
+    const { data: activeRows, error: aErr } = await activeQuery;
 
     if (aErr) {
       console.error("[recommend] applicants query error", aErr);
       return NextResponse.json({ error: aErr.message }, { status: 500 });
     }
 
-    const { data: legacyRows, error: lErr } = await supabase
-      .from("legacy_applicants")
-      .select("id, name, phone, lat, lng, own_vehicle, submitted_at, imported_at, sigungu, location, promoted_applicant_id, birth_date")
-      .is("promoted_applicant_id", null)
-      .not("disqualified", "is", true)
-      .not("lat", "is", null);
-
-    if (lErr) {
-      console.error("[recommend] legacy query error", lErr);
-      return NextResponse.json({ error: lErr.message }, { status: 500 });
-    }
+    // sourceFilter가 지정되면 legacy_applicants는 제외 (legacy엔 source 컬럼 없음)
+    const legacyRows = body.sourceFilter
+      ? []
+      : (await supabase
+          .from("legacy_applicants")
+          .select("id, name, phone, lat, lng, own_vehicle, submitted_at, imported_at, sigungu, location, promoted_applicant_id, birth_date")
+          .is("promoted_applicant_id", null)
+          .not("disqualified", "is", true)
+          .not("lat", "is", null)).data ?? [];
 
     const candidates: CandidateForScoring[] = [
       ...(activeRows || []).map((r) => ({

@@ -92,6 +92,24 @@ type AgentState = {
   onboarding?: Record<string, boolean>;
 };
 
+interface FactsItem {
+  id: number;
+  category: string;
+  title: string;
+  body: string;
+  sort_order: number;
+}
+
+interface RecCandidate {
+  id: number;
+  source: "applicant" | "legacy";
+  name: string;
+  phone: string;
+  score: { total: number; distance: number; vehicle: number; recency: number; distanceKm: number };
+  sigungu?: string | null;
+  location?: string | null;
+}
+
 
 const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
@@ -190,7 +208,18 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newBranch, setNewBranch] = useState(branches[0] ?? "");
+  const [newTargetFactsId, setNewTargetFactsId] = useState<number | "">("");
   const [submitting, setSubmitting] = useState(false);
+
+  // ── facts (AI 참고자료 — 공고 정보) ──────────────────
+  const [factsList, setFactsList] = useState<FactsItem[]>([]);
+
+  // ── 추천 모달 (live 모드만) ───────────────────────────
+  const [showRecommendModal, setShowRecommendModal] = useState(false);
+  const [recommendMemo, setRecommendMemo] = useState("");
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendResult, setRecommendResult] = useState<RecCandidate[]>([]);
+  const [recommendSending, setRecommendSending] = useState<number | null>(null);
 
   // ── 후보 목록 ──────────────────────────────────────────
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -246,6 +275,16 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates]);
+
+  // facts 목록 로드 (새 등록 시 공고 지정 select용)
+  useEffect(() => {
+    fetch("/api/admin/prompt-examples?category=facts", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j.data)) setFactsList(j.data as FactsItem[]);
+      })
+      .catch((e) => console.error("[danggeun facts load]", e));
+  }, []);
 
   useEffect(() => {
     if (!newBranch && branches.length > 0) setNewBranch(branches[0]);
@@ -372,6 +411,12 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     }
     setSubmitting(true);
     try {
+      // 선택된 facts 항목이 있으면 그 title+body를 targetJobInfo로 함께 전달.
+      // applicants.introduction에 저장돼 AI가 응답 컨텍스트로 활용.
+      const selectedFacts = factsList.find((f) => f.id === newTargetFactsId);
+      const targetJobInfo = selectedFacts
+        ? `[${selectedFacts.title}]\n${selectedFacts.body}`
+        : "";
       const res = await fetch(cfg.startApi, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -380,6 +425,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
           phone: newPhone.replace(/-/g, ""),
           branch1: newBranch,
           startMessage: startMsg,
+          targetJobInfo,
         }),
       });
       const json = await res.json();
@@ -389,6 +435,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
       }
       setNewName("");
       setNewPhone("");
+      setNewTargetFactsId("");
       setShowNewModal(false);
       await fetchCandidates();
       if (json.applicant?.id) setSelectedId(json.applicant.id);
@@ -396,6 +443,75 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
       alert(e instanceof Error ? e.message : "등록 실패");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ── 추천 받기 (live 모드 전용) ────────────────────────
+  const handleRecommend = async () => {
+    if (!recommendMemo.trim()) {
+      alert("공고 메모를 입력해주세요. (예: 강북미아 평일오전 자차)");
+      return;
+    }
+    setRecommendLoading(true);
+    setRecommendResult([]);
+    try {
+      const res = await fetch("/api/admin/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          posting: recommendMemo,
+          sourceFilter: "danggeun",
+          topN: 30,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "추천 실패");
+        return;
+      }
+      setRecommendResult(json.candidates || []);
+      if ((json.candidates || []).length === 0) {
+        alert("당근 후보 풀에 적합한 사람이 없습니다.");
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "추천 실패");
+    } finally {
+      setRecommendLoading(false);
+    }
+  };
+
+  // 추천 후보 클릭 → 그 사람에게 시작 멘트 발송 (이미 등록된 applicant이므로 send만)
+  const handleRecommendSend = async (c: RecCandidate) => {
+    if (!startMsg.trim()) {
+      alert("시작 멘트를 먼저 저장해주세요.");
+      return;
+    }
+    if (!confirm(`${c.name}(${formatPhone(c.phone)})에게 시작 멘트를 발송합니다. 진행할까요?`)) {
+      return;
+    }
+    setRecommendSending(c.id);
+    try {
+      const res = await fetch("/api/admin/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicant_id: c.id,
+          phone: c.phone,
+          body: startMsg,
+          sent_by: "danggeun-recommend",
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || "발송 실패");
+        return;
+      }
+      alert(`${c.name}님에게 시작 멘트가 발송되었습니다.`);
+      await fetchCandidates({ silent: true });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "발송 실패");
+    } finally {
+      setRecommendSending(null);
     }
   };
 
@@ -492,6 +608,14 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
           <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
             {cfg.newCandidateLabel}
           </button>
+          {!cfg.practice && (
+            <button
+              className="dg-btn dg-btn-ghost-bordered"
+              onClick={() => setShowRecommendModal(true)}
+            >
+              ⭐ 추천 받기
+            </button>
+          )}
           <button className="dg-btn-ghost" onClick={() => fetchCandidates()} disabled={listLoading}>
             {listLoading ? "..." : "새로고침"}
           </button>
@@ -792,6 +916,30 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                 ))}
               </select>
             </div>
+            <div className="dg-field">
+              <label className="dg-label">
+                어떤 공고로 모집? <span style={{ color: "#9CA3AF", fontWeight: 400 }}>(AI 참고자료에서 선택 — AI 응답 컨텍스트에 인용됨)</span>
+              </label>
+              <select
+                className="dg-input"
+                value={newTargetFactsId}
+                onChange={(e) =>
+                  setNewTargetFactsId(e.target.value ? Number(e.target.value) : "")
+                }
+              >
+                <option value="">선택 안함 (AI가 일반 응답)</option>
+                {factsList.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.title}
+                  </option>
+                ))}
+              </select>
+              {factsList.length === 0 && (
+                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0" }}>
+                  AI 참고자료 탭에서 공고 정보를 먼저 추가해주세요.
+                </p>
+              )}
+            </div>
             <div className="dg-modal-actions">
               <button
                 className="dg-btn dg-btn-ghost-bordered"
@@ -808,6 +956,69 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                 {submitting ? "발송 중..." : "대화 시작 (실 발송)"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 추천 받기 (live 모드만) */}
+      {showRecommendModal && (
+        <div className="dg-modal-bg" onClick={() => setShowRecommendModal(false)}>
+          <div className="dg-modal dg-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="dg-modal-head">
+              <h3 className="dg-modal-title">⭐ 당근 후보 추천 받기</h3>
+              <button className="dg-btn-ghost" onClick={() => setShowRecommendModal(false)}>×</button>
+            </div>
+            <p className="dg-modal-desc">
+              공고 메모를 입력하면 source='danggeun' 후보 풀에서 점수순(거리/차량/최신성)으로 추천합니다.
+              결과에서 한 명을 클릭하면 저장된 시작 멘트가 그 사람에게 실 발송됩니다.
+            </p>
+            <div className="dg-field">
+              <label className="dg-label">공고 메모</label>
+              <textarea
+                className="dg-textarea"
+                rows={4}
+                placeholder="예) 강북미아 평일오전 자차, 시급 1.5~2만 / 픽업 서울 강북구 도봉로 34"
+                value={recommendMemo}
+                onChange={(e) => setRecommendMemo(e.target.value)}
+              />
+            </div>
+            <div className="dg-row-end">
+              <button
+                className="dg-btn dg-btn-primary"
+                onClick={handleRecommend}
+                disabled={recommendLoading}
+              >
+                {recommendLoading ? "추천 중..." : "추천 받기"}
+              </button>
+            </div>
+
+            {recommendResult.length > 0 && (
+              <div className="dg-rec-list">
+                <div className="dg-rec-head">
+                  <span className="dg-rec-head-name">이름</span>
+                  <span className="dg-rec-head-meta">전화 · 지역 · 거리</span>
+                  <span className="dg-rec-head-score">점수</span>
+                  <span />
+                </div>
+                {recommendResult.map((c) => (
+                  <div key={c.id} className="dg-rec-item">
+                    <span className="dg-rec-name">{c.name}</span>
+                    <span className="dg-rec-meta">
+                      {formatPhone(c.phone)} · {c.sigungu ?? c.location ?? "-"} ·{" "}
+                      {c.score.distanceKm != null ? `${c.score.distanceKm.toFixed(1)}km` : "-"}
+                    </span>
+                    <span className="dg-rec-score">{c.score.total.toFixed(1)}</span>
+                    <button
+                      className="dg-btn dg-btn-primary"
+                      onClick={() => handleRecommendSend(c)}
+                      disabled={recommendSending === c.id}
+                    >
+                      {recommendSending === c.id ? "발송 중..." : "시작 멘트 발송"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1202,5 +1413,39 @@ const css = `
     border-radius: 6px;
     color: #92400E;
     font-size: 12px;
+  }
+
+  .dg-modal-wide { max-width: 800px; }
+  .dg-rec-list {
+    margin-top: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .dg-rec-head, .dg-rec-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 60px 130px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .dg-rec-head {
+    background: #F9FAFB;
+    font-weight: 700;
+    color: #6b7280;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .dg-rec-head-score { text-align: center; }
+  .dg-rec-item:not(:last-child) { border-bottom: 1px solid #f3f4f6; }
+  .dg-rec-name { font-weight: 600; color: #111827; }
+  .dg-rec-meta { color: #6b7280; }
+  .dg-rec-score {
+    text-align: center;
+    font-weight: 700;
+    color: #1D4ED8;
+    background: #EFF6FF;
+    border-radius: 99px;
+    padding: 2px 6px;
   }
 `;

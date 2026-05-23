@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, phone, branch1, startMessage } = body;
+    const { name, phone, branch1, startMessage, targetJobInfo } = body;
 
     if (!name?.trim() || !/^\d{10,11}$/.test((phone || "").replace(/-/g, "")) || !branch1) {
       return NextResponse.json(
@@ -52,10 +52,12 @@ export async function POST(req: NextRequest) {
         license_type: PLACEHOLDER,
         vehicle_type: PLACEHOLDER,
         work_hours: PLACEHOLDER,
-        introduction: "당근 연습용 (테스트 데이터)",
+        introduction: targetJobInfo?.trim() || "당근 연습용 (테스트 데이터)",
         status: "연습",
         filter_pass: null,
-        note: "당근 연습용 — 실 SMS 발송 안 됨",
+        note: targetJobInfo?.trim()
+          ? `당근 연습용 — 공고: ${targetJobInfo.trim().slice(0, 80)}`
+          : "당근 연습용 — 실 SMS 발송 안 됨",
       })
       .select()
       .single();

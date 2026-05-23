@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, phone, branch1, startMessage } = body;
+    const { name, phone, branch1, startMessage, targetJobInfo } = body;
+    // targetJobInfo: 매니저가 새 등록 시 어떤 공고/지점으로 모집할지 명시 (facts 항목 또는 자유 텍스트).
+    // applicants.introduction에 저장되어 router → stage 모듈의 컨텍스트에 자동 주입됨.
 
     if (!name?.trim() || !/^\d{10,11}$/.test((phone || "").replace(/-/g, "")) || !branch1) {
       return NextResponse.json(
@@ -51,10 +53,10 @@ export async function POST(req: NextRequest) {
         license_type: PLACEHOLDER,
         vehicle_type: PLACEHOLDER,
         work_hours: PLACEHOLDER,
-        introduction: "당근 수동등록",
+        introduction: targetJobInfo?.trim() || "당근 수동등록",
         status: "서류심사",
         filter_pass: null,
-        note: "당근 수동등록",
+        note: targetJobInfo?.trim() ? `당근 수동등록 — 공고: ${targetJobInfo.trim().slice(0, 80)}` : "당근 수동등록",
       })
       .select()
       .single();
