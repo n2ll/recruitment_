@@ -580,6 +580,17 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
 
               <StageProgress stage={agentStage} />
 
+              {agentStage === "onboarding" && (
+                <div className="dg-banner dg-banner-info">
+                  🛑 <b>온보딩 진입 — AI 자동 응답 OFF.</b> 매니저가 직접 응대해주세요. (시스템 자동 안내는 그대로 발송됩니다)
+                </div>
+              )}
+              {agentStage === "paused" && (
+                <div className="dg-banner dg-banner-warn">
+                  ⏸ <b>매니저 인계 상태.</b> AI가 중단됐습니다. 매니저가 직접 응대해주세요.
+                </div>
+              )}
+
               {(agentStage === "screening" || agentStage === "onboarding") && (
                 <div className="dg-checklist">
                   <div className="dg-checklist-title">
@@ -1012,6 +1023,15 @@ const css = `
     font-weight: 500;
   }
   .dg-chk-done { color: #065F46; font-weight: 700; }
+
+  .dg-banner {
+    padding: 10px 16px;
+    font-size: 12px;
+    line-height: 1.5;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .dg-banner-info { background: #EFF6FF; color: #1E3A8A; border-bottom-color: #BFDBFE; }
+  .dg-banner-warn { background: #FEE2E2; color: #991B1B; border-bottom-color: #FCA5A5; }
 
   .dg-progress {
     display: flex;

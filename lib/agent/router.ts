@@ -94,10 +94,15 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   }
 
   // 2) 대화 history (이번 인입 제외)
+  // job_id만으로 좁히면 시스템 더미 공고(__danggeun_system__)를 공유하는 후보들끼리
+  // history가 섞여 AI가 다른 후보 대화를 이 후보 컨텍스트로 인용해버린다.
+  // applicant_id로 추가 좁히기 — 한 후보의 대화만 본 후보 history에 포함.
+  const applicantIdForHistory = jc.applicant_id as number;
   const { data: msgs } = await supabase
     .from("messages")
     .select("direction, body, created_at")
     .eq("job_id", jc.job_id)
+    .eq("applicant_id", applicantIdForHistory)
     .neq("id", inbound_message_id)
     .order("created_at", { ascending: true })
     .limit(50);
@@ -123,9 +128,13 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   const result = await stage.process(ctx, cleanInbound);
 
   // 4) 응답 발송 (simulate=true면 SOLAPI 건너뛰고 DB만 기록)
+  // advance 전이 시엔 transitions.ts가 안내 묶음(SCREENING_ANNOUNCE/GUIDE 등)을 자동 발송하므로
+  // AI가 동시에 reply_text를 넣었어도 중복 방지를 위해 무시한다.
+  const skipReplyDueToAdvance =
+    result.transition.kind === "advance" && !!result.reply_text;
   let replySent = false;
   let outboundId: string | null = null;
-  if (result.reply_text) {
+  if (result.reply_text && !skipReplyDueToAdvance) {
     let sendOk = simulate;
     let sendMessageId: string | null = null;
     if (!simulate) {
