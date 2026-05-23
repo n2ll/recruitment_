@@ -646,7 +646,8 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                       <div className="dg-msg-bubble">{m.body}</div>
                       {m.reasoning && (
                         <div className="dg-msg-reasoning">
-                          🤖 {m.reasoning}
+                          <div className="dg-reasoning-label">🧠 AI 판단 근거</div>
+                          <div className="dg-reasoning-body">{m.reasoning}</div>
                         </div>
                       )}
                       <div className="dg-msg-meta">
@@ -660,6 +661,16 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                       </div>
                     </div>
                   ))
+                )}
+                {sending && cfg.practice && (
+                  <div className="dg-msg dg-msg-in dg-typing">
+                    <div className="dg-msg-bubble dg-typing-bubble">
+                      <span className="dg-typing-dot" />
+                      <span className="dg-typing-dot" />
+                      <span className="dg-typing-dot" />
+                      <span className="dg-typing-text">AI 응답 생성 중...</span>
+                    </div>
+                  </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -989,16 +1000,53 @@ const css = `
   .dg-msg-meta { font-size: 10px; color: #9ca3af; margin-top: 3px; }
   .dg-msg-reasoning {
     font-size: 11px;
-    color: #6b7280;
-    background: #F9FAFB;
-    border-left: 2px solid #D1D5DB;
-    padding: 4px 8px;
-    margin-top: 4px;
-    border-radius: 0 4px 4px 0;
-    line-height: 1.4;
+    background: #EFF6FF;
+    border-left: 3px solid #3B82F6;
+    padding: 6px 10px;
+    margin-top: 6px;
+    border-radius: 0 6px 6px 0;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
     max-width: 100%;
+  }
+  .dg-reasoning-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1D4ED8;
+    margin-bottom: 2px;
+    letter-spacing: 0.02em;
+  }
+  .dg-reasoning-body {
+    color: #1E40AF;
+  }
+  .dg-typing-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff !important;
+    border: 1px dashed #d1d5db !important;
+    color: #6b7280;
+    padding: 8px 12px !important;
+  }
+  .dg-typing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9CA3AF;
+    animation: dg-typing 1.4s infinite ease-in-out;
+  }
+  .dg-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .dg-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dg-typing {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+  }
+  .dg-typing-text {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 500;
   }
   .dg-checklist {
     padding: 10px 16px;
