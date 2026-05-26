@@ -56,17 +56,18 @@ interface PromptExamplesViewProps {
 }
 
 export default function PromptExamplesView({
-  categories = ["conversation", "screening"],
-  pageTitle = "톤 가이드",
-  pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
+  categories = ["facts", "screening", "conversation"],
+  pageTitle = "클로드 조련하기",
+  pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시 + 사실 정보입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
   showSeed = true,
 }: PromptExamplesViewProps) {
   const isFactsOnly = categories.length === 1 && categories[0] === "facts";
-  const themeColor = isFactsOnly ? "#2563EB" : "#D97706"; // facts=파랑 / 톤가이드=주황
-  const themeBg = isFactsOnly ? "#EFF6FF" : "#FFFBEB";
-  const themeBorder = isFactsOnly ? "#BFDBFE" : "#F5C518";
-  const themeEmoji = isFactsOnly ? "📋" : "🎨";
-  const themeKind = isFactsOnly ? "사실 데이터" : "퓨샷 예시 / 말투";
+  const isCombined = categories.length > 1;
+  const themeColor = isFactsOnly ? "#2563EB" : isCombined ? "#7C3AED" : "#D97706";
+  const themeBg = isFactsOnly ? "#EFF6FF" : isCombined ? "#F5F3FF" : "#FFFBEB";
+  const themeBorder = isFactsOnly ? "#BFDBFE" : isCombined ? "#DDD6FE" : "#F5C518";
+  const themeEmoji = isFactsOnly ? "📋" : isCombined ? "🧠" : "🎨";
+  const themeKind = isFactsOnly ? "사실 데이터" : isCombined ? "클로드 조련 — 사실 / 운영문구 / 말투" : "퓨샷 예시 / 말투";
   const [items, setItems] = useState<PromptExample[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Category>(categories[0]);
@@ -216,8 +217,10 @@ export default function PromptExamplesView({
           <div className="pe-banner-kind">{themeKind}</div>
           <div className="pe-banner-msg">
             {isFactsOnly
-              ? "여기는 AI가 사실로 인용할 운영 정보(지점·시급·정책 등) 전용입니다. 말투/대화 예시는 [톤 가이드] 탭에서 관리하세요."
-              : "여기는 AI 말투/대화 톤 예시 전용입니다. 시급·정책 같은 사실 정보는 [AI 참고자료] 탭에서 관리하세요."}
+              ? "여기는 AI가 사실로 인용할 운영 정보(지점·시급·정책 등) 전용입니다."
+              : isCombined
+              ? "AI가 학습할 모든 정보를 한 곳에서. 참고자료(사실) · 스크리닝 운영 문구 · 대화 톤 세 카테고리로 관리합니다."
+              : "여기는 AI 말투/대화 톤 예시 전용입니다."}
           </div>
         </div>
       </div>
