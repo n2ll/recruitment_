@@ -55,7 +55,8 @@ export async function sendSlackPausedAlert(data: {
   reason: string;
   inbound_text?: string;
 }) {
-  if (!SLACK_ENABLED) return;
+  // 매니저 인계 알림은 SLACK_WEBHOOK_URL만 있으면 무조건 발송
+  // (SLACK_NOTIFICATIONS_ENABLED 체크 없음 — 인계는 항상 알려야)
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 

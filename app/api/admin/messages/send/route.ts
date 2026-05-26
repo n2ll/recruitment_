@@ -46,6 +46,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 매니저 발송 직후 — 후보가 paused 상태면 직전 stage로 자동 복귀.
+    // (시급 등 facts 부족으로 pause된 후 매니저가 답변 보내주면 AI가 다음 답장부터 다시 인수)
+    if (applicant_id) {
+      const { data: jc } = await supabase
+        .from("job_candidates")
+        .select("id, agent_stage, agent_state")
+        .eq("applicant_id", applicant_id)
+        .not("agent_stage", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (jc?.agent_stage === "paused") {
+        const meta = (jc.agent_state as { meta?: { paused_from_stage?: string } } | null)?.meta;
+        const restoreStage = (meta?.paused_from_stage as string | undefined) || "exploration";
+        await supabase
+          .from("job_candidates")
+          .update({
+            agent_stage: restoreStage,
+            paused_reason: null,
+          })
+          .eq("id", jc.id);
+      }
+    }
+
     // 사용된 draft 표시
     if (draft_id) {
       await supabase
