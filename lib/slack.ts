@@ -5,8 +5,6 @@
  * 호출부는 그대로 두어도 됨 (각 함수가 진입 시점에 self-disable).
  */
 
-import { sourceLabel } from "@/lib/applicant-source";
-
 const SLACK_ENABLED = process.env.SLACK_NOTIFICATIONS_ENABLED === "1";
 
 /**
@@ -123,36 +121,3 @@ export async function sendSlackAgentAlert(data: {
   }
 }
 
-/**
- * 슬랙 Webhook으로 알림 발송
- */
-export async function sendSlackNotification(data: {
-  name: string;
-  phone: string;
-  branch: string;
-  available_date: string;
-  filter_pass: string;
-  source: string;
-}) {
-  if (!SLACK_ENABLED) return;
-  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
-  if (!webhookUrl) return;
-
-  const emoji = data.filter_pass === "Y" ? ":white_check_mark:" : ":x:";
-  const statusText = data.filter_pass === "Y" ? "스크리닝 대상" : "부적합";
-
-  const message = {
-    text: `${emoji} *새 지원자* — ${statusText}\n` +
-      `> *성함:* ${data.name}\n` +
-      `> *연락처:* ${data.phone}\n` +
-      `> *지점:* ${data.branch}\n` +
-      `> *시작가능일:* ${data.available_date}\n` +
-      `> *유입채널:* ${sourceLabel(data.source)}\n`,
-  };
-
-  await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(message),
-  });
-}
