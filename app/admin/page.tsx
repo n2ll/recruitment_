@@ -154,6 +154,7 @@ export default function AdminPage() {
   const [sidebarPinned, setSidebarPinned] = useState(true);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const sidebarExpanded = sidebarPinned || sidebarHovered;
+  const [showOther, setShowOther] = useState(false);
 
   // 사이드바 핀 상태 — localStorage 복구
   useEffect(() => {
@@ -1046,20 +1047,10 @@ export default function AdminPage() {
           </div>
 
           <div className="nav-group-label">AI 에이전트</div>
-          <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
-            onClick={() => setTab("agent")} title="구인 에이전트">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            <span className="nav-label">구인 에이전트</span>
-          </button>
           <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
             onClick={() => setTab("danggeun")} title="당근마켓구인">
             <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
             <span className="nav-label">당근마켓구인</span>
-          </button>
-          <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
-            onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)">
-            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
-            <span className="nav-label">당근마켓구인 (연습용)</span>
           </button>
           <button className={`nav-btn ${tab === "klod" ? "nav-active" : ""}`}
             onClick={() => setTab("klod")} title="클로드 조련하기">
@@ -1087,20 +1078,10 @@ export default function AdminPage() {
           </button>
 
           <div className="nav-group-label">매트릭스</div>
-          <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
-            onClick={() => setTab("hope-slots")} title="희망 슬롯">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
-            <span className="nav-label">희망 슬롯</span>
-          </button>
           <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
             onClick={() => setTab("confirmed-slots")} title="확정 슬롯">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
             <span className="nav-label">확정 슬롯</span>
-          </button>
-          <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
-            onClick={() => setTab("recommend")} title="추천 받기">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-            <span className="nav-label">추천 받기</span>
           </button>
 
           <div className="nav-group-label">관리</div>
@@ -1109,15 +1090,53 @@ export default function AdminPage() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
             <span className="nav-label">지점 관리</span>
           </button>
-          <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
-            onClick={() => setTab("site-managers")} title="현장 매니저">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            <span className="nav-label">현장 매니저</span>
+
+          {/* 기타 — collapsible, 디폴트 접힘. 1차 목표(당근마켓구인) 외 메뉴들. */}
+          <button
+            className="nav-group-toggle"
+            onClick={() => setShowOther((v) => !v)}
+            title={showOther ? "기타 접기" : "기타 펼치기"}
+          >
+            <span className="nav-group-label-inline">
+              기타 {showOther ? "▾" : "▸"}
+            </span>
           </button>
-          <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
-            onClick={() => setTab("playground")} title="플레이그라운드">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
-            <span className="nav-label">플레이그라운드</span>
+          {showOther && (
+            <>
+              <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
+                onClick={() => setTab("agent")} title="구인 에이전트">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <span className="nav-label">구인 에이전트</span>
+              </button>
+              <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
+                onClick={() => setTab("hope-slots")} title="희망 슬롯">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
+                <span className="nav-label">희망 슬롯</span>
+              </button>
+              <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
+                onClick={() => setTab("recommend")} title="추천 받기">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                <span className="nav-label">추천 받기</span>
+              </button>
+              <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
+                onClick={() => setTab("site-managers")} title="현장 매니저">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <span className="nav-label">현장 매니저</span>
+              </button>
+              <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
+                onClick={() => setTab("playground")} title="플레이그라운드">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
+                <span className="nav-label">플레이그라운드</span>
+              </button>
+            </>
+          )}
+
+          {/* 연습용 — 사이드바 맨 아래 별도 위치 */}
+          <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
+            onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)"
+            style={{ marginTop: 12 }}>
+            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
+            <span className="nav-label">당근마켓구인 (연습용)</span>
           </button>
 
           <div className="sidebar-footer">
@@ -2215,6 +2234,30 @@ const css = `
     height: 0; overflow: hidden;
   }
   .sidebar-expanded .nav-group-label { opacity: 1; height: auto; }
+
+  .nav-group-toggle {
+    background: transparent;
+    border: none;
+    padding: 12px 12px 4px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    opacity: 0;
+    transition: opacity 0.15s;
+    height: 0;
+    overflow: hidden;
+  }
+  .sidebar-expanded .nav-group-toggle { opacity: 1; height: auto; }
+  .nav-group-label-inline {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+  .nav-group-toggle:hover .nav-group-label-inline { color: #fff; }
 
   .nav-btn {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px;
