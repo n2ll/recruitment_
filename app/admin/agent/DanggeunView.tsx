@@ -791,7 +791,46 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
               )}
               {agentStage === "paused" && (
                 <div className="dg-banner dg-banner-warn">
-                  ⏸ <b>매니저 인계 상태.</b> AI가 중단됐습니다. 매니저가 직접 응대해주세요.
+                  <div className="dg-paused-row">
+                    <div className="dg-paused-text">
+                      ⏸ <b>매니저 인계 상태</b> — AI 자동 응답이 꺼져 있습니다.<br />
+                      <span className="dg-paused-help">
+                        매니저가 직접 답변한 뒤, 아래 버튼을 누르면 <b>그 후 새로 들어오는 후보 답장부터</b> AI가 다시 응답합니다.
+                        (이미 와 있는 메시지는 재처리되지 않습니다)
+                      </span>
+                    </div>
+                    <button
+                      className="dg-btn dg-btn-resume"
+                      onClick={async () => {
+                        if (selectedId == null) return;
+                        if (
+                          !confirm(
+                            "AI 응답을 재개합니다.\n\n• 이 버튼을 누른 시점 이후 후보가 새로 보내는 메시지부터 AI가 응답합니다.\n• 이미 도착해 있는 메시지에는 자동 응답하지 않습니다.\n• 매니저 직접 응답은 그대로 가능합니다.\n\n진행할까요?"
+                          )
+                        ) {
+                          return;
+                        }
+                        try {
+                          const res = await fetch("/api/admin/agent/resume", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ applicant_id: selectedId }),
+                          });
+                          const json = await res.json();
+                          if (!res.ok) {
+                            alert(json.error || "재개 실패");
+                            return;
+                          }
+                          alert(`AI 재개됨 (stage='${json.restored_stage}'). 다음 후보 답장부터 적용됩니다.`);
+                          await fetchMessages(selectedId, { silent: true });
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : "재개 실패");
+                        }
+                      }}
+                    >
+                      ▶ AI 응답 재개
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1399,6 +1438,35 @@ const css = `
   }
   .dg-banner-info { background: #EFF6FF; color: #1E3A8A; border-bottom-color: #BFDBFE; }
   .dg-banner-warn { background: #FEE2E2; color: #991B1B; border-bottom-color: #FCA5A5; }
+  .dg-paused-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+  }
+  .dg-paused-text { flex: 1; line-height: 1.5; }
+  .dg-paused-help {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: #991B1B;
+    margin-top: 3px;
+    opacity: 0.85;
+  }
+  .dg-btn-resume {
+    background: #15803D;
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .dg-btn-resume:hover { background: #166534; }
 
   .dg-progress {
     display: flex;
