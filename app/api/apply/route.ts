@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { sendNotification } from "@/lib/solapi";
+import { sendNotification, sendSms } from "@/lib/solapi";
 import { geocodeAddress } from "@/lib/kakao-geocode";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { getSystemMessage } from "@/lib/agent/system-messages";
 
 export async function POST(req: NextRequest) {
   try {
@@ -115,14 +116,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 서류접수 안내 자동 발송 (알림톡 ① / SMS 폴백) ──────
+    // ── 자동 발송 ──────
+    // source='danggeun'이면 매니저가 저장한 시작 멘트를, 그 외엔 기본 접수 안내를 보낸다.
+    // 둘 다 prompt_examples 테이블의 'system_message' 카테고리에서 매니저가 편집 가능.
     try {
       const receivedAt = new Date().toLocaleString("ko-KR", {
         timeZone: "Asia/Seoul",
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit",
       });
-      const fallbackText = [
+      const defaultReceived = [
         "[옹고잉 배송원 지원 접수 안내]",
         "",
         `${inserted.name}님, 안녕하세요.`,
@@ -138,31 +141,71 @@ export async function POST(req: NextRequest) {
         "빠르게 안내드리겠습니다.",
       ].join("\n");
 
-      const notifyResult = await sendNotification(
-        inserted.phone,
-        "APPLY_RECEIVED",
-        {
-          "#{이름}": inserted.name,
-          "#{지점}": inserted.branch,
-          "#{접수일시}": receivedAt,
-        },
-        fallbackText
-      );
+      // 어떤 멘트를 보낼지 결정 — source별 분기
+      let sendBody: string;
+      let sentByLabel: string;
+      let useTemplate: "danggeun" | "apply_received" = "apply_received";
 
-      if (notifyResult.success) {
+      if (inserted.source === "danggeun") {
+        const danggeunStart = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
+        if (danggeunStart) {
+          sendBody = danggeunStart;
+          sentByLabel = "danggeun-start";
+          useTemplate = "danggeun";
+        } else {
+          // DB에 시작 멘트 미저장 — 폴백으로 접수 안내
+          const stored = (await getSystemMessage(supabase, "apply_received"))?.trim();
+          sendBody = stored || defaultReceived;
+          sentByLabel = "system-auto";
+        }
+      } else {
+        const stored = (await getSystemMessage(supabase, "apply_received"))?.trim();
+        sendBody = stored || defaultReceived;
+        sentByLabel = "system-auto";
+      }
+
+      // 당근 시작 멘트는 알림톡 템플릿이 별도로 없을 가능성이 크니 SMS 직발송,
+      // 일반 접수 안내는 기존 알림톡(APPLY_RECEIVED) 우선.
+      let sendOk = false;
+      let messageId: string | null = null;
+      let viaLabel: string = "sms";
+      let templateId: string | null = null;
+
+      if (useTemplate === "danggeun") {
+        const r = await sendSms(inserted.phone, sendBody);
+        sendOk = r.success;
+        messageId = r.messageId ?? null;
+        if (!r.success) console.error("[apply danggeun-start send]", r.error);
+      } else {
+        const r = await sendNotification(
+          inserted.phone,
+          "APPLY_RECEIVED",
+          {
+            "#{이름}": inserted.name,
+            "#{지점}": inserted.branch,
+            "#{접수일시}": receivedAt,
+          },
+          sendBody
+        );
+        sendOk = r.success;
+        messageId = r.messageId ?? null;
+        viaLabel = r.via;
+        templateId = r.templateId ?? null;
+        if (!r.success) console.error("[apply notify error]", r.error);
+      }
+
+      if (sendOk) {
         await supabase.from("messages").insert({
           applicant_id: inserted.id,
           applicant_phone: inserted.phone,
           direction: "outbound",
-          body: fallbackText,
+          body: sendBody,
           status: "sent",
-          sent_by: "system-auto",
-          solapi_msg_id: notifyResult.messageId || null,
-          message_type: notifyResult.via,
-          template_id: notifyResult.templateId || null,
+          sent_by: sentByLabel,
+          solapi_msg_id: messageId,
+          message_type: viaLabel,
+          template_id: templateId,
         });
-      } else {
-        console.error("[apply notify error]", notifyResult.error);
       }
     } catch (notifyErr) {
       console.error("[apply notify exception]", notifyErr);

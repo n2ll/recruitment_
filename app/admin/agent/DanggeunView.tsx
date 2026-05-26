@@ -247,25 +247,57 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   const [showNewModal, setShowNewModal] = useState(false);
 
   // ── 초기 로드 ─────────────────────────────────────────
+  // 시작 멘트는 이제 prompt_examples(system_message/danggeun_start)에 저장.
+  // 매니저 + apply route(서버 측)가 동일 출처 사용.
+  // 기존 localStorage 데이터가 있으면 한 번만 DB로 마이그레이션.
   useEffect(() => {
-    try {
-      let saved = localStorage.getItem(STORAGE_KEY) ?? "";
-      // 1회용 마이그레이션 — 통합 이전 연습용 전용 키에 저장된 멘트를 새 통합 키로 옮김
-      if (!saved) {
-        const legacyPractice = localStorage.getItem("danggeun_practice_start_message_v1");
-        if (legacyPractice) {
-          localStorage.setItem(STORAGE_KEY, legacyPractice);
-          localStorage.removeItem("danggeun_practice_start_message_v1");
-          saved = legacyPractice;
+    (async () => {
+      try {
+        const res = await fetch(
+          "/api/admin/prompt-examples?category=system_message",
+          { cache: "no-store" }
+        );
+        const json = await res.json();
+        const items = Array.isArray(json.data) ? json.data : [];
+        const dbRow = items.find((it: { title?: string }) => it.title === "danggeun_start");
+        let saved: string = dbRow?.body ?? "";
+
+        // 1회용 마이그레이션: localStorage에 있던 멘트를 DB로 옮김
+        if (!saved) {
+          let legacy = "";
+          try {
+            legacy = localStorage.getItem(STORAGE_KEY) ?? "";
+            if (!legacy) {
+              legacy = localStorage.getItem("danggeun_practice_start_message_v1") ?? "";
+            }
+          } catch { /* ignore */ }
+          if (legacy.trim()) {
+            await fetch("/api/admin/prompt-examples", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                category: "system_message",
+                title: "danggeun_start",
+                body: legacy,
+              }),
+            });
+            saved = legacy;
+            try {
+              localStorage.removeItem(STORAGE_KEY);
+              localStorage.removeItem("danggeun_practice_start_message_v1");
+            } catch { /* ignore */ }
+          }
         }
+
+        setStartMsg(saved);
+        setStartMsgDraft(saved);
+      } catch (e) {
+        console.error("[danggeun start msg load]", e);
+      } finally {
+        setStartMsgLoaded(true);
       }
-      setStartMsg(saved);
-      setStartMsgDraft(saved);
-    } catch {
-      // localStorage 비활성 환경
-    }
-    setStartMsgLoaded(true);
-  }, []);
+    })();
+  }, [STORAGE_KEY]);
 
   const fetchCandidates = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setListLoading(true);
@@ -386,16 +418,46 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   }, [messages.length]);
 
   // ── 핸들러 ─────────────────────────────────────────────
-  const handleSaveStartMsg = () => {
+  const handleSaveStartMsg = async () => {
     if (!startMsgDraft.trim()) {
       alert("시작 멘트를 입력해주세요.");
       return;
     }
     setStartMsgSaving(true);
     try {
-      localStorage.setItem(STORAGE_KEY, startMsgDraft);
+      // 기존 row 있으면 PUT, 없으면 POST
+      const listRes = await fetch(
+        "/api/admin/prompt-examples?category=system_message",
+        { cache: "no-store" }
+      );
+      const listJson = await listRes.json();
+      const items = Array.isArray(listJson.data) ? listJson.data : [];
+      const existing = items.find((it: { title?: string; id?: number }) => it.title === "danggeun_start");
+
+      let res: Response;
+      if (existing?.id) {
+        res = await fetch(`/api/admin/prompt-examples/${existing.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: startMsgDraft }),
+        });
+      } else {
+        res = await fetch("/api/admin/prompt-examples", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: "system_message",
+            title: "danggeun_start",
+            body: startMsgDraft,
+          }),
+        });
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "저장 실패");
+      }
       setStartMsg(startMsgDraft);
-      alert("시작 멘트가 저장되었습니다. (이 브라우저 기준)");
+      alert("시작 멘트가 저장되었습니다. (모든 매니저·apply route 공유)");
       setShowStartMsgModal(false);
     } catch (e) {
       alert(e instanceof Error ? e.message : "저장 실패");
@@ -844,7 +906,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
               </button>
             </div>
             <p className="dg-modal-desc">
-              새 당근 후보 등록 시 자동으로 발송되는 첫 메시지. 이 브라우저에만 저장됩니다.
+              새 당근 후보 등록 시 + apply 폼 source='danggeun' 지원자에게 자동 발송되는 첫 메시지. DB(system_message)에 저장 — 모든 매니저 공유.
             </p>
             <textarea
               className="dg-textarea"

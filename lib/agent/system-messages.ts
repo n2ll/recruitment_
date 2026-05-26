@@ -1,0 +1,35 @@
+/**
+ * 시스템 자동 발송용 운영 메시지 조회 헬퍼.
+ *
+ * prompt_examples 테이블의 category='system_message' row를 title 기준으로 조회.
+ * 매니저가 톤가이드/AI 참고자료처럼 admin UI에서 편집할 수 있고,
+ * apply route / agent route 등 서버 측이 동일 출처에서 멘트를 가져온다.
+ *
+ * 사용 키:
+ *  - 'danggeun_start'  : 당근 유입 후보에게 첫 발송할 시작 멘트
+ *  - 'apply_received'  : apply 폼 접수 안내 (기본 fallback)
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type SystemMessageKey = "danggeun_start" | "apply_received";
+
+export async function getSystemMessage(
+  supabase: SupabaseClient,
+  key: SystemMessageKey
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("prompt_examples")
+    .select("body")
+    .eq("category", "system_message")
+    .eq("title", key)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[system-messages] fetch '${key}' failed`, error);
+    return null;
+  }
+  return (data?.body as string | null) ?? null;
+}
