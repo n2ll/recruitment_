@@ -6,7 +6,7 @@
  */
 
 export interface SeedExample {
-  category: "conversation" | "screening";
+  category: "conversation" | "screening" | "system_message";
   title: string;
   body: string;
   sort_order: number;
@@ -162,5 +162,66 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
 4) 배송의 경우 배차 시점으로부터 60분 내에 배송이 되어야 합니다. 60분 제한이 있으니 이 점만 유의부탁 드려요.
 
 5) 상차지에서는 배차 받고 10분까지만 대기 후 출발 부탁 드립니다.`,
+  },
+
+  // ── 시스템 자동 발송 문구 (제목=고정 키, 본문 {{이름}} 치환) ──
+  {
+    category: "system_message",
+    sort_order: 10,
+    title: "danggeun_start",
+    body: `안녕하세요! 당근에서 연락드린 옹고잉 매니저입니다 :)
+비마트 배송 지원 문의 주셔서 감사합니다. 궁금하신 점 편하게 말씀 주세요!`,
+  },
+  {
+    category: "system_message",
+    sort_order: 20,
+    title: "apply_received",
+    body: `[옹고잉 배송원 지원 접수 안내]
+
+{{이름}}님, 안녕하세요.
+옹고잉 배송원 지원서가 정상 접수되었습니다.
+
+서류 검토 후 영업일 기준 1~2일 내 유선으로 연락드릴 예정입니다.
+문의사항은 본 메시지에 회신 주시면 빠르게 안내드리겠습니다.`,
+  },
+  {
+    category: "system_message",
+    sort_order: 30,
+    title: "screening_announce",
+    body: `{{이름}}님, 본격적인 진행을 위해 몇 가지 안내드릴게요!
+
+1) 업무시간은 배차 시간 기준입니다.
+   08:00 첫 배차 / 16:00 마지막 배차이고, 배송 시간은 별도로 산정됩니다.
+2) 정산은 건당 금액이 매주, 프로모션 비용은 2주 간격으로 진행됩니다.
+3) 프로모션 5천원 비용은 1~2개월 후 종료될 수 있는 점 참고 부탁드려요.
+
+읽어보시고 괜찮으시면 몇 가지만 짧게 여쭤볼게요^^`,
+  },
+  {
+    category: "system_message",
+    sort_order: 40,
+    title: "onboarding_guide",
+    body: `업무 진행을 위한 앱설치 및 요청사항을 전달드립니다. 영상교육 수료 후, 회신 부탁드립니다.
+
+1. 배민 커넥트 앱 설치 후 가입
+2. 앱 가입 시 안전보건교육 영상(2시간) 필수 시청 필요
+3. 가입 및 교육 수료 후 마이페이지 > 내 정보에서 '아이디' 확인 후, 아이디 회신 부탁드립니다.
+4. 차량번호도 함께 회신 부탁드립니다.
+
+[참고 자료]
+가입 가이드: https://www.youtube.com/watch?v=bMM112zT7JY
+사용법 가이드: https://www.youtube.com/watch?v=5547PR3fzRs`,
+  },
+  {
+    category: "system_message",
+    sort_order: 50,
+    title: "first_day_rules",
+    body: `{{이름}}님 안녕하세요? 첫 근무 관련 안내사항 전달드립니다!
+
+1) 08시 경에 나오셔서 카카오 채널로 건물 또는 주차하신 사진 부탁드립니다 (현재 활동 여부 확인용).
+2) 배차 들어오면 수락해 주시고(라우트는 자동), 가까운 곳 우선으로 돌아주시면 감사하겠습니다.
+3) 식사는 13시 이후로 진행 부탁드립니다.
+4) 배차 시점부터 60분 내 배송 완료 부탁드립니다.
+5) 상차지에서 배차 받고 10분 대기 후 출발 부탁드립니다.`,
   },
 ];

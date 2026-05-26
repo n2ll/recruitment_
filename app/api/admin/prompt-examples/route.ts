@@ -108,29 +108,31 @@ export async function PUT(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // 이미 데이터가 있으면 거부 (실수로 중복 시드 방지)
-    const { count } = await supabase
+    // 멱등 시드 — 이미 존재하는 (category, title) 조합은 건드리지 않고 빠진 것만 INSERT.
+    // 매니저가 일부 편집·삭제한 뒤 다시 눌러도 기존 데이터 보존 + 새 기본값(예: system_message)만 보충.
+    const { data: existing } = await supabase
       .from("prompt_examples")
-      .select("id", { count: "exact", head: true });
+      .select("category, title");
+    const existingKeys = new Set(
+      (existing ?? []).map((r) => `${r.category}::${r.title}`)
+    );
 
-    if ((count ?? 0) > 0) {
-      return NextResponse.json(
-        { error: `이미 ${count}건의 예시가 있습니다. 비어 있을 때만 시드 가능합니다.` },
-        { status: 409 }
-      );
+    const toInsert = PROMPT_EXAMPLES_SEED.filter(
+      (s) => !existingKeys.has(`${s.category}::${s.title}`)
+    );
+
+    if (toInsert.length === 0) {
+      return NextResponse.json({ success: true, inserted: 0, message: "이미 모든 기본값이 있습니다." });
     }
 
-    const { error } = await supabase
-      .from("prompt_examples")
-      .insert(PROMPT_EXAMPLES_SEED);
-
+    const { error } = await supabase.from("prompt_examples").insert(toInsert);
     if (error) {
       console.error("[prompt-examples seed]", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     invalidateExamplesCache();
-    return NextResponse.json({ success: true, inserted: PROMPT_EXAMPLES_SEED.length });
+    return NextResponse.json({ success: true, inserted: toInsert.length });
   } catch (err) {
     console.error("[prompt-examples PUT exception]", err);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });

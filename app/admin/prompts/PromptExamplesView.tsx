@@ -102,7 +102,7 @@ export default function PromptExamplesView({
   );
 
   const handleSeed = async () => {
-    if (!confirm("기본 예시 14건을 한 번에 추가합니다. (기존 데이터가 있으면 거부됩니다) 진행할까요?")) {
+    if (!confirm("빠져 있는 기본값만 추가합니다. (이미 있는 항목은 그대로 유지) 진행할까요?")) {
       return;
     }
     setSeeding(true);
@@ -117,7 +117,7 @@ export default function PromptExamplesView({
         alert(json.error || "시드 실패");
         return;
       }
-      alert(`${json.inserted}건 추가됨.`);
+      alert(json.inserted > 0 ? `${json.inserted}건 추가됨.` : (json.message || "추가할 기본값이 없습니다."));
       await fetchAll();
     } catch (e) {
       alert(e instanceof Error ? e.message : "시드 실패");
@@ -234,9 +234,9 @@ export default function PromptExamplesView({
           <p className="page-desc">{pageDesc}</p>
         </div>
         <div className="pe-header-actions">
-          {showSeed && items.length === 0 && !loading && (
-            <button className="pe-btn pe-btn-primary" onClick={handleSeed} disabled={seeding}>
-              {seeding ? "추가 중..." : "기본 예시 가져오기"}
+          {showSeed && !loading && (
+            <button className="pe-btn pe-btn-ghost-bordered" onClick={handleSeed} disabled={seeding}>
+              {seeding ? "추가 중..." : "기본값 채우기"}
             </button>
           )}
           <button
