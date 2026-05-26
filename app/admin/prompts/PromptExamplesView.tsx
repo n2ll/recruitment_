@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Category = "conversation" | "screening" | "facts";
+type Category = "conversation" | "screening" | "facts" | "system_message";
 
 interface PromptExample {
   id: number;
@@ -29,6 +29,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   conversation: "대화 톤",
   screening: "스크리닝 운영 문구",
   facts: "운영 정보",
+  system_message: "시스템 발송 문구",
 };
 
 const CATEGORY_DESC: Record<Category, string> = {
@@ -38,6 +39,8 @@ const CATEGORY_DESC: Record<Category, string> = {
     "지원/스크리닝/온보딩 단계의 운영 문구 모음. AI가 톤을 흡수해 자연스럽게 풀어냅니다.",
   facts:
     "AI가 지원자에게 사실로 인용 가능한 운영 정보. 예) '마포상암 — 평일오전 구인중, 시급 15,000원, 픽업 마포구 ...' 형태로 행마다 하나의 사실 단위.",
+  system_message:
+    "시스템이 자동 발송하는 고정 문구. 제목=정해진 키(danggeun_start/apply_received/screening_announce/onboarding_guide/first_day_rules), 본문에 {{이름}} 쓰면 발송 시 지원자 이름으로 치환됩니다. 제목은 바꾸지 마세요.",
 };
 
 interface EditorState {
@@ -56,7 +59,7 @@ interface PromptExamplesViewProps {
 }
 
 export default function PromptExamplesView({
-  categories = ["facts", "screening", "conversation"],
+  categories = ["facts", "screening", "conversation", "system_message"],
   pageTitle = "클로드 조련하기",
   pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시 + 사실 정보입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
   showSeed = true,

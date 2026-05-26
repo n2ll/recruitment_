@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendNotification } from "../solapi";
 import { sendSlackConfirmedAlert, sendSlackPausedAlert } from "../slack";
+import { getSystemMessage, fillTemplate } from "./system-messages";
 import { mergeAgentState } from "./checklist";
 import type { AgentState, JobContext, ScreeningChecklist, StageName, StageTransition } from "./types";
 
@@ -134,7 +135,10 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       if (transition.to === "screening") {
         // 1) 안내 묶음 (정산/프로모션/업무시간) 1통 발송
         try {
-          const announceText = buildScreeningAnnouncement(applicant_name);
+          const storedAnnounce = await getSystemMessage(supabase, "screening_announce");
+          const announceText = storedAnnounce
+            ? fillTemplate(storedAnnounce, { 이름: applicant_name ?? "지원자" })
+            : buildScreeningAnnouncement(applicant_name);
           if (await isAlreadySentRecently(announceText)) {
             // 이미 발송됨 — 중복 방지
           } else {
@@ -224,7 +228,10 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {
-          const guideText = buildOnboardingGuideText(applicant_name);
+          const storedGuide = await getSystemMessage(supabase, "onboarding_guide");
+          const guideText = storedGuide
+            ? fillTemplate(storedGuide, { 이름: applicant_name ?? "지원자" })
+            : buildOnboardingGuideText(applicant_name);
           if (await isAlreadySentRecently(guideText)) {
             // 이미 발송됨 — 중복 방지
           } else {
@@ -274,7 +281,10 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 
         // 첫 출근 룰 안내 자동 발송 (screening-examples.txt 마지막 단락)
         try {
-          const rulesText = buildFirstDayRules(applicant_name);
+          const storedRules = await getSystemMessage(supabase, "first_day_rules");
+          const rulesText = storedRules
+            ? fillTemplate(storedRules, { 이름: applicant_name ?? "지원자" })
+            : buildFirstDayRules(applicant_name);
           const r = await maybeSendNotification(
             applicant_phone,
             "ATTENDANCE",

@@ -6,13 +6,32 @@
  * apply route / agent route 등 서버 측이 동일 출처에서 멘트를 가져온다.
  *
  * 사용 키:
- *  - 'danggeun_start'  : 당근 유입 후보에게 첫 발송할 시작 멘트
- *  - 'apply_received'  : apply 폼 접수 안내 (기본 fallback)
+ *  - 'danggeun_start'    : 당근 유입 후보에게 첫 발송할 시작 멘트
+ *  - 'apply_received'    : apply 폼 접수 안내 (기본 fallback)
+ *  - 'screening_announce': 스크리닝 진입 시 안내 묶음 (정산·프로모션·업무시간)
+ *  - 'onboarding_guide'  : 온보딩 진입 시 앱설치·교육 안내
+ *  - 'first_day_rules'   : 근무 시작(active) 첫 출근 룰 안내
+ *
+ * 본문에 {{이름}} placeholder를 쓰면 발송 시 지원자 이름으로 치환됨.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type SystemMessageKey = "danggeun_start" | "apply_received";
+export type SystemMessageKey =
+  | "danggeun_start"
+  | "apply_received"
+  | "screening_announce"
+  | "onboarding_guide"
+  | "first_day_rules";
+
+/** {{이름}} 등 placeholder 치환 */
+export function fillTemplate(text: string, vars: Record<string, string>): string {
+  let out = text;
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+  }
+  return out;
+}
 
 export async function getSystemMessage(
   supabase: SupabaseClient,
