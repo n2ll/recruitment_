@@ -9,7 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendNotification } from "../solapi";
-import { sendSlackConfirmedAlert } from "../slack";
+import { sendSlackConfirmedAlert, sendSlackPausedAlert } from "../slack";
 import { mergeAgentState } from "./checklist";
 import type { AgentState, JobContext, ScreeningChecklist, StageName, StageTransition } from "./types";
 
@@ -90,6 +90,19 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         .from("job_candidates")
         .update({ paused_reason: transition.reason })
         .eq("id", candidate_id);
+      // 매니저 인계 슬랙 알림 — 연습 모드(simulate)면 skip
+      if (!simulate) {
+        try {
+          await sendSlackPausedAlert({
+            applicant_name,
+            applicant_phone,
+            branch: job?.branch ?? null,
+            reason: transition.reason,
+          });
+        } catch (e) {
+          console.error("[transitions] slack paused alert failed", e);
+        }
+      }
       break;
 
     // ────────────────────────────────────────────────

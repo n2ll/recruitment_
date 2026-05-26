@@ -47,6 +47,46 @@ export async function sendSlackConfirmedAlert(data: {
 }
 
 /**
+ * 후보가 매니저 인계(stage='paused') 상태로 전환됐을 때 알림.
+ * AI가 응대 어려운 메시지(시급 등 facts 부족)이라 매니저 응답 요청.
+ */
+export async function sendSlackPausedAlert(data: {
+  applicant_name: string | null;
+  applicant_phone: string;
+  branch: string | null;
+  reason: string;
+  inbound_text?: string;
+}) {
+  if (!SLACK_ENABLED) return;
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const name = data.applicant_name || "(이름 없음)";
+  const branchTag = data.branch ? ` · ${data.branch}` : "";
+  const inboundLine = data.inbound_text
+    ? `\n> *받은 메시지:* ${data.inbound_text}`
+    : "";
+
+  const message = {
+    text:
+      `:pause_button: *매니저 인계 필요*${branchTag}\n` +
+      `> *지원자:* ${name} (${data.applicant_phone})\n` +
+      `> *사유:* ${data.reason}${inboundLine}\n` +
+      `\n관리자 페이지에서 직접 응대해주세요.`,
+  };
+
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    });
+  } catch (e) {
+    console.error("[slack paused alert]", e);
+  }
+}
+
+/**
  * AI 에이전트가 답변 못 만들었을 때 — 매니저 직접 응대 필요 알림
  */
 export async function sendSlackAgentAlert(data: {
