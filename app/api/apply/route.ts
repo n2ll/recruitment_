@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { sendNotification } from "@/lib/solapi";
 import { geocodeAddress } from "@/lib/kakao-geocode";
+import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
 
 export async function POST(req: NextRequest) {
   try {
@@ -165,6 +166,26 @@ export async function POST(req: NextRequest) {
       }
     } catch (notifyErr) {
       console.error("[apply notify exception]", notifyErr);
+    }
+
+    // source='danggeun'으로 들어온 폼 지원자는 자동 AI 응대 흐름에 올린다.
+    // 시스템 더미 공고 + job_candidates(exploration) 자동 생성 → 다음 인입 SMS 시
+    // /api/messages/inbound가 router를 태우게 됨.
+    if (inserted.source === "danggeun") {
+      try {
+        const danggeunJobId = await ensureDanggeunSystemJob(supabase);
+        const { error: jcErr } = await supabase.from("job_candidates").insert({
+          job_id: danggeunJobId,
+          applicant_id: inserted.id,
+          agent_stage: "exploration",
+          agent_state: {},
+        });
+        if (jcErr) {
+          console.error("[apply] danggeun job_candidates insert error", jcErr);
+        }
+      } catch (e) {
+        console.error("[apply] ensureDanggeunSystemJob failed", e);
+      }
     }
 
     return NextResponse.json({
