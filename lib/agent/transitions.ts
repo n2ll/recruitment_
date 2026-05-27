@@ -20,6 +20,8 @@ interface ApplyTransitionInput {
   applicant_id: number;
   applicant_name: string | null;
   applicant_phone: string;
+  applicant_branch?: string | null;     // 근무지점 (슬랙 알림용)
+  applicant_work_hours?: string | null; // 근무시간대 (슬랙 알림용)
   job_id: number;
   job: JobContext | null;           // exploration → screening 시 조건부 자동 true 판정용
   current_stage: StageName;
@@ -41,6 +43,8 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     applicant_id,
     applicant_name,
     applicant_phone,
+    applicant_branch,
+    applicant_work_hours,
     job_id,
     job,
     current_stage,
@@ -202,7 +206,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .update({ status: "확정" })
           .eq("id", applicant_id);
 
-        // 슬랙 확정 알림 — 라인명 / 지원자 / 매니저
+        // 슬랙 알림 — 스크리닝 통과 → 온보딩 진입: 이름 / 근무지점 / 근무시간대
         try {
           let smName: string | null = null;
           if (job?.site_manager_id) {
@@ -215,10 +219,10 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           }
           if (!simulate) {
             await sendSlackConfirmedAlert({
-              job_title: job?.title ?? "(공고 정보 없음)",
               applicant_name,
               applicant_phone,
-              branch: job?.branch ?? null,
+              branch: applicant_branch ?? job?.branch ?? null,
+              work_hours: applicant_work_hours ?? null,
               site_manager_name: smName,
             });
           }

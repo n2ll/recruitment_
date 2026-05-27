@@ -140,14 +140,17 @@ function stageBadge(stage: string | null) {
   };
 }
 
-const STAGE_FLOW = ["exploration", "screening", "onboarding", "active"] as const;
+// 탐색은 base 능력으로 상시 깔려 있어 progress에 표시하지 않음. 프로세스는 스크리닝부터.
+const STAGE_FLOW = ["screening", "onboarding", "active"] as const;
 type FlowStage = (typeof STAGE_FLOW)[number];
 
 function StageProgress({ stage }: { stage: string | null }) {
   // paused / abort는 별도 표시
   const isPaused = stage === "paused";
   const isAbort = stage === "abort";
-  const currentIdx = STAGE_FLOW.indexOf(stage as FlowStage);
+  // exploration(잔존 후보)은 스크리닝 직전으로 간주
+  const effective = stage === "exploration" ? "screening" : stage;
+  const currentIdx = STAGE_FLOW.indexOf(effective as FlowStage);
 
   return (
     <div className="dg-progress">
