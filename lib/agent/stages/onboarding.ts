@@ -253,19 +253,10 @@ function toStageResult(out: OnboardingToolInput, ctx: StageContext): StageResult
     state_update.meta = { ...(state_update.meta ?? {}), onboarding_complete_at: new Date().toISOString() };
   }
 
-  // 배민ID + 차량번호 둘 다 수신된 직후엔 AI 응답("곧 만남장소 안내드릴게요")을 생략한다 —
-  // 시스템이 곧이어 만남장소 안내(buildVenueGuideText)를 자동 발송하므로 그게 응답을 겸한다.
-  // (exploration→screening / screening→onboarding 패턴과 동일)
-  const onb = state_update.onboarding;
-  const venueAboutToFire =
-    onb?.배민_아이디_수신 === true &&
-    onb?.차량번호_수신 === true &&
-    onb?.만남장소_안내발송됨 !== true;
-
-  const reply_text = venueAboutToFire ? null : out.reply_text;
-
+  // 배민ID + 차량번호 둘 다 수신되면 AI가 "감사합니다, 곧 다시 연락드리겠습니다" 마무리 멘트를
+  // 직접 보낸다 (현 설계). 이후 만남장소 안내·확정은 매니저가 직접 진행하므로 시스템 자동 발송은 없다.
   return {
-    reply_text,
+    reply_text: out.reply_text,
     state_update,
     transition,
     reasoning: out.reasoning,

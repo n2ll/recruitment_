@@ -297,36 +297,9 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     }
   }
 
-  // ─── 후처리: onboarding 단계에서 배민ID + 차량번호 둘 다 수신 시 만남장소 자동 발송 ───
-  // (transition.kind 무관하게 검사 — stay 중 인입에서 둘 다 도착 케이스가 가장 흔함)
-  const mergedForCheck = mergeAgentState(state_update, extraStateUpdate);
-  const onb = mergedForCheck.onboarding;
-  if (
-    (current_stage === "onboarding" || nextStage === "onboarding") &&
-    onb?.배민_아이디_수신 === true &&
-    onb?.차량번호_수신 === true &&
-    onb?.만남장소_안내발송됨 !== true
-  ) {
-    try {
-      const venueSent = await sendVenueGuide({
-        supabase,
-        applicant_id,
-        applicant_name,
-        applicant_phone,
-        job_id,
-        job,
-      });
-      if (venueSent) {
-        autoSent++;
-        extraStateUpdate = mergeAgentState(extraStateUpdate, {
-          onboarding: { 만남장소_안내발송됨: true },
-          meta: { venue_sent_at: now },
-        });
-      }
-    } catch (e) {
-      console.error("[transitions] venue guide auto-send failed", e);
-    }
-  }
+  // 배민ID + 차량번호 둘 다 수신 시 만남장소 자동 발송은 제거됨.
+  // 현 설계: AI는 "감사합니다, 곧 다시 연락드리겠습니다" 마무리 + 슬랙 '온보딩 준비 완료'까지만,
+  // 이후 만남장소 안내·확정은 매니저가 직접 진행한다.
 
   // job_candidates 갱신
   const merged = mergeAgentState(state_update, extraStateUpdate);

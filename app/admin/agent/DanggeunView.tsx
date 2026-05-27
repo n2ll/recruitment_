@@ -311,6 +311,25 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     if (!newBranch && branches.length > 0) setNewBranch(branches[0]);
   }, [branches, newBranch]);
 
+  // ── 대화창 로드 ────────────────────────────────────────
+  // silent=true: 로딩 스피너 안 띄우고 조용히 데이터만 갱신 (발송 직후 reasoning/배지 매핑용)
+  const fetchMessages = useCallback(async (id: number, opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setMsgLoading(true);
+    try {
+      const res = await fetch(`/api/admin/messages/${id}`, { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok) {
+        setMessages(Array.isArray(json.messages) ? json.messages : []);
+        setAgentStage(json.agent_stage ?? null);
+        setAgentState((json.agent_state ?? {}) as AgentState);
+      }
+    } catch (e) {
+      console.error("[danggeun messages error]", e);
+    } finally {
+      if (!opts.silent) setMsgLoading(false);
+    }
+  }, []);
+
   // ── Realtime ──────────────────────────────────────────
   useEffect(() => {
     const supabase = getBrowserClient();
@@ -354,35 +373,23 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "job_candidates" },
-        () => {
-          // Realtime이 잡은 job_candidates 변경은 stage badge만 갱신 — 로딩 스피너 X
+        (payload) => {
+          // Realtime이 잡은 job_candidates 변경 — 사이드바 목록 갱신 (로딩 스피너 X)
           fetchCandidates({ silent: true });
+          // 열려있는 후보의 변경이면 단계/체크리스트 배지도 다시 fetch.
+          // (실 지원자 답장 → AI 자동 진행 시 fetchMessages가 안 불려 배지가 얼어붙던 버그 수정)
+          const row = payload.new as { applicant_id?: number } | null;
+          const currentId = selectedIdRef.current;
+          if (currentId != null && row?.applicant_id === currentId) {
+            fetchMessages(currentId, { silent: true });
+          }
         }
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchCandidates, cfg.source]);
-
-  // ── 대화창 로드 ────────────────────────────────────────
-  // silent=true: 로딩 스피너 안 띄우고 조용히 데이터만 갱신 (발송 직후 reasoning 매핑용)
-  const fetchMessages = useCallback(async (id: number, opts: { silent?: boolean } = {}) => {
-    if (!opts.silent) setMsgLoading(true);
-    try {
-      const res = await fetch(`/api/admin/messages/${id}`, { cache: "no-store" });
-      const json = await res.json();
-      if (res.ok) {
-        setMessages(Array.isArray(json.messages) ? json.messages : []);
-        setAgentStage(json.agent_stage ?? null);
-        setAgentState((json.agent_state ?? {}) as AgentState);
-      }
-    } catch (e) {
-      console.error("[danggeun messages error]", e);
-    } finally {
-      if (!opts.silent) setMsgLoading(false);
-    }
-  }, []);
+  }, [fetchCandidates, fetchMessages, cfg.source]);
 
   useEffect(() => {
     if (selectedId == null) {
