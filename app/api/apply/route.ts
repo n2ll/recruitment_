@@ -242,7 +242,14 @@ export async function POST(req: NextRequest) {
           job_id: danggeunJobId,
           applicant_id: inserted.id,
           agent_stage: "screening", // 탐색은 base 능력, 프로세스는 스크리닝부터
-          agent_state: {},
+          agent_state: {
+            screening: {
+              프로모션_종료가능성_안내: true,
+              정산주기_안내: true,
+              업무시간_체계_이해: true,
+            },
+            meta: { screening_entered_at: new Date().toISOString() },
+          },
         });
         if (jcErr) {
           console.error("[apply] danggeun job_candidates insert error", jcErr);

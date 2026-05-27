@@ -100,7 +100,15 @@ export async function POST(req: NextRequest) {
         job_id: danggeunJobId,
         applicant_id: inserted.id,
         agent_stage: "screening", // 탐색은 base 능력으로 깔고, 프로세스는 스크리닝부터 시작
-        agent_state: {},
+        // 시작 멘트에 안내 묶음(정산/프로모션/업무시간)이 포함되므로 해당 항목 자동 true
+        agent_state: {
+          screening: {
+            프로모션_종료가능성_안내: true,
+            정산주기_안내: true,
+            업무시간_체계_이해: true,
+          },
+          meta: { screening_entered_at: new Date().toISOString() },
+        },
       });
       if (jcErr) {
         console.error("[danggeun start] job_candidates insert error", jcErr);
