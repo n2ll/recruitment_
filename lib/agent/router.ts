@@ -80,9 +80,8 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   if (!stageName || stageName === "paused" || stageName === "abort") {
     return { ok: true, skipped: `stage=${stageName ?? "null"} — agent skipped` };
   }
-  // onboarding은 stage 모듈을 호출해 체크리스트(배민 아이디·차량번호) 갱신은 진행하되,
-  // AI 응답 발송은 매니저 인계 정책에 따라 차단한다. transitions의 자동 발송(만남장소 등)은 그대로.
-  const blockReplyForStage = stageName === "onboarding";
+  // onboarding도 AI가 응답한다 — 배민 아이디·차량번호 수집 후 "감사합니다 곧 연락드리겠습니다" 마무리.
+  const blockReplyForStage = false;
 
   const stage = STAGES[stageName];
   if (!stage) {

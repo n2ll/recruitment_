@@ -11,26 +11,26 @@ const SLACK_ENABLED = process.env.SLACK_NOTIFICATIONS_ENABLED === "1";
  * 지원자 확정(screening → onboarding 전이) 시 슬랙 알림.
  * 라인명(공고 제목) + 지원자 이름 + 전화번호 + 매니저 정보.
  */
-export async function sendSlackConfirmedAlert(data: {
+// 온보딩 준비 완료 — 배민 아이디 + 차량번호 둘 다 수신된 시점.
+// 이름 / 근무지점 / 근무시간대 + 수집된 아이디·차량번호.
+export async function sendSlackOnboardingReady(data: {
   applicant_name: string | null;
   applicant_phone: string;
   branch: string | null;
   work_hours: string | null;
-  site_manager_name?: string | null;
 }) {
-  // 스크리닝 통과 → 온보딩 직전 알림은 SLACK_WEBHOOK_URL만 있으면 무조건 발송
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 
   const name = data.applicant_name || "(이름 없음)";
-  const sm = data.site_manager_name ? `\n> *현장 매니저:* ${data.site_manager_name}` : "";
 
   const message = {
     text:
-      `:white_check_mark: *스크리닝 통과 — 온보딩 진입*\n` +
+      `:tada: *온보딩 준비 완료 — 매니저 확인 요망*\n` +
       `> *이름:* ${name} (${data.applicant_phone})\n` +
       `> *근무지점:* ${data.branch || "-"}\n` +
-      `> *근무시간대:* ${data.work_hours || "-"}${sm}`,
+      `> *근무시간대:* ${data.work_hours || "-"}\n` +
+      `배민 아이디·차량번호 수신 완료. 만남장소 안내·확정 처리 부탁드립니다.`,
   };
 
   try {
@@ -40,7 +40,7 @@ export async function sendSlackConfirmedAlert(data: {
       body: JSON.stringify(message),
     });
   } catch (e) {
-    console.error("[slack confirmed alert]", e);
+    console.error("[slack onboarding ready]", e);
   }
 }
 

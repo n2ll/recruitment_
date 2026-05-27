@@ -9,7 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendNotification } from "../solapi";
-import { sendSlackConfirmedAlert, sendSlackPausedAlert } from "../slack";
+import { sendSlackPausedAlert } from "../slack";
 import { getSystemMessage, fillTemplate } from "./system-messages";
 import { mergeAgentState } from "./checklist";
 import type { AgentState, JobContext, ScreeningChecklist, StageName, StageTransition } from "./types";
@@ -206,29 +206,8 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .update({ status: "확정" })
           .eq("id", applicant_id);
 
-        // 슬랙 알림 — 스크리닝 통과 → 온보딩 진입: 이름 / 근무지점 / 근무시간대
-        try {
-          let smName: string | null = null;
-          if (job?.site_manager_id) {
-            const { data: sm } = await supabase
-              .from("site_managers")
-              .select("name")
-              .eq("id", job.site_manager_id)
-              .maybeSingle();
-            smName = (sm?.name as string | null) ?? null;
-          }
-          if (!simulate) {
-            await sendSlackConfirmedAlert({
-              applicant_name,
-              applicant_phone,
-              branch: applicant_branch ?? job?.branch ?? null,
-              work_hours: applicant_work_hours ?? null,
-              site_manager_name: smName,
-            });
-          }
-        } catch (e) {
-          console.error("[transitions] slack confirmed alert failed", e);
-        }
+        // (온보딩 진입 슬랙은 제거 — '온보딩 준비 완료'(아이디·차량번호 수신) 시점에
+        //  onboarding stage에서 발송한다.)
 
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         try {

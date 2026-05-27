@@ -717,7 +717,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
 
               {agentStage === "onboarding" && (
                 <div className="dg-banner dg-banner-info">
-                  🛑 <b>온보딩 진입 — AI 자동 응답 OFF.</b> 매니저가 직접 응대해주세요. (시스템 자동 안내는 그대로 발송됩니다)
+                  📦 <b>온보딩 — AI가 배민 아이디·차량번호 수집 중.</b> 둘 다 받으면 "곧 연락드리겠습니다"로 마무리 + 슬랙에 '온보딩 준비 완료' 알림이 갑니다.
                 </div>
               )}
               {agentStage === "paused" && (
