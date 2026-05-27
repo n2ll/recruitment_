@@ -238,6 +238,8 @@ export async function POST(req: NextRequest) {
     if (inserted.source === "danggeun") {
       try {
         const danggeunJobId = await ensureDanggeunSystemJob(supabase);
+        // 희망시간대에 '주말'이 없으면 평일 슬롯 → 공휴일 업무 확인 자동 통과
+        const isWeekendSlot = String(inserted.work_hours ?? "").includes("주말");
         const { error: jcErr } = await supabase.from("job_candidates").insert({
           job_id: danggeunJobId,
           applicant_id: inserted.id,
@@ -247,6 +249,7 @@ export async function POST(req: NextRequest) {
               프로모션_종료가능성_안내: true,
               정산주기_안내: true,
               업무시간_체계_이해: true,
+              ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
             },
             meta: { screening_entered_at: new Date().toISOString() },
           },

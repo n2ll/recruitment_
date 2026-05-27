@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
             프로모션_종료가능성_안내: true,
             정산주기_안내: true,
             업무시간_체계_이해: true,
+            공휴일_업무여부_확인: true, // 연습용은 슬롯 미상 → 평일 간주, 공휴일 자동 통과
           },
           meta: { screening_entered_at: new Date().toISOString() },
         },
