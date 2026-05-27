@@ -74,6 +74,7 @@ interface Candidate {
   last_message_at: string | null;
   unread_count: number;
   agent_stage: string | null;
+  work_hours: string | null;
 }
 
 interface Message {
@@ -194,6 +195,20 @@ function timeAgo(iso: string | null): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
   return d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+}
+
+// 희망 근무 시간대 축약 — "평일(월~금) 오전 타임 (08:00~13:00), 주말..." → "평일오전, 주말오후"
+function shortWorkHours(wh: string | null): string {
+  if (!wh || wh === "미확인") return "";
+  const parts = wh.split(",").map((s) => s.trim()).filter(Boolean);
+  const out = parts
+    .map((p) => {
+      const day = p.includes("주말") ? "주말" : p.includes("평일") ? "평일" : "";
+      const time = p.includes("오전") ? "오전" : p.includes("오후") ? "오후" : "";
+      return day + time;
+    })
+    .filter(Boolean);
+  return Array.from(new Set(out)).join(", ");
 }
 
 export default function DanggeunView({ branches, mode = "live" }: DanggeunViewProps) {
@@ -732,6 +747,12 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                       <span>{formatPhone(c.phone)}</span>
                       <span>·</span>
                       <span>{c.branch ?? "-"}</span>
+                      {shortWorkHours(c.work_hours) && (
+                        <>
+                          <span>·</span>
+                          <span className="dg-list-slot">🕑 {shortWorkHours(c.work_hours)}</span>
+                        </>
+                      )}
                       {c.last_message_at && (
                         <>
                           <span>·</span>
@@ -1289,7 +1310,8 @@ const css = `
   .dg-list-active { background: #FFFBEB !important; border-color: #F5C518; }
   .dg-list-row { display: flex; align-items: center; gap: 6px; }
   .dg-list-name { font-weight: 600; font-size: 13px; color: #111827; flex: 1; }
-  .dg-list-meta { font-size: 11px; color: #6b7280; display: flex; gap: 4px; align-items: center; }
+  .dg-list-meta { font-size: 11px; color: #6b7280; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .dg-list-slot { color: #92650A; font-weight: 600; }
   .dg-badge {
     background: #ef4444;
     color: #fff;

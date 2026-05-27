@@ -41,7 +41,7 @@ const SOURCE_OPTIONS = [
 function normalizeSource(raw: string | null): string {
   const known = SOURCE_OPTIONS.map((s) => s.value);
   if (raw && known.includes(raw)) return raw;
-  return "direct";
+  return "danggeun"; // 당근이 메인 유입 채널 — URL에 source 없으면 기본 당근
 }
 
 const KAKAO_CHANNEL_URL =
