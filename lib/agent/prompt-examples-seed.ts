@@ -169,8 +169,9 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
     category: "system_message",
     sort_order: 10,
     title: "danggeun_start",
-    body: `안녕하세요! 당근에서 연락드린 옹고잉 매니저입니다 :)
-비마트 배송 지원 문의 주셔서 감사합니다. 궁금하신 점 편하게 말씀 주세요!`,
+    body: `안녕하세요 {{지점}} {{시간대}} 지원해 주신 {{이름}}님, 지원해 주셔서 감사합니다!
+진행 전 확인이 필요한 사항이 있어 연락드렸어요 :)
+편하게 답장 주시면 순서대로 안내드릴게요.`,
   },
   {
     category: "system_message",

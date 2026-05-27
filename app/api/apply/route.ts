@@ -3,7 +3,23 @@ import { createServiceClient } from "@/lib/supabase";
 import { sendNotification, sendSms } from "@/lib/solapi";
 import { geocodeAddress } from "@/lib/kakao-geocode";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
-import { getSystemMessage } from "@/lib/agent/system-messages";
+import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
+
+// 희망 근무 시간대 축약 — "평일(월~금) 오전 타임..., 주말..." → "평일오전, 주말오후"
+function shortWorkHours(wh: string | null | undefined): string {
+  if (!wh || wh === "미확인") return "";
+  const out = wh
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const day = p.includes("주말") ? "주말" : p.includes("평일") ? "평일" : "";
+      const time = p.includes("오전") ? "오전" : p.includes("오후") ? "오후" : "";
+      return day + time;
+    })
+    .filter(Boolean);
+  return Array.from(new Set(out)).join(", ");
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -149,7 +165,12 @@ export async function POST(req: NextRequest) {
       if (inserted.source === "danggeun") {
         const danggeunStart = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
         if (danggeunStart) {
-          sendBody = danggeunStart;
+          // 시작 멘트 {{이름}}/{{지점}}/{{시간대}} 치환
+          sendBody = fillTemplate(danggeunStart, {
+            이름: inserted.name,
+            지점: inserted.branch ?? "",
+            시간대: shortWorkHours(inserted.work_hours),
+          });
           sentByLabel = "danggeun-start";
           useTemplate = "danggeun";
         } else {
@@ -220,7 +241,7 @@ export async function POST(req: NextRequest) {
         const { error: jcErr } = await supabase.from("job_candidates").insert({
           job_id: danggeunJobId,
           applicant_id: inserted.id,
-          agent_stage: "exploration",
+          agent_stage: "screening", // 탐색은 base 능력, 프로세스는 스크리닝부터
           agent_state: {},
         });
         if (jcErr) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { sendSms } from "@/lib/solapi";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { fillTemplate } from "@/lib/agent/system-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -69,8 +70,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 시작 멘트 placeholder 치환 — {{이름}}/{{지점}}/{{시간대}}
+    const filledStart = fillTemplate(startMessage.trim(), {
+      이름: name.trim(),
+      지점: branch1,
+      시간대: "", // 수동 등록은 희망 시간대 미상
+    });
+
     // 시작 멘트 SMS 발송
-    const sendResult = await sendSms(normalizedPhone, startMessage.trim());
+    const sendResult = await sendSms(normalizedPhone, filledStart);
     if (!sendResult.success) {
       console.error("[danggeun start send error]", sendResult.error);
       return NextResponse.json(
@@ -91,7 +99,7 @@ export async function POST(req: NextRequest) {
       const { error: jcErr } = await supabase.from("job_candidates").insert({
         job_id: danggeunJobId,
         applicant_id: inserted.id,
-        agent_stage: "exploration",
+        agent_stage: "screening", // 탐색은 base 능력으로 깔고, 프로세스는 스크리닝부터 시작
         agent_state: {},
       });
       if (jcErr) {
@@ -106,7 +114,7 @@ export async function POST(req: NextRequest) {
       applicant_id: inserted.id,
       applicant_phone: normalizedPhone,
       direction: "outbound",
-      body: startMessage.trim(),
+      body: filledStart,
       status: "sent",
       sent_by: "danggeun-start",
       solapi_msg_id: sendResult.messageId || null,

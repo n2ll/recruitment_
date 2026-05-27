@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { fillTemplate } from "@/lib/agent/system-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
       const { error: jcErr } = await supabase.from("job_candidates").insert({
         job_id: danggeunJobId,
         applicant_id: inserted.id,
-        agent_stage: "exploration",
+        agent_stage: "screening", // 스크리닝부터 시작
         agent_state: {},
       });
       if (jcErr) {
@@ -88,12 +89,17 @@ export async function POST(req: NextRequest) {
       console.error("[danggeun-practice] system job ensure failed", e);
     }
 
-    // 시작 멘트를 messages에 outbound로 기록만 (실 SMS X)
+    // 시작 멘트 placeholder 치환 + messages에 outbound 기록만 (실 SMS X)
+    const filledStart = fillTemplate(startMessage.trim(), {
+      이름: name.trim(),
+      지점: branch1,
+      시간대: "",
+    });
     await supabase.from("messages").insert({
       applicant_id: inserted.id,
       applicant_phone: normalizedPhone,
       direction: "outbound",
-      body: startMessage.trim(),
+      body: filledStart,
       status: "sent",
       sent_by: "danggeun-practice-start",
       job_id: jobIdForMsg,
