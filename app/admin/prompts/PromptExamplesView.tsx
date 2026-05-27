@@ -26,10 +26,10 @@ interface PromptExample {
 }
 
 const CATEGORY_LABELS: Record<Category, string> = {
-  conversation: "대화 톤",
-  screening: "스크리닝 운영 문구",
-  facts: "운영 정보",
-  system_message: "시스템 발송 문구",
+  conversation: "[AI 참고용] 대화 톤",
+  screening: "[AI 참고용] 스크리닝 운영 문구",
+  facts: "[AI 참고용] 운영 정보",
+  system_message: "자동 발송 메시지",
 };
 
 const CATEGORY_DESC: Record<Category, string> = {
