@@ -865,13 +865,15 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                     </div>
                   ))
                 )}
-                {sending && cfg.practice && (
-                  <div className="dg-msg dg-msg-in dg-typing">
+                {sending && (
+                  <div className={`dg-msg ${cfg.practice ? "dg-msg-in" : "dg-msg-out"} dg-typing`}>
                     <div className="dg-msg-bubble dg-typing-bubble">
                       <span className="dg-typing-dot" />
                       <span className="dg-typing-dot" />
                       <span className="dg-typing-dot" />
-                      <span className="dg-typing-text">AI 응답 생성 중...</span>
+                      <span className="dg-typing-text">
+                        {cfg.practice ? "AI 응답 생성 중..." : "전송 중..."}
+                      </span>
                     </div>
                   </div>
                 )}
