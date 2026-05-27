@@ -5,12 +5,30 @@
 -- 본문에 {{이름}}을 쓰면 발송 시 지원자 이름으로 치환됨.
 -- 제목(title)은 시스템이 찾는 고정 키 — 바꾸지 말 것.
 
--- 1) 당근 시작 멘트 (스크리닝 진입 인사 — {{지점}}/{{시간대}}/{{이름}} 치환)
+-- 1) 당근 시작 멘트 (스크리닝 진입 인사 + 안내 묶음 — {{지점}}/{{시간대}}/{{이름}} 치환)
 INSERT INTO prompt_examples (category, title, body, sort_order)
 SELECT 'system_message', 'danggeun_start', $body$안녕하세요 {{지점}} {{시간대}} 지원해 주신 {{이름}}님, 지원해 주셔서 감사합니다!
-진행 전 확인이 필요한 사항이 있어 연락드렸어요 :)
-편하게 답장 주시면 순서대로 안내드릴게요.$body$, 10
+진행 전 몇 가지 안내드릴게요.
+
+1) 업무시간은 배차 시간 기준입니다.
+   08:00 첫 배차 / 16:00 마지막 배차이고, 배송 시간은 별도로 산정됩니다.
+2) 정산은 건당 금액이 매주, 프로모션 비용은 2주 간격으로 진행됩니다.
+3) 프로모션 5천원 비용은 1~2개월 후 종료될 수 있는 점 참고 부탁드려요.
+
+읽어보시고 괜찮으시면 몇 가지만 짧게 여쭤볼게요^^$body$, 10
 WHERE NOT EXISTS (SELECT 1 FROM prompt_examples WHERE category='system_message' AND title='danggeun_start');
+
+-- (이미 danggeun_start가 있는 경우 본문을 새 버전으로 덮어쓰려면 아래 UPDATE 실행)
+-- UPDATE prompt_examples SET body = $body$안녕하세요 {{지점}} {{시간대}} 지원해 주신 {{이름}}님, 지원해 주셔서 감사합니다!
+-- 진행 전 몇 가지 안내드릴게요.
+--
+-- 1) 업무시간은 배차 시간 기준입니다.
+--    08:00 첫 배차 / 16:00 마지막 배차이고, 배송 시간은 별도로 산정됩니다.
+-- 2) 정산은 건당 금액이 매주, 프로모션 비용은 2주 간격으로 진행됩니다.
+-- 3) 프로모션 5천원 비용은 1~2개월 후 종료될 수 있는 점 참고 부탁드려요.
+--
+-- 읽어보시고 괜찮으시면 몇 가지만 짧게 여쭤볼게요^^$body$
+-- WHERE category='system_message' AND title='danggeun_start';
 
 -- 2) apply 폼 접수 안내
 INSERT INTO prompt_examples (category, title, body, sort_order)
