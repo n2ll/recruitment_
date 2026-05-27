@@ -260,6 +260,9 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   // ── 모달 ──────────────────────────────────────────────
   const [showNewModal, setShowNewModal] = useState(false);
 
+  // ── 연습 데이터 초기화 (practice 모드 전용) ──────────
+  const [resetting, setResetting] = useState(false);
+
   // ── 초기 로드 ─────────────────────────────────────────
   // 시작 멘트(danggeun_start)는 클로드 조련하기 > 자동 발송 메시지에서 관리.
   // 여기선 등록 검증·발송용으로 읽기만 한다.
@@ -447,6 +450,31 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   };
 
   // ── 추천 받기 (live 모드 전용) ────────────────────────
+  const handleResetPractice = async () => {
+    if (!confirm("연습 데이터(연습용 후보·대화)를 전부 삭제합니다.\n라이브 당근 데이터는 안 건드립니다. 진행할까요?")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await fetch("/api/admin/agent/danggeun-practice/reset", {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "초기화 실패");
+        return;
+      }
+      setSelectedId(null);
+      setMessages([]);
+      await fetchCandidates();
+      alert(`${json.deleted}명 삭제됨. 깨끗하게 초기화되었습니다.`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "초기화 실패");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleRecommend = async () => {
     if (!recommendMemo.trim()) {
       alert("공고 메모를 입력해주세요. (예: 강북미아 평일오전 자차)");
@@ -611,6 +639,15 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
               onClick={() => setShowRecommendModal(true)}
             >
               ⭐ 추천 받기
+            </button>
+          )}
+          {cfg.practice && (
+            <button
+              className="dg-btn dg-btn-ghost-bordered"
+              onClick={handleResetPractice}
+              disabled={resetting}
+            >
+              {resetting ? "초기화 중..." : "🗑 연습 데이터 초기화"}
             </button>
           )}
           <button className="dg-btn-ghost" onClick={() => fetchCandidates()} disabled={listLoading}>
