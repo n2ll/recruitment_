@@ -324,6 +324,17 @@ function toStageResult(out: ScreeningToolInput, ctx: StageContext): StageResult 
       break;
   }
 
+  // 자동 advance 가드: abort/pause가 아닌데 8항목이 모두 true면 AI가 stay여도 온보딩으로 전이.
+  // (마지막 항목이 채워진 턴에서 AI가 advance를 놓쳐 screening에 멈추는 것 방지)
+  if (
+    out.transition !== "abort" &&
+    out.transition !== "pause" &&
+    transition.kind !== "advance" &&
+    isComplete(state_update, "screening")
+  ) {
+    transition = { kind: "advance", to: "onboarding", reason: "체크리스트 8항목 완료 — 자동 전이" };
+  }
+
   // advance 시: AI 응답("그럼 온보딩 절차로 안내드릴게요" 식) 발송 생략 →
   // 시스템 자동 GUIDE(앱설치/교육 안내)가 곧바로 발송되며 그게 응답을 겸함.
   // (exploration → screening 전환과 동일한 패턴)
