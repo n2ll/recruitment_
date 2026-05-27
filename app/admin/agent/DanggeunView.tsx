@@ -3,7 +3,7 @@
 /**
  * 당근마켓구인 — source='danggeun' 후보 관리 + 실 발송/저장.
  *
- * 상단 툴바: 시작 멘트 설정 / 새 당근 후보 / 새로고침
+ * 상단 툴바: 새 당근 후보 / 추천 받기 / 새로고침 (시작 멘트는 클로드 조련하기에서 관리)
  * 메인: 좌(후보 목록) + 우(대화창)
  * 모달: 시작 멘트 편집, 새 후보 등록
  *
@@ -216,11 +216,8 @@ function shortWorkHours(wh: string | null): string {
 
 export default function DanggeunView({ branches, mode = "live" }: DanggeunViewProps) {
   const cfg = MODE_CONFIG[mode];
-  const STORAGE_KEY = cfg.storageKey;
-  // ── 시작 멘트 ──────────────────────────────────────────
+  // ── 시작 멘트 (편집은 클로드 조련하기에서. 여기선 등록 검증·발송용으로 읽기만) ──
   const [startMsg, setStartMsg] = useState("");
-  const [startMsgDraft, setStartMsgDraft] = useState("");
-  const [startMsgSaving, setStartMsgSaving] = useState(false);
   const [startMsgLoaded, setStartMsgLoaded] = useState(false);
 
   // ── 새 후보 폼 ──────────────────────────────────────────
@@ -261,61 +258,22 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── 모달 ──────────────────────────────────────────────
-  const [showStartMsgModal, setShowStartMsgModal] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
 
   // ── 초기 로드 ─────────────────────────────────────────
-  // 시작 멘트는 이제 prompt_examples(system_message/danggeun_start)에 저장.
-  // 매니저 + apply route(서버 측)가 동일 출처 사용.
-  // 기존 localStorage 데이터가 있으면 한 번만 DB로 마이그레이션.
+  // 시작 멘트(danggeun_start)는 클로드 조련하기 > 자동 발송 메시지에서 관리.
+  // 여기선 등록 검증·발송용으로 읽기만 한다.
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(
-          "/api/admin/prompt-examples?category=system_message",
-          { cache: "no-store" }
-        );
-        const json = await res.json();
+    fetch("/api/admin/prompt-examples?category=system_message", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
         const items = Array.isArray(json.data) ? json.data : [];
         const dbRow = items.find((it: { title?: string }) => it.title === "danggeun_start");
-        let saved: string = dbRow?.body ?? "";
-
-        // 1회용 마이그레이션: localStorage에 있던 멘트를 DB로 옮김
-        if (!saved) {
-          let legacy = "";
-          try {
-            legacy = localStorage.getItem(STORAGE_KEY) ?? "";
-            if (!legacy) {
-              legacy = localStorage.getItem("danggeun_practice_start_message_v1") ?? "";
-            }
-          } catch { /* ignore */ }
-          if (legacy.trim()) {
-            await fetch("/api/admin/prompt-examples", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                category: "system_message",
-                title: "danggeun_start",
-                body: legacy,
-              }),
-            });
-            saved = legacy;
-            try {
-              localStorage.removeItem(STORAGE_KEY);
-              localStorage.removeItem("danggeun_practice_start_message_v1");
-            } catch { /* ignore */ }
-          }
-        }
-
-        setStartMsg(saved);
-        setStartMsgDraft(saved);
-      } catch (e) {
-        console.error("[danggeun start msg load]", e);
-      } finally {
-        setStartMsgLoaded(true);
-      }
-    })();
-  }, [STORAGE_KEY]);
+        setStartMsg(dbRow?.body ?? "");
+      })
+      .catch((e) => console.error("[danggeun start msg load]", e))
+      .finally(() => setStartMsgLoaded(true));
+  }, []);
 
   const fetchCandidates = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setListLoading(true);
@@ -436,54 +394,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   }, [messages.length]);
 
   // ── 핸들러 ─────────────────────────────────────────────
-  const handleSaveStartMsg = async () => {
-    if (!startMsgDraft.trim()) {
-      alert("시작 멘트를 입력해주세요.");
-      return;
-    }
-    setStartMsgSaving(true);
-    try {
-      // 기존 row 있으면 PUT, 없으면 POST
-      const listRes = await fetch(
-        "/api/admin/prompt-examples?category=system_message",
-        { cache: "no-store" }
-      );
-      const listJson = await listRes.json();
-      const items = Array.isArray(listJson.data) ? listJson.data : [];
-      const existing = items.find((it: { title?: string; id?: number }) => it.title === "danggeun_start");
-
-      let res: Response;
-      if (existing?.id) {
-        res = await fetch(`/api/admin/prompt-examples/${existing.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: startMsgDraft }),
-        });
-      } else {
-        res = await fetch("/api/admin/prompt-examples", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: "system_message",
-            title: "danggeun_start",
-            body: startMsgDraft,
-          }),
-        });
-      }
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "저장 실패");
-      }
-      setStartMsg(startMsgDraft);
-      alert("시작 멘트가 저장되었습니다. (모든 매니저·apply route 공유)");
-      setShowStartMsgModal(false);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패");
-    } finally {
-      setStartMsgSaving(false);
-    }
-  };
-
   const handleStart = async () => {
     if (!newName.trim() || !newPhone.trim() || !newBranch) {
       alert("이름, 전화번호, 지점은 필수입니다.");
@@ -672,8 +582,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
     [candidates, selectedId]
   );
 
-  const startMsgDirty = startMsgDraft !== startMsg;
-
   // ── 렌더 ───────────────────────────────────────────────
   return (
     <div className="content" style={{ display: "flex", flexDirection: "column", gap: 12, height: "calc(100vh - 60px)", boxSizing: "border-box" }}>
@@ -689,12 +597,11 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
           <span className="dg-help">{cfg.helpLine}</span>
         </div>
         <div className="dg-toolbar-actions">
-          <button
-            className={`dg-btn ${startMsg ? "dg-btn-ghost-bordered" : "dg-btn-warn"}`}
-            onClick={() => setShowStartMsgModal(true)}
-          >
-            {startMsg ? "시작 멘트 ✓" : "시작 멘트 설정 필요"}
-          </button>
+          {startMsgLoaded && !startMsg && (
+            <span className="dg-btn dg-btn-warn" style={{ cursor: "default" }}>
+              ⚠ 시작 멘트 미설정 — 클로드 조련하기에서 설정
+            </span>
+          )}
           <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
             {cfg.newCandidateLabel}
           </button>
@@ -958,50 +865,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
         </main>
       </div>
 
-      {/* 모달: 시작 멘트 */}
-      {showStartMsgModal && (
-        <div className="dg-modal-bg" onClick={() => !startMsgSaving && setShowStartMsgModal(false)}>
-          <div className="dg-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="dg-modal-head">
-              <h3 className="dg-modal-title">당근 시작 멘트</h3>
-              <button className="dg-btn-ghost" onClick={() => setShowStartMsgModal(false)}>
-                ×
-              </button>
-            </div>
-            <p className="dg-modal-desc">
-              새 당근 후보 등록 시 + apply 폼 source='danggeun' 지원자에게 자동 발송되는 첫 메시지. DB(system_message)에 저장 — 모든 매니저 공유.
-            </p>
-            <textarea
-              className="dg-textarea"
-              rows={8}
-              placeholder="예) 안녕하세요. 당근에서 연락드린 옹고잉 매니저입니다..."
-              value={startMsgDraft}
-              onChange={(e) => setStartMsgDraft(e.target.value)}
-              disabled={!startMsgLoaded}
-            />
-            <div className="dg-modal-actions">
-              <button
-                className="dg-btn dg-btn-ghost-bordered"
-                onClick={() => {
-                  setStartMsgDraft(startMsg);
-                  setShowStartMsgModal(false);
-                }}
-                disabled={startMsgSaving}
-              >
-                취소
-              </button>
-              <button
-                className="dg-btn dg-btn-primary"
-                onClick={handleSaveStartMsg}
-                disabled={startMsgSaving || !startMsgDirty}
-              >
-                {startMsgSaving ? "저장 중..." : "저장"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 모달: 새 후보 등록 */}
       {showNewModal && (
         <div className="dg-modal-bg" onClick={() => !submitting && setShowNewModal(false)}>
@@ -1015,7 +878,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
             <p className="dg-modal-desc">{cfg.newCandidateNote}</p>
             {!startMsg && (
               <div className="dg-warn">
-                ⚠ 시작 멘트가 아직 저장되지 않았습니다. 먼저 우측 상단에서 시작 멘트를 설정해주세요.
+                ⚠ 시작 멘트가 아직 없습니다. [클로드 조련하기 → 자동 발송 메시지]에서 danggeun_start를 먼저 설정해주세요.
               </div>
             )}
             <div className="dg-field">
