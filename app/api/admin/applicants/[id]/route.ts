@@ -3,17 +3,18 @@ import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
+// 매니저가 수정 가능한 모든 컬럼 (시스템 컬럼: id/created_at/churned_at/last_message_at/
+// unread_count/lat/lng/sido/sigungu/bname/road_address/marketing_consent_at 등은 제외).
 const ALLOWED_FIELDS = new Set([
-  "status",
-  "confirmed_slot",
-  "confirmed_branch",
-  "current_branch",
-  "start_date",
-  "churn_reason",
-  "screening",
-  "note",
-  "marketing_consent",
-  "kakao_channel_friend",
+  "name", "phone", "birth_date", "location",
+  "own_vehicle", "license_type", "vehicle_type",
+  "branch1", "branch2", "branch",
+  "work_hours", "available_date", "self_ownership",
+  "introduction", "experience",
+  "source", "status", "filter_pass", "note",
+  "start_date", "confirmed_slot", "confirmed_branch", "current_branch",
+  "churn_reason", "screening",
+  "marketing_consent", "kakao_channel_friend",
 ]);
 
 const VALID_STATUS = new Set([

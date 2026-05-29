@@ -8,6 +8,7 @@ import DanggeunView from "./agent/DanggeunView";
 import PromptExamplesView from "./prompts/PromptExamplesView";
 import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
+import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
 
 interface Applicant {
   id: number;
@@ -180,6 +181,10 @@ export default function AdminPage() {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // 지원자 추가/편집 모달
+  const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
+  const [modalInitial, setModalInitial] = useState<ApplicantFormValue | null>(null);
 
   // 문자 대화 관련 state
   const [chatApplicant, setChatApplicant] = useState<Applicant | null>(null);
@@ -994,9 +999,9 @@ export default function AdminPage() {
     deployed: data.filter((a) => a.status === "확정").length,
   };
 
-  const activeBranchNames = branches.filter((b) => b.active).map((b) => b.name);
+  // 지점 on/off는 /apply(공개 폼)에만 영향. 매니저용 admin 화면은 모든 지점 노출.
   const allBranchNames = branches.map((b) => b.name);
-  const branchStats = activeBranchNames.map((b) => ({
+  const branchStats = allBranchNames.map((b) => ({
     name: b,
     total: data.filter((a) => a.branch === b).length,
     pass: data.filter((a) => a.branch === b && a.filter_pass === "Y").length,
@@ -1187,10 +1192,18 @@ export default function AdminPage() {
             </div>
           ) : tab === "applicants" ? (
             <div className="content">
-              <h2 className="page-title">지원자 목록 <span className="count">{filtered.length}명</span></h2>
+              <div className="applicants-head">
+                <h2 className="page-title">지원자 목록 <span className="count">{filtered.length}명</span></h2>
+                <button
+                  className="add-applicant-btn"
+                  onClick={() => { setModalInitial(null); setModalMode("create"); }}
+                >
+                  + 지원자 추가
+                </button>
+              </div>
               <div className="filters">
                 <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-                  {["전체", ...activeBranchNames].map((b) => <option key={b}>{b}</option>)}
+                  {["전체", ...allBranchNames].map((b) => <option key={b}>{b}</option>)}
                 </select>
                 <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   {["전체", ...ALL_STATUSES].map((s) => <option key={s}>{s}</option>)}
@@ -1248,6 +1261,12 @@ export default function AdminPage() {
                       {hasChanges && <span className="dirty-tag">변경됨</span>}
                     </h3>
                     <div className="detail-actions">
+                      <button
+                        className="cancel-btn"
+                        onClick={() => { setModalInitial(selected as ApplicantFormValue); setModalMode("edit"); }}
+                      >
+                        ✏️ 전체 편집
+                      </button>
                       <button
                         className="cancel-btn"
                         onClick={cancelEdits}
@@ -1387,7 +1406,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeBranchNames.map((b) => {
+                    {allBranchNames.map((b) => {
                       const rowTotal = data.filter(
                         (a) =>
                           a.filter_pass === "Y" &&
@@ -1506,7 +1525,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {branches.filter((b) => b.active).map((branch) => {
+                    {branches.map((branch) => {
                       const b = branch.name;
                       return (
                       <tr key={b}>
@@ -1968,15 +1987,15 @@ export default function AdminPage() {
               )}
             </div>
           ) : tab === "site-managers" ? (
-            <SiteManagersView branches={activeBranchNames} />
+            <SiteManagersView branches={allBranchNames} />
           ) : tab === "agent" ? (
-            <AgentJobsView branches={activeBranchNames} />
+            <AgentJobsView branches={allBranchNames} />
           ) : tab === "playground" ? (
-            <PlaygroundView branches={activeBranchNames} />
+            <PlaygroundView branches={allBranchNames} />
           ) : tab === "danggeun" ? (
-            <DanggeunView branches={activeBranchNames} mode="live" />
+            <DanggeunView branches={allBranchNames} mode="live" />
           ) : tab === "danggeun-practice" ? (
-            <DanggeunView branches={activeBranchNames} mode="practice" />
+            <DanggeunView branches={allBranchNames} mode="practice" />
           ) : tab === "klod" ? (
             <PromptExamplesView />
           ) : tab === "contact" ? (
@@ -1986,7 +2005,7 @@ export default function AdminPage() {
 
               <div className="filters">
                 <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-                  {["전체", ...activeBranchNames].map((b) => <option key={b}>{b}</option>)}
+                  {["전체", ...allBranchNames].map((b) => <option key={b}>{b}</option>)}
                 </select>
                 <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
@@ -2155,6 +2174,17 @@ export default function AdminPage() {
           )}
         </main>
       </div>
+
+      {modalMode && (
+        <ApplicantFormModal
+          mode={modalMode}
+          initial={modalInitial}
+          branches={allBranchNames}
+          allBranches={allBranchNames}
+          onClose={() => { setModalMode(null); setModalInitial(null); }}
+          onSaved={() => { fetchData(); }}
+        />
+      )}
     </>
   );
 }
@@ -2270,6 +2300,17 @@ const css = `
   .page-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
   .page-desc { font-size: 13px; color: #6b7280; margin: -16px 0 24px; }
   .count { font-size: 14px; font-weight: 500; color: #9ca3af; margin-left: 8px; }
+  .applicants-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .applicants-head .page-title { margin-bottom: 0; }
+  .add-applicant-btn {
+    background: #1F2937; color: #fff; border: none; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .add-applicant-btn:hover { background: #111827; }
 
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 32px; }
   .stat-card {
