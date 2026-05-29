@@ -86,7 +86,7 @@ export async function sendSlackPausedAlert(data: {
 }
 
 /**
- * 온보딩 리마인더 발송 후에도 3h 내 회신 없음 — 매니저가 전화 인계 필요.
+ * 온보딩 가이드 발송 후 24h 미회신 — 매니저가 전화로 직접 확인 필요.
  */
 export async function sendSlackOnboardingHandoff(data: {
   applicant_name: string | null;
@@ -103,7 +103,7 @@ export async function sendSlackOnboardingHandoff(data: {
     text:
       `:telephone_receiver: *매니저 전화 인계 필요 — 온보딩 미회신*${branchTag}\n` +
       `> *지원자:* ${name} (${data.applicant_phone})\n` +
-      `리마인더 발송 후 3시간 내 회신이 없습니다. 직접 전화로 확인 부탁드립니다.`,
+      `가이드 발송 후 24시간 내 배민 아이디·차량번호 회신이 없습니다. 직접 전화로 확인 부탁드립니다.`,
   };
 
   try {
