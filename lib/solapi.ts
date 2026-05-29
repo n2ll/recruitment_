@@ -95,7 +95,6 @@ export async function sendAlimtalk(
 
 export type TemplateKey =
   | "APPLY_RECEIVED"
-  | "REMINDER"
   | "CONFIRM"
   | "WAIT"
   | "ATTENDANCE"
