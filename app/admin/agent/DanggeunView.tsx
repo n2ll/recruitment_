@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
+import { sentByLabel } from "./sent-by-label";
 
 interface DanggeunViewProps {
   branches: string[];
@@ -144,21 +145,35 @@ function stageBadge(stage: string | null) {
 const STAGE_FLOW = ["screening", "onboarding", "active"] as const;
 type FlowStage = (typeof STAGE_FLOW)[number];
 
-function StageProgress({ stage }: { stage: string | null }) {
+function StageProgress({
+  stage,
+  onStageClick,
+}: {
+  stage: string | null;
+  onStageClick?: (target: FlowStage) => void;
+}) {
   // paused / abort는 별도 표시
   const isPaused = stage === "paused";
   const isAbort = stage === "abort";
   // exploration(잔존 후보)은 스크리닝 직전으로 간주
   const effective = stage === "exploration" ? "screening" : stage;
   const currentIdx = STAGE_FLOW.indexOf(effective as FlowStage);
+  const clickable = !!onStageClick && !isAbort; // abort 상태에선 단계 변경 불가
 
   return (
     <div className="dg-progress">
       {STAGE_FLOW.map((s, i) => {
         const done = currentIdx > i;
         const current = currentIdx === i;
+        const isClickable = clickable && !current;
         return (
-          <div key={s} className="dg-progress-step">
+          <div
+            key={s}
+            className={`dg-progress-step ${isClickable ? "dg-progress-step-clickable" : ""}`}
+            onClick={isClickable ? () => onStageClick(s) : undefined}
+            role={isClickable ? "button" : undefined}
+            title={isClickable ? `'${STAGE_LABEL[s]}' 단계로 이동` : undefined}
+          >
             <div
               className={`dg-progress-node ${done ? "dg-node-done" : current ? "dg-node-current" : "dg-node-pending"}`}
             >
@@ -749,15 +764,77 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                     {selectedCandidate.status ?? "-"}
                   </div>
                 </div>
-                <button
-                  className="dg-btn-ghost"
-                  onClick={() => selectedId != null && fetchMessages(selectedId)}
-                >
-                  새로고침
-                </button>
+                <div className="dg-conv-actions">
+                  {(agentStage === "screening" || agentStage === "onboarding" || agentStage === "active") && (
+                    <button
+                      className="dg-btn-pause"
+                      onClick={async () => {
+                        if (selectedId == null) return;
+                        if (
+                          !confirm(
+                            "AI 응답을 일시정지합니다.\n\n• 이 후보가 보내는 새 메시지에 AI가 답하지 않습니다.\n• 매니저가 직접 답변하세요.\n• 재개하려면 '▶ AI 응답 재개' 버튼을 누르세요.\n\n진행할까요?"
+                          )
+                        ) {
+                          return;
+                        }
+                        try {
+                          const res = await fetch("/api/admin/agent/pause", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ applicant_id: selectedId }),
+                          });
+                          const json = await res.json();
+                          if (!res.ok) {
+                            alert(json.error || "일시정지 실패");
+                            return;
+                          }
+                          await fetchMessages(selectedId, { silent: true });
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : "일시정지 실패");
+                        }
+                      }}
+                    >
+                      ⏸ AI 일시정지
+                    </button>
+                  )}
+                  <button
+                    className="dg-btn-ghost"
+                    onClick={() => selectedId != null && fetchMessages(selectedId)}
+                  >
+                    새로고침
+                  </button>
+                </div>
               </header>
 
-              <StageProgress stage={agentStage} />
+              <StageProgress
+                stage={agentStage}
+                onStageClick={async (target) => {
+                  if (selectedId == null) return;
+                  const targetLabel = STAGE_LABEL[target];
+                  const note =
+                    target === "screening"
+                      ? "스크리닝부터 다시 진행합니다."
+                      : target === "onboarding"
+                      ? "스크리닝을 완료한 것으로 처리하고 온보딩 단계로 넘어갑니다. (앱설치 안내 자동 발송)"
+                      : "스크리닝·온보딩을 완료한 것으로 처리하고 근무중으로 넘어갑니다. (첫 출근 룰 자동 발송)";
+                  if (!confirm(`'${targetLabel}' 단계로 변경합니다.\n\n${note}\n\n진행할까요?`)) return;
+                  try {
+                    const res = await fetch("/api/admin/agent/set-stage", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ applicant_id: selectedId, target_stage: target }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) {
+                      alert(json.error || "단계 변경 실패");
+                      return;
+                    }
+                    await fetchMessages(selectedId, { silent: true });
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : "단계 변경 실패");
+                  }
+                }}
+              />
 
               {agentStage === "onboarding" && (
                 <div className="dg-banner dg-banner-info">
@@ -861,7 +938,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                         </div>
                       )}
                       <div className="dg-msg-meta">
-                        {m.direction === "outbound" && m.sent_by ? `${m.sent_by} · ` : ""}
+                        {m.direction === "outbound" && m.sent_by ? `${sentByLabel(m.sent_by)} · ` : ""}
                         {new Date(m.created_at).toLocaleString("ko-KR", {
                           month: "2-digit",
                           day: "2-digit",
@@ -1259,6 +1336,19 @@ const css = `
   }
   .dg-conv-name { font-weight: 700; font-size: 14px; color: #111827; }
   .dg-conv-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .dg-conv-actions { display: flex; gap: 6px; }
+  .dg-btn-pause {
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    color: #92400E;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .dg-btn-pause:hover { background: #FDE68A; }
   .dg-conv-body {
     flex: 1;
     overflow-y: auto;
@@ -1417,7 +1507,16 @@ const css = `
     flex: 1;
     position: relative;
   }
-  .dg-progress-step:last-child { flex: 0; }
+  .dg-progress-step:last-child { flex: 0 0 auto; }
+  .dg-progress-step-clickable { cursor: pointer; }
+  .dg-progress-step-clickable:hover .dg-progress-node {
+    transform: scale(1.08);
+    transition: transform 80ms ease-out;
+  }
+  .dg-progress-step-clickable:hover .dg-progress-label {
+    color: #2563EB;
+    text-decoration: underline;
+  }
   .dg-progress-node {
     width: 28px;
     height: 28px;
@@ -1448,6 +1547,7 @@ const css = `
     font-size: 12px;
     color: #9CA3AF;
     font-weight: 500;
+    white-space: nowrap;
   }
   .dg-label-done { color: #065F46; font-weight: 600; }
   .dg-label-current { color: #92650A; font-weight: 700; }

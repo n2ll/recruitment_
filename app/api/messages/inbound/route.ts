@@ -21,7 +21,9 @@ import { createServiceClient } from "@/lib/supabase";
 import { runAgentForCandidate } from "@/lib/agent/router";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+// 답장 텀(최대 45s 슬립) + AI(~5~10s) + 발송 — 60s 안에 마치도록 maxDuration 60.
+// (Vercel Hobby 한도 = 60s. Pro면 더 늘려도 무방.)
+export const maxDuration = 60;
 
 interface InboundPayload {
   from: string;            // 발신 번호 ("010-1234-5678" 또는 "01012345678")
@@ -180,6 +182,7 @@ export async function POST(req: NextRequest) {
     candidate_id: candidateRow.id,
     inbound_message_id: inserted.id,
     inbound_text: text,
+    received_at: receivedAt, // 인입 시각 기준 답장 텀 적용 (router에서 대기)
   });
 
   return NextResponse.json({

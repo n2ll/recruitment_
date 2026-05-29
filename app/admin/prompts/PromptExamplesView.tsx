@@ -4,16 +4,17 @@
  * 톤 가이드 / AI 참고자료 — prompt_examples 테이블 CRUD.
  *
  * 매니저가 자유롭게 추가/수정/삭제. 같은 데이터가 AI 프롬프트에도 자동 주입됨.
- * - conversation: 일반 대화 예시 (모든 stage에 톤 가이드로)
- * - screening: 스크리닝 단계 운영 항목/문구
  * - facts: AI가 사실로 인용 가능한 운영 정보 (지점·시급·정책 등)
+ * - system_message: 시스템 자동 발송 고정 문구
+ * - conversation: 매니저 대화 톤 (백엔드에서만 로드 — UI 노출 안 함)
+ * - screening: (deprecated, 미사용 — DB 행은 무해한 레거시로 남김)
  *
  * categories prop으로 표시 카테고리를 제한 가능 (탭 분리용).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Category = "conversation" | "screening" | "facts" | "system_message";
+type Category = "conversation" | "facts" | "system_message";
 
 interface PromptExample {
   id: number;
@@ -27,7 +28,6 @@ interface PromptExample {
 
 const CATEGORY_LABELS: Record<Category, string> = {
   conversation: "[AI 참고용] 대화 톤",
-  screening: "[AI 참고용] 스크리닝 운영 문구",
   facts: "[AI 참고용] 운영 정보",
   system_message: "자동 발송 메시지",
 };
@@ -35,8 +35,6 @@ const CATEGORY_LABELS: Record<Category, string> = {
 const CATEGORY_DESC: Record<Category, string> = {
   conversation:
     "매니저가 실제로 보낸 메시지 예시. AI가 이 톤·길이·말투를 그대로 모방합니다.",
-  screening:
-    "지원/스크리닝/온보딩 단계의 운영 문구 모음. AI가 톤을 흡수해 자연스럽게 풀어냅니다.",
   facts:
     "AI가 지원자에게 사실로 인용 가능한 운영 정보. 예) '마포상암 — 평일오전 구인중, 시급 15,000원, 픽업 마포구 ...' 형태로 행마다 하나의 사실 단위.",
   system_message:
@@ -59,7 +57,7 @@ interface PromptExamplesViewProps {
 }
 
 export default function PromptExamplesView({
-  categories = ["facts", "screening", "conversation", "system_message"],
+  categories = ["facts", "system_message"],
   pageTitle = "클로드 조련하기",
   pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시 + 사실 정보입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
   showSeed = true,

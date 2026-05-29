@@ -1,8 +1,7 @@
 /**
  * 퓨샷 예시 + 사실 정보 로더 — Supabase `prompt_examples` 테이블에서 동적 로드.
  *
- * - category='conversation' : 일반 대화 톤 (모든 stage)
- * - category='screening'    : 스크리닝 단계 운영 항목/문구
+ * - category='conversation' : 일반 대화 톤 (모든 stage) — 백엔드 전용, UI 비노출
  * - category='facts'        : AI가 사실로 인용 가능한 운영 정보 (지점별 시급/구인 상태/정책 등)
  *
  * 매니저가 admin UI에서 편집하면 다음 캐시 만료(60초) 이후 자동 반영.
@@ -18,7 +17,7 @@ interface CachedCategory {
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, CachedCategory>();
 
-async function fetchCategory(category: "conversation" | "screening" | "facts"): Promise<string> {
+async function fetchCategory(category: "conversation" | "facts"): Promise<string> {
   const cached = cache.get(category);
   if (cached && cached.expiresAt > Date.now()) return cached.text;
 
@@ -51,10 +50,6 @@ export async function loadConversationExamples(): Promise<string> {
   return fetchCategory("conversation");
 }
 
-export async function loadScreeningExamples(): Promise<string> {
-  return fetchCategory("screening");
-}
-
 export async function loadFacts(): Promise<string> {
   return fetchCategory("facts");
 }
@@ -62,9 +57,7 @@ export async function loadFacts(): Promise<string> {
 /**
  * 시스템 프롬프트 끝에 붙일 톤 가이드 블록.
  */
-export async function buildToneGuide(
-  opts: { includeScreening?: boolean } = {}
-): Promise<string> {
+export async function buildToneGuide(): Promise<string> {
   const [conv, facts] = await Promise.all([
     loadConversationExamples(),
     loadFacts(),
@@ -90,17 +83,6 @@ export async function buildToneGuide(
       "여기에 없는 사실(시급·시간대·인근 지하철역·시작일 등)은 추측하지 말고 매니저에게 인계해라.",
       "",
       facts
-    );
-  }
-
-  if (opts.includeScreening) {
-    const screening = await loadScreeningExamples();
-    lines.push(
-      "",
-      "## 스크리닝 운영 항목 원본 (참고)",
-      "체크리스트 항목·자동 발송 본문이 어디서 왔는지 확인용. 그대로 인용보다는 톤을 흡수해 자연스럽게 풀어라.",
-      "",
-      screening
     );
   }
 

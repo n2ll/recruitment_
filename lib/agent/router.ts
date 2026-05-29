@@ -41,7 +41,13 @@ export interface RunAgentInput {
   inbound_text: string;
   /** true면 SOLAPI 발송을 건너뛰고 DB(messages)에만 outbound 기록 — 연습용 빙의 모드에서 사용. */
   simulate?: boolean;
+  /** 인입 SMS 수신 시각(ISO). 제공되면 received_at + REPLY_DELAY까지 대기 후 응답한다.
+   *  '바로 답장' 느낌을 줄이기 위한 인위적 텀. simulate=true나 값 없으면 즉시 응답. */
+  received_at?: string;
 }
+
+const REPLY_DELAY_MS = 60_000;       // 인입 시각 기준 답장 목표 지연 (1분)
+const MAX_REPLY_SLEEP_MS = 45_000;   // 함수 timeout 안전 마진 (Vercel maxDuration ≥ 60s 가정)
 
 export interface RunAgentResult {
   ok: boolean;
@@ -54,7 +60,17 @@ export interface RunAgentResult {
 }
 
 export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAgentResult> {
-  const { supabase, candidate_id, inbound_message_id, inbound_text, simulate = false } = input;
+  const { supabase, candidate_id, inbound_message_id, inbound_text, simulate = false, received_at } = input;
+
+  // 답장 텀 — 인입 시각으로부터 REPLY_DELAY_MS 후를 목표로 대기.
+  // 이미 지났으면 즉시 진행. simulate(연습 빙의)는 매니저 테스트라 텀 없이 즉시.
+  if (!simulate && received_at) {
+    const target = new Date(received_at).getTime() + REPLY_DELAY_MS;
+    const wait = Math.min(MAX_REPLY_SLEEP_MS, target - Date.now());
+    if (wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 
   // 1) job_candidate + 관련 데이터 로드
   const { data: jc, error: jcErr } = await supabase
@@ -82,6 +98,23 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   }
   // onboarding도 AI가 응답한다 — 배민 아이디·차량번호 수집 후 "감사합니다 곧 연락드리겠습니다" 마무리.
   const blockReplyForStage = false;
+
+  // 답장 텀(sleep) 동안 같은 후보가 추가 메시지를 보냈으면, 더 늦은 핸들러가
+  // 모든 메시지를 한꺼번에 history로 보고 한 번에 답한다. 내(현재) 핸들러는 양보하고 종료.
+  // (사용자 메시지가 무시되지 않으면서도 답장이 중복 발송되는 것을 막는다)
+  if (!simulate && received_at) {
+    const { data: newer } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("applicant_id", jc.applicant_id as number)
+      .eq("direction", "inbound")
+      .gt("created_at", received_at)
+      .neq("id", inbound_message_id)
+      .limit(1);
+    if (newer && newer.length > 0) {
+      return { ok: true, skipped: "coalesced — newer inbound will handle" };
+    }
+  }
 
   const stage = STAGES[stageName];
   if (!stage) {

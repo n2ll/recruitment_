@@ -5,7 +5,9 @@ import { PROMPT_EXAMPLES_SEED } from "@/lib/agent/prompt-examples-seed";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["conversation", "screening", "facts", "system_message"] as const;
+// 'screening' 카테고리는 deprecated (시스템 자동 발송 문구로 일원화됨).
+// DB에 남은 레거시 행은 무해 — 더 이상 UI/백엔드에서 읽지 않는다.
+const CATEGORIES = ["conversation", "facts", "system_message"] as const;
 type Category = (typeof CATEGORIES)[number];
 
 function isValidCategory(v: unknown): v is Category {

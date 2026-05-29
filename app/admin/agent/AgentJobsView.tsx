@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import JobCreateModal from "./JobCreateModal";
+import { sentByLabel } from "./sent-by-label";
 import {
   ApplicantSummary,
   CandidateRow,
@@ -913,7 +914,7 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
                 <p>{m.body}</p>
                 {m.reasoning && <div className="ch-reason">🤖 {m.reasoning}</div>}
                 <div className="ch-time">
-                  {m.sent_by && <span>{m.sent_by} · </span>}
+                  {m.sent_by && <span>{sentByLabel(m.sent_by)} · </span>}
                   {new Date(m.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
