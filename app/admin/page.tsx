@@ -1965,8 +1965,12 @@ export default function AdminPage() {
                                   max={99}
                                   value={getSlotCapacity(b, s)}
                                   disabled={branchSaving}
+                                  onFocus={(e) => e.currentTarget.select()}
                                   onChange={(e) => {
-                                    const n = Math.max(0, Math.min(99, Number(e.target.value) || 0));
+                                    // leading-zero('05') 케이스에서도 5가 들어가도록 parseInt 사용 후 clamp.
+                                    const raw = e.target.value;
+                                    const parsed = raw === "" ? 0 : parseInt(raw, 10);
+                                    const n = Math.max(0, Math.min(99, Number.isFinite(parsed) ? parsed : 0));
                                     const prevCap = {
                                       ...DEFAULT_SLOT_CAPACITY,
                                       ...(b.slot_capacity ?? {}),

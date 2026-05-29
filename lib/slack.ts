@@ -86,6 +86,38 @@ export async function sendSlackPausedAlert(data: {
 }
 
 /**
+ * 온보딩 리마인더 발송 후에도 3h 내 회신 없음 — 매니저가 전화 인계 필요.
+ */
+export async function sendSlackOnboardingHandoff(data: {
+  applicant_name: string | null;
+  applicant_phone: string;
+  branch: string | null;
+}) {
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const name = data.applicant_name || "(이름 없음)";
+  const branchTag = data.branch ? ` · ${data.branch}` : "";
+
+  const message = {
+    text:
+      `:telephone_receiver: *매니저 전화 인계 필요 — 온보딩 미회신*${branchTag}\n` +
+      `> *지원자:* ${name} (${data.applicant_phone})\n` +
+      `리마인더 발송 후 3시간 내 회신이 없습니다. 직접 전화로 확인 부탁드립니다.`,
+  };
+
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    });
+  } catch (e) {
+    console.error("[slack onboarding handoff]", e);
+  }
+}
+
+/**
  * AI 에이전트가 답변 못 만들었을 때 — 매니저 직접 응대 필요 알림
  */
 export async function sendSlackAgentAlert(data: {

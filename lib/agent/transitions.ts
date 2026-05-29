@@ -215,7 +215,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
         // 본문 뒤에 발송시각+24h 마감 안내를 자동 부착. 24h 미회신 시 cron으로 리마인더 발송.
         try {
-          const deadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const deadline = roundDeadlineToHour(new Date(Date.now() + 24 * 60 * 60 * 1000));
           const deadlineStr = formatDeadlineKST(deadline);
           const storedGuide = await getSystemMessage(supabase, "onboarding_guide");
           const baseGuide = storedGuide
@@ -410,6 +410,17 @@ async function sendVenueGuide(input: SendVenueGuideInput): Promise<boolean> {
   });
 
   return true;
+}
+
+/** 마감 시각을 정각 단위로 반올림. (30분 이상 → 다음 정각, 미만 → 이전 정각) */
+export function roundDeadlineToHour(d: Date): Date {
+  const min = d.getMinutes();
+  const out = new Date(d);
+  if (min >= 30) {
+    out.setHours(out.getHours() + 1);
+  }
+  out.setMinutes(0, 0, 0);
+  return out;
 }
 
 /** 마감시각 표기 — KST 기준 "M월 D일 오전/오후 H시(분)" */
