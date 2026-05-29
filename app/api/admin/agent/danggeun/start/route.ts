@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         vehicle_type: PLACEHOLDER,
         work_hours: PLACEHOLDER,
         introduction: targetJobInfo?.trim() || "당근 수동등록",
-        status: "서류심사",
+        status: "스크리닝",
         filter_pass: null,
         note: targetJobInfo?.trim() ? `당근 수동등록 — 공고: ${targetJobInfo.trim().slice(0, 80)}` : "당근 수동등록",
       })

@@ -148,6 +148,18 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
   },
   {
     category: "system_message",
+    sort_order: 45,
+    title: "onboarding_reminder",
+    body: `{{이름}}님, 아직 배민 아이디·차량번호 회신이 확인되지 않습니다.
+
+진행을 위해 두 정보 모두 회신 부탁드립니다.
+1. 배민 커넥트 아이디 (마이페이지 > 내 정보)
+2. 차량번호
+
+* 회신이 없을 경우 진행이 자동 중단될 수 있습니다.`,
+  },
+  {
+    category: "system_message",
     sort_order: 50,
     title: "first_day_rules",
     body: `{{이름}}님 안녕하세요? 첫 근무 관련 안내사항 전달드립니다!

@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { applyTransition } from "@/lib/agent/transitions";
-import { SCREENING_KEYS, ONBOARDING_KEYS } from "@/lib/agent/checklist";
+import { SCREENING_KEYS, ONBOARDING_KEYS, mergeAgentState } from "@/lib/agent/checklist";
 import type {
   AgentState,
   JobContext,
@@ -91,7 +91,6 @@ export async function POST(req: NextRequest) {
       stateUpdate.onboarding = onboardingAllTrue;
     }
 
-    // applyTransition으로 자연스러운 advance 부수효과(자동 발송·status 업데이트 등)를 그대로 태움
     const applicant = jc.applicants as unknown as {
       id: number; name: string | null; phone: string;
       branch1: string | null; work_hours: string | null; source: string | null;
@@ -99,6 +98,32 @@ export async function POST(req: NextRequest) {
     const job = (jc.jobs ?? null) as unknown as JobContext | null;
     const simulate = applicant.source === "danggeun_practice";
 
+    // '확정'(active)으로 수동 전환 시엔 자동 발송·부수효과 없이 stage/체크리스트/status만 갱신.
+    // (첫 출근 룰 등은 매니저가 별도로 진행)
+    if (targetStage === "active") {
+      const prev = (jc.agent_state ?? {}) as AgentState;
+      const merged = mergeAgentState(prev, stateUpdate);
+      const { error: upErr } = await supabase
+        .from("job_candidates")
+        .update({ agent_stage: "active", agent_state: merged })
+        .eq("id", jc.id);
+      if (upErr) {
+        console.error("[agent/set-stage] active update error", upErr);
+        return NextResponse.json({ error: upErr.message }, { status: 500 });
+      }
+      await supabase
+        .from("applicants")
+        .update({ status: "확정" })
+        .eq("id", applicant.id);
+      return NextResponse.json({
+        ok: true,
+        from_stage: currentStage,
+        to_stage: "active",
+        auto_sent_messages: 0,
+      });
+    }
+
+    // screening / onboarding 전환은 기존대로 applyTransition을 태워 자동 발송·status 업데이트 포함.
     const apply = await applyTransition({
       supabase,
       candidate_id: jc.id as number,

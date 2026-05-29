@@ -23,7 +23,6 @@ interface FormData {
   branch1: string;
   branch2: string;
   workHours: string[];
-  introduction: string;
   experience: string;
   availableDate: string;
   selfOwnership: string;
@@ -176,7 +175,7 @@ function ApplyPage() {
     name: "", birthDate: "", phone: "", location: "",
     ownVehicle: "", licenseType: "", vehicleType: "",
     branch1: branchParam, branch2: "",
-    workHours: [], introduction: "", experience: "",
+    workHours: [], experience: "",
     availableDate: "", selfOwnership: "",
     source: defaultSource,
     marketingConsent: true,
@@ -239,9 +238,6 @@ function ApplyPage() {
     if (!form.vehicleType.trim()) e.vehicleType = "차종을 입력해주세요";
     if (!form.branch1) e.branch1 = "희망 근무 지점을 선택해주세요";
     if (form.workHours.length === 0) e.workHours = "희망 근무 시간대를 하나 이상 선택해주세요";
-    if (!form.introduction.trim()) {
-      e.introduction = "자기소개를 작성해주세요";
-    }
     if (!form.availableDate) e.availableDate = "업무 시작 가능일을 선택해주세요";
     if (!form.selfOwnership) e.selfOwnership = "본인 명의 여부를 선택해주세요";
     if (form.selfOwnership === "문제 있음 (지원불가)") {
@@ -509,24 +505,10 @@ function ApplyPage() {
 
           <div className="divider" />
 
-          {/* 05 자기소개 */}
+          {/* 05 경력 */}
           <section className="section">
             <div className="section-header">
               <span className="section-num">05</span>
-              <h3 className="section-title">자기소개 및 지원동기 <span className="req">*</span></h3>
-            </div>
-            <p className="section-desc">경력, 강점 등을 상세하게 작성해주세요.</p>
-            <textarea className={`textarea ${errors.introduction ? "input-err" : ""}`}
-              placeholder="자유롭게 작성해주세요." rows={5}
-              value={form.introduction}
-              onChange={(e) => set("introduction")(e.target.value)} />
-            {errors.introduction && <p className="error-msg">{errors.introduction}</p>}
-          </section>
-
-          {/* 06 경력 */}
-          <section className="section" style={{ marginTop: 24 }}>
-            <div className="section-header">
-              <span className="section-num">06</span>
               <h3 className="section-title">배달 업무 관련 경력</h3>
             </div>
             <p className="section-desc">없으시면 비워두셔도 됩니다.</p>
@@ -538,10 +520,10 @@ function ApplyPage() {
 
           <div className="divider" />
 
-          {/* 07 추가 확인 사항 */}
+          {/* 06 추가 확인 사항 */}
           <section className="section">
             <div className="section-header">
-              <span className="section-num">07</span>
+              <span className="section-num">06</span>
               <h3 className="section-title">추가 확인 사항</h3>
             </div>
 

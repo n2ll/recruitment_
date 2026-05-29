@@ -22,7 +22,7 @@ interface Applicant {
   branch1: string;
   branch2: string | null;
   work_hours: string;
-  introduction: string;
+  introduction: string | null;
   experience: string | null;
   available_date: string;
   self_ownership: string;
@@ -98,15 +98,15 @@ interface RecommendResponse {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  서류심사: "#6b7280",
-  "스크리닝 완료": "#f59e0b",
+  스크리닝: "#6b7280",
+  온보딩: "#f59e0b",
   확정: "#10b981",
   이탈: "#475569",
   부적합: "#ef4444",
 };
 
 const ALL_STATUSES = [
-  "서류심사", "스크리닝 완료", "확정", "이탈", "부적합",
+  "스크리닝", "온보딩", "확정", "이탈", "부적합",
 ];
 
 interface Branch {
@@ -144,7 +144,7 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
-const ACTIVE_STATUSES = ["서류심사", "스크리닝 완료", "확정"];
+const ACTIVE_STATUSES = ["스크리닝", "온보딩", "확정"];
 const CONFIRMED_STATUSES = ["확정"];
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
@@ -180,7 +180,6 @@ export default function AdminPage() {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [sending, setSending] = useState<number | null>(null);
 
   // 문자 대화 관련 state
   const [chatApplicant, setChatApplicant] = useState<Applicant | null>(null);
@@ -982,31 +981,6 @@ export default function AdminPage() {
     return true;
   });
 
-  const screeningList = data.filter((a) => a.filter_pass === "Y" && a.status === "서류심사");
-
-  const handleScreening = async (id: number) => {
-    if (!confirm("스크리닝 완료 처리하고 문자를 발송하시겠습니까?")) return;
-    setSending(id);
-    try {
-      const res = await fetch("/api/admin/screening", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert("문자 발송 완료!");
-        fetchData();
-      } else {
-        alert("실패: " + (json.error || "알 수 없는 오류"));
-      }
-    } catch {
-      alert("오류가 발생했습니다.");
-    } finally {
-      setSending(null);
-    }
-  };
-
   const stats = {
     total: data.length,
     today: data.filter((a) => {
@@ -1015,8 +989,8 @@ export default function AdminPage() {
       return d.toDateString() === today.toDateString();
     }).length,
     filterPass: data.filter((a) => a.filter_pass === "Y").length,
-    screening: screeningList.length,
-    onboarding: data.filter((a) => a.status === "스크리닝 완료").length,
+    screening: data.filter((a) => a.filter_pass === "Y" && a.status === "스크리닝").length,
+    onboarding: data.filter((a) => a.status === "온보딩").length,
     deployed: data.filter((a) => a.status === "확정").length,
   };
 
@@ -1026,7 +1000,7 @@ export default function AdminPage() {
     name: b,
     total: data.filter((a) => a.branch === b).length,
     pass: data.filter((a) => a.branch === b && a.filter_pass === "Y").length,
-    screening: data.filter((a) => a.branch === b && a.status === "서류심사").length,
+    screening: data.filter((a) => a.branch === b && a.status === "스크리닝").length,
   }));
 
   const selected = data.find((a) => a.id === selectedId);
@@ -1186,8 +1160,8 @@ export default function AdminPage() {
                 <div className="stat-card"><div className="stat-num">{stats.total}</div><div className="stat-label">전체 지원자</div></div>
                 <div className="stat-card accent"><div className="stat-num">{stats.today}</div><div className="stat-label">오늘 지원</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.filterPass}</div><div className="stat-label">필터 통과</div></div>
-                <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝 대기</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">스크리닝 완료</div></div>
+                <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">온보딩</div></div>
                 <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">확정</div></div>
               </div>
 
@@ -1195,7 +1169,7 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>지점</th><th>전체</th><th>필터 통과</th><th>스크리닝 대기</th><th>통과율</th></tr>
+                    <tr><th>지점</th><th>전체</th><th>필터 통과</th><th>스크리닝</th><th>통과율</th></tr>
                   </thead>
                   <tbody>
                     {branchStats.map((b) => (
@@ -1227,12 +1201,10 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th><th>액션</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
-                    {filtered.map((a) => {
-                      const canScreen = a.filter_pass === "Y" && a.status === "서류심사";
-                      return (
+                    {filtered.map((a) => (
                       <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
                         <td className="td-bold">
                           <span className="name-link" onClick={(e) => { e.stopPropagation(); openChat(a); }}>{a.name}</span>
@@ -1246,20 +1218,8 @@ export default function AdminPage() {
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{sourceLabel(a.source)}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
-                        <td>
-                          {canScreen && (
-                            <button
-                              className={`row-action-btn ${sending === a.id ? "row-action-loading" : ""}`}
-                              onClick={(e) => { e.stopPropagation(); handleScreening(a.id); }}
-                              disabled={sending === a.id}
-                            >
-                              {sending === a.id ? "발송 중..." : "1차 스크리닝 완료"}
-                            </button>
-                          )}
-                        </td>
                       </tr>
-                      );
-                    })}
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1318,17 +1278,34 @@ export default function AdminPage() {
                         {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </label>
-                    <label className="edit-field">
-                      <span className="dl">확정 슬롯</span>
-                      <select
-                        className="edit-select"
-                        value={(draftVal("confirmed_slot") as string) || ""}
-                        onChange={(e) => setDraft("confirmed_slot", e.target.value || null)}
-                      >
-                        <option value="">—</option>
-                        {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </label>
+                    <div className="edit-field edit-field-wide">
+                      <span className="dl">확정 슬롯 (복수 선택)</span>
+                      <div className="slot-toggle-row">
+                        {(() => {
+                          const raw = (draftVal("confirmed_slot") as string) || "";
+                          const selected = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+                          return SLOTS.map((s) => {
+                            const on = selected.has(s);
+                            return (
+                              <button
+                                key={s}
+                                type="button"
+                                className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
+                                onClick={() => {
+                                  const next = new Set(selected);
+                                  if (on) next.delete(s); else next.add(s);
+                                  // 입력 순서를 유지하기 위해 SLOTS 기준으로 재정렬
+                                  const joined = SLOTS.filter((x) => next.has(x)).join(",");
+                                  setDraft("confirmed_slot", joined || null);
+                                }}
+                              >
+                                {s}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
                     <label className="edit-field">
                       <span className="dl">확정 지점</span>
                       <select
@@ -1337,17 +1314,6 @@ export default function AdminPage() {
                         onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}
                       >
                         <option value="">—</option>
-                        {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </label>
-                    <label className="edit-field">
-                      <span className="dl">현재 근무 지점</span>
-                      <select
-                        className="edit-select"
-                        value={(draftVal("current_branch") as string) || ""}
-                        onChange={(e) => setDraft("current_branch", e.target.value || null)}
-                      >
-                        <option value="">— (비근무)</option>
                         {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </label>
@@ -1386,10 +1352,12 @@ export default function AdminPage() {
                     <div><span className="dl">본인명의</span>{selected.self_ownership}</div>
                     <div><span className="dl">필터</span>{selected.filter_pass === "Y" ? "통과" : "탈락"}</div>
                   </div>
-                  <div className="detail-section">
-                    <span className="dl">자기소개</span>
-                    <p className="detail-text">{selected.introduction}</p>
-                  </div>
+                  {selected.introduction && (
+                    <div className="detail-section">
+                      <span className="dl">자기소개</span>
+                      <p className="detail-text">{selected.introduction}</p>
+                    </div>
+                  )}
                   {selected.experience && (
                     <div className="detail-section">
                       <span className="dl">경력</span>
@@ -1548,7 +1516,7 @@ export default function AdminPage() {
                           const confirmed = data.filter(
                             (a) =>
                               a.status === "확정" &&
-                              a.confirmed_slot === s &&
+                              (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(s) &&
                               a.confirmed_branch === b
                           ).length;
                           const cellClass =
@@ -1576,7 +1544,7 @@ export default function AdminPage() {
               {slotCell && (() => {
                 const list = data.filter(
                   (a) =>
-                    a.confirmed_slot === slotCell.slot &&
+                    (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(slotCell.slot) &&
                     a.confirmed_branch === slotCell.branch &&
                     a.status === "확정"
                 );
@@ -2395,6 +2363,16 @@ const css = `
   }
   .edit-field { display: flex; flex-direction: column; gap: 6px; }
   .edit-field-wide { grid-column: 1 / -1; }
+  .slot-toggle-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .slot-toggle {
+    padding: 6px 12px; border: 1.5px solid #E8E8E0; border-radius: 99px;
+    font-size: 12px; font-family: inherit; background: #fff; cursor: pointer; color: #6b7280;
+  }
+  .slot-toggle:hover { border-color: #9CA3AF; color: #111827; }
+  .slot-toggle-on {
+    background: #1F2937; color: #fff; border-color: #1F2937; font-weight: 600;
+  }
+  .slot-toggle-on:hover { color: #fff; }
   .edit-select {
     padding: 8px 10px; border: 1.5px solid #E8E8E0; border-radius: 8px;
     font-size: 13px; font-family: inherit; background: #fff; outline: none;

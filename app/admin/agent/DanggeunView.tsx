@@ -118,7 +118,7 @@ const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
   screening: "스크리닝",
   onboarding: "온보딩",
-  active: "근무중",
+  active: "확정",
   paused: "매니저 인계",
   abort: "중단",
 };
@@ -816,7 +816,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
                       ? "스크리닝부터 다시 진행합니다."
                       : target === "onboarding"
                       ? "스크리닝을 완료한 것으로 처리하고 온보딩 단계로 넘어갑니다. (앱설치 안내 자동 발송)"
-                      : "스크리닝·온보딩을 완료한 것으로 처리하고 근무중으로 넘어갑니다. (첫 출근 룰 자동 발송)";
+                      : "스크리닝·온보딩을 완료한 것으로 처리하고 확정 단계로 넘어갑니다. (자동 발송 없음)";
                   if (!confirm(`'${targetLabel}' 단계로 변경합니다.\n\n${note}\n\n진행할까요?`)) return;
                   try {
                     const res = await fetch("/api/admin/agent/set-stage", {

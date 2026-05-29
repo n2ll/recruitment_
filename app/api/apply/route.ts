@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // ── 필수 필드 검증 ─────────────────────────────────────
+    // (introduction은 더 이상 폼 필수 아님 — 옵션 컬럼으로 처리)
     if (
       !name?.trim() ||
       !/^\d{6}$/.test(birthDate) ||
@@ -55,7 +56,6 @@ export async function POST(req: NextRequest) {
       !vehicleType?.trim() ||
       !branch1 ||
       !workHours?.length ||
-      !introduction?.trim() ||
       !availableDate ||
       !selfOwnership
     ) {
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       VALID_LICENSES.includes(licenseType) &&
       selfOwnership === "문제 없음";
 
-    const autoStatus = filterPass ? "서류심사" : "부적합";
+    const autoStatus = filterPass ? "스크리닝" : "부적합";
 
     // ── 주소 지오코딩 (실패해도 저장 진행) ─────────────────
     const geo = location?.trim() ? await geocodeAddress(location) : null;
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
         branch1,
         branch2: branch2 || null,
         work_hours: Array.isArray(workHours) ? workHours.join(", ") : workHours,
-        introduction,
+        introduction: introduction?.trim() || null,
         experience: experience || null,
         available_date: availableDate,
         self_ownership: selfOwnership,

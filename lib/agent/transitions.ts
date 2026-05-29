@@ -192,10 +192,13 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           screening: autoTrue,
           meta: { screening_entered_at: now },
         };
+
+        // applicants.status를 단계명과 통일 — '스크리닝'
+        await supabase.from("applicants").update({ status: "스크리닝" }).eq("id", applicant_id);
       }
 
       if (transition.to === "onboarding") {
-        // screening → onboarding: 확정 처리 + 앱·교육 안내 자동 발송
+        // screening → onboarding: 앱·교육 안내 자동 발송 + applicants.status='온보딩'
         // (별도 "확정 안내" 메시지는 보내지 않음 — AI의 마지막 응답 + 가이드 본문이 그 역할 대신)
         await supabase
           .from("job_candidates")
@@ -203,18 +206,25 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .eq("id", candidate_id);
         await supabase
           .from("applicants")
-          .update({ status: "확정" })
+          .update({ status: "온보딩" })
           .eq("id", applicant_id);
 
         // (온보딩 진입 슬랙은 제거 — '온보딩 준비 완료'(아이디·차량번호 수신) 시점에
         //  onboarding stage에서 발송한다.)
 
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
+        // 본문 뒤에 발송시각+24h 마감 안내를 자동 부착. 24h 미회신 시 cron으로 리마인더 발송.
         try {
+          const deadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const deadlineStr = formatDeadlineKST(deadline);
           const storedGuide = await getSystemMessage(supabase, "onboarding_guide");
-          const guideText = storedGuide
-            ? fillTemplate(storedGuide, { 이름: applicant_name ?? "지원자" })
+          const baseGuide = storedGuide
+            ? fillTemplate(storedGuide, { 이름: applicant_name ?? "지원자", 마감시각: deadlineStr })
             : buildOnboardingGuideText(applicant_name);
+          // 본문에 {{마감시각}} placeholder가 없거나 치환 후에도 deadlineStr이 보이지 않으면 끝에 자동 부착.
+          const guideText = baseGuide.includes(deadlineStr)
+            ? baseGuide
+            : `${baseGuide}\n\n⏰ ${deadlineStr}까지 아이디와 차량번호를 반드시 회신해주세요.`;
           if (await isAlreadySentRecently(guideText)) {
             // 이미 발송됨 — 중복 방지
           } else {
@@ -252,14 +262,14 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       }
 
       if (transition.to === "active") {
-        // onboarding → active: 근무 시작
+        // onboarding → active: 근무 시작 + status='확정'
         await supabase
           .from("job_candidates")
           .update({ activated_at: now })
           .eq("id", candidate_id);
         await supabase
           .from("applicants")
-          .update({ current_branch: null /* 라우터에서 job.branch로 채움 */ })
+          .update({ status: "확정", current_branch: null /* 라우터에서 job.branch로 채움 */ })
           .eq("id", applicant_id);
 
         // 첫 출근 룰 안내 자동 발송 (screening-examples.txt 마지막 단락)
@@ -400,6 +410,26 @@ async function sendVenueGuide(input: SendVenueGuideInput): Promise<boolean> {
   });
 
   return true;
+}
+
+/** 마감시각 표기 — KST 기준 "M월 D일 오전/오후 H시(분)" */
+export function formatDeadlineKST(d: Date): string {
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const m = get("month");
+  const day = get("day");
+  const ap = get("dayPeriod");
+  const h = get("hour");
+  const min = get("minute");
+  const minPart = min === "00" ? "" : ` ${parseInt(min, 10)}분`;
+  return `${m}월 ${day}일 ${ap} ${h}시${minPart}`;
 }
 
 function formatStartDate(iso: string): string {

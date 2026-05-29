@@ -112,7 +112,7 @@ export const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
   screening: "스크리닝",
   onboarding: "온보딩",
-  active: "근무중",
+  active: "확정",
   paused: "일시정지",
   abort: "부적합",
 };

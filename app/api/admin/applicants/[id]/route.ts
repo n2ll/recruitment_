@@ -17,14 +17,21 @@ const ALLOWED_FIELDS = new Set([
 ]);
 
 const VALID_STATUS = new Set([
-  "서류심사",
-  "스크리닝 완료",
+  "스크리닝",
+  "온보딩",
   "확정",
   "이탈",
   "부적합",
 ]);
 
 const VALID_SLOT = new Set(["평일오전", "평일오후", "주말오전", "주말오후"]);
+
+// 콤마로 구분된 confirmed_slot 값 검증 — 각 토큰이 VALID_SLOT에 포함돼야 함.
+function isValidConfirmedSlot(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const tokens = v.split(",").map((t) => t.trim()).filter(Boolean);
+  return tokens.every((t) => VALID_SLOT.has(t));
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -47,7 +54,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    if (key === "confirmed_slot" && value && !VALID_SLOT.has(value as string)) {
+    if (key === "confirmed_slot" && value && !isValidConfirmedSlot(value)) {
       return NextResponse.json(
         { error: `invalid confirmed_slot: ${value}` },
         { status: 400 }
