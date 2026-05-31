@@ -9,6 +9,7 @@ import PromptExamplesView from "./prompts/PromptExamplesView";
 import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
 import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
+import { STAGE_LABEL } from "./agent/types";
 
 interface Applicant {
   id: number;
@@ -41,6 +42,7 @@ interface Applicant {
   current_branch: string | null;
   churned_at: string | null;
   churn_reason: string | null;
+  agent_stage?: string | null;   // GET 응답에 attached (당근마켓구인과 동일 출처)
 }
 
 interface Message {
@@ -1212,7 +1214,7 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>단계 (AI)</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
@@ -1226,6 +1228,7 @@ export default function AdminPage() {
                         <td>{a.own_vehicle}</td>
                         <td>{a.license_type}</td>
                         <td>{a.available_date}</td>
+                        <td>{a.agent_stage ? <span className="stage-pill">{STAGE_LABEL[a.agent_stage] ?? a.agent_stage}</span> : <span className="td-muted">—</span>}</td>
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{sourceLabel(a.source)}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
@@ -2344,7 +2347,13 @@ const css = `
   .row-selected { background: #FFFBEB; }
   .td-bold { font-weight: 600; }
   .td-warn { color: #f59e0b; font-weight: 700; }
+  .td-muted { color: #9CA3AF; font-size: 11px; }
 
+  .stage-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 600; color: #374151; background: #F3F4F6;
+    border: 1px solid #E5E7EB;
+  }
   .status-badge {
     display: inline-block; padding: 2px 8px; border-radius: 6px;
     font-size: 11px; font-weight: 600; color: #fff;
