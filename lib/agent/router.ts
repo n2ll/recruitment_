@@ -158,8 +158,11 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   // 4) 응답 발송 (simulate=true면 SOLAPI 건너뛰고 DB만 기록)
   // advance 전이 시엔 transitions.ts가 안내 묶음(SCREENING_ANNOUNCE/GUIDE 등)을 자동 발송하므로
   // AI가 동시에 reply_text를 넣었어도 중복 방지를 위해 무시한다.
+  // 단, advance.to='active'는 자동 발송이 없어서 AI 마무리 멘트를 그대로 보내야 함.
   const skipReplyDueToAdvance =
-    result.transition.kind === "advance" && !!result.reply_text;
+    result.transition.kind === "advance" &&
+    result.transition.to !== "active" &&
+    !!result.reply_text;
   let replySent = false;
   let outboundId: string | null = null;
   if (result.reply_text && !skipReplyDueToAdvance && !blockReplyForStage) {

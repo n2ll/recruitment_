@@ -43,8 +43,6 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     applicant_id,
     applicant_name,
     applicant_phone,
-    applicant_branch,
-    applicant_work_hours,
     job_id,
     job,
     current_stage,
@@ -262,7 +260,8 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       }
 
       if (transition.to === "active") {
-        // onboarding → active: 근무 시작 + status='확정'
+        // onboarding → active: 확정 처리 (status·timestamp만). 첫 출근 룰 자동 발송은
+        // 이 시점이 아니라 실제 근무 시작 D-day에 별도 cron으로 보내야 정상이므로 여기선 생략.
         await supabase
           .from("job_candidates")
           .update({ activated_at: now })
@@ -271,37 +270,6 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .from("applicants")
           .update({ status: "확정", current_branch: null /* 라우터에서 job.branch로 채움 */ })
           .eq("id", applicant_id);
-
-        // 첫 출근 룰 안내 자동 발송 (screening-examples.txt 마지막 단락)
-        try {
-          const storedRules = await getSystemMessage(supabase, "first_day_rules");
-          const rulesText = storedRules
-            ? fillTemplate(storedRules, { 이름: applicant_name ?? "지원자" })
-            : buildFirstDayRules(applicant_name);
-          const r = await maybeSendNotification(
-            applicant_phone,
-            "ATTENDANCE",
-            { "#{이름}": applicant_name ?? "지원자" },
-            rulesText
-          );
-          if (r.success) {
-            await supabase.from("messages").insert({
-              applicant_id,
-              applicant_phone,
-              direction: "outbound",
-              body: rulesText,
-              status: "sent",
-              sent_by: "system-auto",
-              solapi_msg_id: r.messageId ?? null,
-              message_type: r.via,
-              template_id: r.templateId ?? null,
-              job_id,
-            });
-            autoSent++;
-          }
-        } catch (e) {
-          console.error("[transitions] ATTENDANCE send failed", e);
-        }
       }
       break;
     }
@@ -322,94 +290,6 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
   await supabase.from("job_candidates").update(jcUpdate).eq("id", candidate_id);
 
   return { next_stage: nextStage, auto_sent_messages: autoSent };
-}
-
-// ─────────────────────────────────────────────────────────────
-// 만남장소 자동 발송 (배민ID + 차량번호 둘 다 수신 시점)
-// ─────────────────────────────────────────────────────────────
-
-interface SendVenueGuideInput {
-  supabase: SupabaseClient;
-  applicant_id: number;
-  applicant_name: string | null;
-  applicant_phone: string;
-  job_id: number;
-  job: JobContext | null;
-}
-
-async function sendVenueGuide(input: SendVenueGuideInput): Promise<boolean> {
-  const { supabase, applicant_id, applicant_name, applicant_phone, job_id, job } = input;
-
-  if (!job) {
-    console.warn("[venue-guide] skipped: job 없음", { applicant_id });
-    return false;
-  }
-  if (!job.start_date) {
-    console.warn("[venue-guide] skipped: start_date 없음", { applicant_id, job_id: job.id });
-    return false;
-  }
-  if (!job.pickup_address) {
-    console.warn("[venue-guide] skipped: pickup_address 없음", { applicant_id, job_id: job.id });
-    return false;
-  }
-
-  let smName: string | null = null;
-  let smPhone: string | null = null;
-  if (job.site_manager_id) {
-    const { data: sm } = await supabase
-      .from("site_managers")
-      .select("name, phone")
-      .eq("id", job.site_manager_id)
-      .maybeSingle();
-    smName = (sm?.name as string | null) ?? null;
-    smPhone = (sm?.phone as string | null) ?? null;
-  }
-  if (!smName || !smPhone) {
-    console.warn("[venue-guide] skipped: 현장 매니저 미배정", { applicant_id, job_id: job.id });
-    return false;
-  }
-
-  const text = buildVenueGuideText({
-    name: applicant_name,
-    start_date: job.start_date,
-    pickup_address: job.pickup_address,
-    site_manager_name: smName,
-    site_manager_phone: smPhone,
-  });
-
-  // sendVenueGuide는 onboarding 완료 시점 호출 — 연습 모드에선 도달 안 함
-  const r = await sendNotification(
-    applicant_phone,
-    "VENUE_GUIDE",
-    {
-      "#{이름}": applicant_name ?? "지원자",
-      "#{일시}": formatStartDate(job.start_date),
-      "#{위치}": job.pickup_address,
-      "#{매니저이름}": smName,
-      "#{매니저전화}": smPhone,
-    },
-    text
-  );
-
-  if (!r.success) {
-    console.error("[venue-guide] send failed", r.error);
-    return false;
-  }
-
-  await supabase.from("messages").insert({
-    applicant_id,
-    applicant_phone,
-    direction: "outbound",
-    body: text,
-    status: "sent",
-    sent_by: "system-auto",
-    solapi_msg_id: r.messageId ?? null,
-    message_type: r.via,
-    template_id: r.templateId ?? null,
-    job_id,
-  });
-
-  return true;
 }
 
 /** 마감 시각을 정각 단위로 반올림. (30분 이상 → 다음 정각, 미만 → 이전 정각) */

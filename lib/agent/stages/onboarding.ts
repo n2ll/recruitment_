@@ -199,7 +199,10 @@ onboarding_turn tool로 응답해라.`;
 
       const result = toStageResult(block.input, ctx);
 
-      // 배민 아이디 + 차량번호 둘 다 '이번 턴에 처음' 채워졌으면 온보딩 준비 완료 슬랙.
+      // 배민 아이디 + 차량번호 둘 다 '이번 턴에 처음' 채워진 시점:
+      //  1) 슬랙 '온보딩 준비 완료' 알림
+      //  2) AI가 만든 마무리 멘트("감사합니다 곧 매니저가...")는 그대로 발송
+      //  3) 자동으로 active 단계로 advance → applicants.status='확정' (만남장소 항목은 사용 안 함)
       const before = ctx.state.onboarding ?? {};
       const after = result.state_update.onboarding ?? {};
       const wasReady = !!before.배민_아이디_수신 && !!before.차량번호_수신;
@@ -214,6 +217,14 @@ onboarding_turn tool로 응답해라.`;
           });
         } catch (e) {
           console.error("[onboarding] slack onboarding-ready failed", e);
+        }
+        // 자동 확정 — abort/pause가 아니면 active로 강제 advance.
+        if (result.transition.kind === "stay") {
+          result.transition = {
+            kind: "advance",
+            to: "active",
+            reason: "온보딩 정보 수집 완료 — 자동 확정",
+          };
         }
       }
 
