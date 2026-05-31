@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { geocodeAddress } from "@/lib/kakao-geocode";
 import { sendSms } from "@/lib/solapi";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
 import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
 
 export const dynamic = "force-dynamic";
@@ -136,12 +137,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 당근(또는 연습용 당근) 등록 + status='스크리닝'이면 apply 폼과 동일한 자동 흐름:
-    //  1) danggeun_start 시스템 메시지 fillTemplate 후 SMS 발송 (연습용은 SMS skip, DB 기록만)
-    //  2) 시스템 더미 공고에 job_candidates row 생성 (stage='screening', 자동-true 항목)
-    //  3) messages outbound 기록
+    // 자동 흐름 트리거:
+    //   - 당근/연습용 당근: 시작 멘트 SMS 발송 + job_candidates 생성 (당근은 매니저가 먼저 보냄)
+    //   - 배민: 시작 멘트 SMS 발송 X (지원자가 먼저 보냄) + job_candidates만 생성
+    //   - 기타 source(manual/facebook/naver/direct): 자동 흐름 없음
     const source = data.source as string | null;
     const isDanggeun = source === "danggeun" || source === "danggeun_practice";
+    const isBaemin = source === "baemin";
+    const isWeekendSlot = String(data.work_hours ?? "").includes("주말");
+    const screeningAutoTrue: Record<string, boolean> = {
+      프로모션_종료가능성_안내: true,
+      정산주기_안내: true,
+      업무시간_체계_이해: true,
+      ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
+    };
+
     if (isDanggeun && data.status === "스크리닝") {
       try {
         const startMsg = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
@@ -164,13 +174,6 @@ export async function POST(req: NextRequest) {
           try {
             const jobId = await ensureDanggeunSystemJob(supabase);
             jobIdForMsg = jobId;
-            const isWeekendSlot = String(data.work_hours ?? "").includes("주말");
-            const screeningAutoTrue: Record<string, boolean> = {
-              프로모션_종료가능성_안내: true,
-              정산주기_안내: true,
-              업무시간_체계_이해: true,
-              ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
-            };
             await supabase.from("job_candidates").insert({
               job_id: jobId,
               applicant_id: data.id,
@@ -200,6 +203,25 @@ export async function POST(req: NextRequest) {
         }
       } catch (e) {
         console.error("[applicants POST] danggeun auto flow failed", e);
+      }
+    }
+
+    if (isBaemin && data.status === "스크리닝") {
+      // 배민은 지원자가 먼저 보낸 흐름이라 시작 멘트 발송 없음 — job_candidates만 생성해
+      // 인입 라우터가 다음 답장부터 스크리닝 stage로 처리할 수 있게 한다.
+      try {
+        const jobId = await ensureBaeminSystemJob(supabase);
+        await supabase.from("job_candidates").insert({
+          job_id: jobId,
+          applicant_id: data.id,
+          agent_stage: "screening",
+          agent_state: {
+            screening: screeningAutoTrue,
+            meta: { screening_entered_at: new Date().toISOString() },
+          },
+        });
+      } catch (e) {
+        console.error("[applicants POST] baemin auto flow failed", e);
       }
     }
 

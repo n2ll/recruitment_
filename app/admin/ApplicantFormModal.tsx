@@ -45,7 +45,8 @@ const SELF_OWNERSHIP_OPTIONS = ["문제 없음", "문제 있음 (지원불가)",
 const STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합"];
 const SOURCES: Array<{ value: string; label: string }> = [
   { value: "manual", label: "수기 등록" },
-  { value: "danggeun", label: "당근 (자동 AI 응대)" },
+  { value: "danggeun", label: "당근 (자동 AI 응대 + 시작 멘트 발송)" },
+  { value: "baemin", label: "배민 (자동 AI 응대, 시작 멘트 없음)" },
   { value: "facebook", label: "페이스북" },
   { value: "naver", label: "네이버 검색" },
   { value: "direct", label: "해당없음" },
