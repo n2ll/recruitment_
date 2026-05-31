@@ -10,6 +10,7 @@ import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
 import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
 import { STAGE_LABEL } from "./agent/types";
+import PendingInboxView from "./inbox/PendingInboxView";
 
 interface Applicant {
   id: number;
@@ -66,7 +67,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "klod";
+type Tab = "dashboard" | "applicants" | "contact" | "inbox" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "klod";
 
 interface RecommendResponse {
   success: boolean;
@@ -1057,6 +1058,11 @@ export default function AdminPage() {
             <span className="nav-label">배송원 컨택</span>
             {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
           </button>
+          <button className={`nav-btn ${tab === "inbox" ? "nav-active" : ""}`}
+            onClick={() => setTab("inbox")} title="미분류 인박스">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 10v4a1 1 0 001 1h12a1 1 0 001-1v-4M2 10l3-6h8l3 6M2 10h4l1 2h4l1-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            <span className="nav-label">미분류 인박스</span>
+          </button>
 
           <div className="nav-group-label">매트릭스</div>
           <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
@@ -1998,6 +2004,8 @@ export default function AdminPage() {
             <DanggeunView mode="practice" />
           ) : tab === "klod" ? (
             <PromptExamplesView />
+          ) : tab === "inbox" ? (
+            <PendingInboxView />
           ) : tab === "contact" ? (
             <div className="content">
               <h2 className="page-title">배송원 컨택 <span className="count">{data.filter((a) => a.last_message_at || a.unread_count > 0).length}명</span></h2>

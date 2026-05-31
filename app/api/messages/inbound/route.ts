@@ -19,6 +19,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { runAgentForCandidate } from "@/lib/agent/router";
+import { triageInbound, isHardSpam } from "@/lib/agent/baemin-triage";
+import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
 
 export const dynamic = "force-dynamic";
 // 답장 텀(최대 45s 슬립) + AI(~5~10s) + 발송 — 60s 안에 마치도록 maxDuration 60.
@@ -85,6 +87,190 @@ export async function POST(req: NextRequest) {
     if (dup) {
       return NextResponse.json({ ok: true, dedup: true });
     }
+  }
+
+  // 3.5) 알려지지 않은 phone — 하드 필터 + Haiku triage → 자동 baemin 생성 또는 pending 인박스
+  if (!applicant) {
+    // 하드 필터: 명백한 스팸은 즉시 'other'
+    if (isHardSpam(phone, text)) {
+      const { data: insOther } = await supabase
+        .from("messages")
+        .insert({
+          applicant_phone: phone,
+          direction: "inbound",
+          body: text,
+          status: "received",
+          sent_by: payload.device_id ?? "sms-gateway",
+          solapi_msg_id: payload.external_id ?? null,
+          message_type: "sms",
+          created_at: receivedAt,
+          classification: "other",
+        })
+        .select("id")
+        .single();
+      return NextResponse.json({
+        ok: true,
+        message_id: insOther?.id,
+        classification: "other",
+        reason: "hard-filter spam",
+      });
+    }
+
+    // Haiku triage
+    const triage = await triageInbound({ phone, body: text });
+    const isAutoBaemin = triage.is_baemin && triage.confidence >= 0.7;
+
+    if (isAutoBaemin) {
+      // 자동 baemin 후보 생성 (extracted 필드 prefill, 미확인 컬럼은 PLACEHOLDER)
+      const ext = triage.extracted;
+      const PH = "미확인";
+      const { data: newApplicant, error: appErr } = await supabase
+        .from("applicants")
+        .insert({
+          name: ext.name?.trim() || "(이름 미확인)",
+          phone,
+          birth_date: PH,
+          location: PH,
+          own_vehicle: PH,
+          license_type: PH,
+          vehicle_type: ext.vehicle?.trim() || PH,
+          branch1: PH,
+          branch: PH,
+          work_hours: ext.time_raw?.trim() || PH,
+          available_date: PH,
+          self_ownership: PH,
+          source: "baemin",
+          status: "스크리닝",
+          filter_pass: null,
+          introduction: ext.experience?.trim() || null,
+          note: `자동 분류 (배민, conf ${triage.confidence.toFixed(2)}): ${triage.reasoning}`,
+        })
+        .select("*")
+        .single();
+
+      if (appErr || !newApplicant) {
+        console.error("[inbound] baemin auto applicant create error", appErr);
+        const { data: insFb } = await supabase
+          .from("messages")
+          .insert({
+            applicant_phone: phone,
+            direction: "inbound",
+            body: text,
+            status: "received",
+            sent_by: payload.device_id ?? "sms-gateway",
+            solapi_msg_id: payload.external_id ?? null,
+            message_type: "sms",
+            created_at: receivedAt,
+            classification: "pending",
+          })
+          .select("id")
+          .single();
+        return NextResponse.json({
+          ok: true,
+          message_id: insFb?.id,
+          classification: "pending",
+          reason: "applicant create failed",
+          triage,
+        });
+      }
+
+      let jobIdForBaemin: number | null = null;
+      let candidateIdForBaemin: number | null = null;
+      try {
+        jobIdForBaemin = await ensureBaeminSystemJob(supabase);
+        const isWeekend = String(newApplicant.work_hours ?? "").includes("주말");
+        const { data: jcIns } = await supabase
+          .from("job_candidates")
+          .insert({
+            job_id: jobIdForBaemin,
+            applicant_id: newApplicant.id,
+            agent_stage: "screening",
+            agent_state: {
+              screening: {
+                프로모션_종료가능성_안내: true,
+                정산주기_안내: true,
+                업무시간_체계_이해: true,
+                ...(isWeekend ? {} : { 공휴일_업무여부_확인: true }),
+              },
+              meta: { screening_entered_at: new Date().toISOString() },
+            },
+          })
+          .select("id")
+          .single();
+        candidateIdForBaemin = (jcIns?.id as number) ?? null;
+      } catch (e) {
+        console.error("[inbound] baemin job_candidates create failed", e);
+      }
+
+      const { data: msgB } = await supabase
+        .from("messages")
+        .insert({
+          applicant_id: newApplicant.id,
+          applicant_phone: phone,
+          direction: "inbound",
+          body: text,
+          status: "received",
+          sent_by: payload.device_id ?? "sms-gateway",
+          solapi_msg_id: payload.external_id ?? null,
+          message_type: "sms",
+          job_id: jobIdForBaemin,
+          created_at: receivedAt,
+          classification: "baemin",
+        })
+        .select("id")
+        .single();
+
+      if (msgB?.id && candidateIdForBaemin != null) {
+        const agentResult = await runAgentForCandidate({
+          supabase,
+          candidate_id: candidateIdForBaemin,
+          inbound_message_id: msgB.id,
+          inbound_text: text,
+          received_at: receivedAt,
+        });
+        return NextResponse.json({
+          ok: true,
+          message_id: msgB.id,
+          classification: "baemin",
+          applicant_id: newApplicant.id,
+          triage,
+          agent_invoked: true,
+          agent: agentResult,
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message_id: msgB?.id,
+        classification: "baemin",
+        applicant_id: newApplicant.id,
+        triage,
+        agent_invoked: false,
+      });
+    }
+
+    // 자신 없음 → pending (매니저 인박스)
+    const { data: insPending } = await supabase
+      .from("messages")
+      .insert({
+        applicant_phone: phone,
+        direction: "inbound",
+        body: text,
+        status: "received",
+        sent_by: payload.device_id ?? "sms-gateway",
+        solapi_msg_id: payload.external_id ?? null,
+        message_type: "sms",
+        created_at: receivedAt,
+        classification: "pending",
+      })
+      .select("id")
+      .single();
+    return NextResponse.json({
+      ok: true,
+      message_id: insPending?.id,
+      classification: "pending",
+      triage,
+    });
   }
 
   // 진행 중인 job 확인 (active job_candidate 우선)
