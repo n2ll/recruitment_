@@ -111,9 +111,10 @@ export async function POST(req: NextRequest) {
         console.error("[agent/set-stage] active update error", upErr);
         return NextResponse.json({ error: upErr.message }, { status: 500 });
       }
+      // '완료' 단계 = 온보딩 정보 회신까지 완료. status='확정'은 매니저가 통화 후 직접 변경.
       await supabase
         .from("applicants")
-        .update({ status: "확정" })
+        .update({ status: "온보딩 완료" })
         .eq("id", applicant.id);
       return NextResponse.json({
         ok: true,

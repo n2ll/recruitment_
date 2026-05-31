@@ -20,6 +20,7 @@ const ALLOWED_FIELDS = new Set([
 const VALID_STATUS = new Set([
   "스크리닝",
   "온보딩",
+  "온보딩 완료",
   "확정",
   "이탈",
   "부적합",

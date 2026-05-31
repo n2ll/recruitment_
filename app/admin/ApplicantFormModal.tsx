@@ -42,7 +42,7 @@ export interface ApplicantFormValue {
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 const LICENSE_TYPES = ["1종 보통", "2종 보통", "1종 대형", "1종 자동", "2종 자동", "없음"];
 const SELF_OWNERSHIP_OPTIONS = ["문제 없음", "문제 있음 (지원불가)", "확인 필요"];
-const STATUSES = ["스크리닝", "온보딩", "확정", "이탈", "부적합"];
+const STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합"];
 const SOURCES: Array<{ value: string; label: string }> = [
   { value: "manual", label: "수기 등록" },
   { value: "danggeun", label: "당근" },

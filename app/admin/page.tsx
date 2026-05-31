@@ -101,13 +101,14 @@ interface RecommendResponse {
 const STATUS_COLORS: Record<string, string> = {
   스크리닝: "#6b7280",
   온보딩: "#f59e0b",
+  "온보딩 완료": "#0EA5E9",
   확정: "#10b981",
   이탈: "#475569",
   부적합: "#ef4444",
 };
 
 const ALL_STATUSES = [
-  "스크리닝", "온보딩", "확정", "이탈", "부적합",
+  "스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합",
 ];
 
 interface Branch {
@@ -145,7 +146,7 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
-const ACTIVE_STATUSES = ["스크리닝", "온보딩", "확정"];
+const ACTIVE_STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정"];
 const CONFIRMED_STATUSES = ["확정"];
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
@@ -996,6 +997,7 @@ export default function AdminPage() {
     filterPass: data.filter((a) => a.filter_pass === "Y").length,
     screening: data.filter((a) => a.filter_pass === "Y" && a.status === "스크리닝").length,
     onboarding: data.filter((a) => a.status === "온보딩").length,
+    onboardingComplete: data.filter((a) => a.status === "온보딩 완료").length,
     deployed: data.filter((a) => a.status === "확정").length,
   };
 
@@ -1167,6 +1169,7 @@ export default function AdminPage() {
                 <div className="stat-card"><div className="stat-num">{stats.filterPass}</div><div className="stat-label">필터 통과</div></div>
                 <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">온보딩</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.onboardingComplete}</div><div className="stat-label">온보딩 완료</div></div>
                 <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">확정</div></div>
               </div>
 

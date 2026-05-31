@@ -260,15 +260,16 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       }
 
       if (transition.to === "active") {
-        // onboarding → active: 확정 처리 (status·timestamp만). 첫 출근 룰 자동 발송은
-        // 이 시점이 아니라 실제 근무 시작 D-day에 별도 cron으로 보내야 정상이므로 여기선 생략.
+        // onboarding → active: 자동 단계 전이지만 '확정' 처리는 아님.
+        // 아이디·차량번호 회신까지 = 온보딩 완료. 이후 매니저가 통화로 확인 후 status='확정'으로 직접 변경.
+        // 첫 출근 룰 자동 발송은 이 시점이 아니라 실제 근무 D-day 별도 cron이 해야 정상이라 생략.
         await supabase
           .from("job_candidates")
           .update({ activated_at: now })
           .eq("id", candidate_id);
         await supabase
           .from("applicants")
-          .update({ status: "확정", current_branch: null /* 라우터에서 job.branch로 채움 */ })
+          .update({ status: "온보딩 완료" })
           .eq("id", applicant_id);
       }
       break;
