@@ -45,10 +45,11 @@ const SELF_OWNERSHIP_OPTIONS = ["문제 없음", "문제 있음 (지원불가)",
 const STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합"];
 const SOURCES: Array<{ value: string; label: string }> = [
   { value: "manual", label: "수기 등록" },
-  { value: "danggeun", label: "당근" },
+  { value: "danggeun", label: "당근 (자동 AI 응대)" },
   { value: "facebook", label: "페이스북" },
   { value: "naver", label: "네이버 검색" },
   { value: "direct", label: "해당없음" },
+  { value: "danggeun_practice", label: "🧪 당근 (연습용)" },
 ];
 
 interface Props {
@@ -67,7 +68,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
     branch1: "", branch2: "", work_hours: "",
     available_date: "", self_ownership: "",
     introduction: "", experience: "",
-    source: "manual", status: "스크리닝", filter_pass: null, note: "",
+    source: "manual", status: "스크리닝", note: "",
     start_date: "", confirmed_slot: "", confirmed_branch: "", current_branch: "",
     churn_reason: "",
     marketing_consent: false, kakao_channel_friend: false,
@@ -230,13 +231,6 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
               <Field label="진행 상태">
                 <select className="afm-inp" value={form.status ?? "스크리닝"} onChange={(e) => set("status", e.target.value)}>
                   {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="필터 통과">
-                <select className="afm-inp" value={form.filter_pass ?? ""} onChange={(e) => set("filter_pass", e.target.value || null)}>
-                  <option value="">—</option>
-                  <option value="Y">Y</option>
-                  <option value="N">N</option>
                 </select>
               </Field>
               <Field label="확정 지점">

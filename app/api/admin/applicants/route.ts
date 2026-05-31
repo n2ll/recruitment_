@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { geocodeAddress } from "@/lib/kakao-geocode";
+import { sendSms } from "@/lib/solapi";
+import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +135,87 @@ export async function POST(req: NextRequest) {
       console.error("[applicants POST] insert error", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // 당근(또는 연습용 당근) 등록 + status='스크리닝'이면 apply 폼과 동일한 자동 흐름:
+    //  1) danggeun_start 시스템 메시지 fillTemplate 후 SMS 발송 (연습용은 SMS skip, DB 기록만)
+    //  2) 시스템 더미 공고에 job_candidates row 생성 (stage='screening', 자동-true 항목)
+    //  3) messages outbound 기록
+    const source = data.source as string | null;
+    const isDanggeun = source === "danggeun" || source === "danggeun_practice";
+    if (isDanggeun && data.status === "스크리닝") {
+      try {
+        const startMsg = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
+        if (startMsg) {
+          const filled = fillTemplate(startMsg, {
+            이름: data.name ?? "",
+            지점: data.branch ?? data.branch1 ?? "",
+            시간대: shortWorkHours(data.work_hours ?? null),
+          });
+          let messageId: string | null = null;
+          if (source === "danggeun") {
+            const r = await sendSms(data.phone, filled);
+            if (!r.success) {
+              console.error("[applicants POST] danggeun start SMS fail", r.error);
+            }
+            messageId = r.messageId ?? null;
+          }
+
+          let jobIdForMsg: number | null = null;
+          try {
+            const jobId = await ensureDanggeunSystemJob(supabase);
+            jobIdForMsg = jobId;
+            const isWeekendSlot = String(data.work_hours ?? "").includes("주말");
+            const screeningAutoTrue: Record<string, boolean> = {
+              프로모션_종료가능성_안내: true,
+              정산주기_안내: true,
+              업무시간_체계_이해: true,
+              ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
+            };
+            await supabase.from("job_candidates").insert({
+              job_id: jobId,
+              applicant_id: data.id,
+              agent_stage: "screening",
+              agent_state: {
+                screening: screeningAutoTrue,
+                meta: { screening_entered_at: new Date().toISOString() },
+              },
+            });
+          } catch (e) {
+            console.error("[applicants POST] danggeun system job ensure failed", e);
+          }
+
+          await supabase.from("messages").insert({
+            applicant_id: data.id,
+            applicant_phone: data.phone,
+            direction: "outbound",
+            body: filled,
+            status: source === "danggeun" ? "sent" : "simulated",
+            sent_by: source === "danggeun" ? "danggeun-start" : "danggeun-practice-start",
+            solapi_msg_id: messageId,
+            message_type: "sms",
+            job_id: jobIdForMsg,
+          });
+        } else {
+          console.warn("[applicants POST] danggeun_start system message empty — auto flow skipped");
+        }
+      } catch (e) {
+        console.error("[applicants POST] danggeun auto flow failed", e);
+      }
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (err) {
     console.error("[applicants POST] exception", err);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });
   }
+}
+
+// 희망 시간대 축약 — "평일오전, 주말오후" 등을 그대로 사용. 빈 값 대비.
+function shortWorkHours(wh: string | null): string {
+  if (!wh || wh === "미확인") return "";
+  return wh
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(", ");
 }

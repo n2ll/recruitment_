@@ -17,48 +17,36 @@ import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
 import { sentByLabel } from "./sent-by-label";
 
 interface DanggeunViewProps {
-  branches: string[];
   mode?: "live" | "practice";
 }
 
 interface ModeConfig {
   source: string;
-  storageKey: string;
-  startApi: string;
   title: string;
   emoji: string;
   helpLine: string;
-  newCandidateLabel: string;
-  newCandidateNote: string;
   replyPlaceholder: string;
   sendButtonLabel: string;
   practice: boolean;
 }
 
+// 새 후보 등록은 [지원자 목록 → + 지원자 추가]로 일원화됨.
+// 이 View는 등록된 당근/연습용 후보의 대화·진행 상태 모니터링만 담당.
 const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
   live: {
     source: "danggeun",
-    storageKey: "danggeun_start_message_v1",
-    startApi: "/api/admin/agent/danggeun/start",
     title: "당근 후보",
     emoji: "🥕",
     helpLine: "당근 유입 후보 — 실 SMS 발송 / Realtime",
-    newCandidateLabel: "+ 새 당근 후보",
-    newCandidateNote: "등록과 동시에 저장된 시작 멘트가 실제로 발송됩니다.",
     replyPlaceholder: "매니저 답장을 직접 작성하면 즉시 실 발송됩니다",
     sendButtonLabel: "보내기",
     practice: false,
   },
   practice: {
     source: "danggeun_practice",
-    // 시작 멘트는 라이브와 동일 키를 공유해 연습용에서 다듬은 멘트가 실전에 자동 반영되게 함.
-    storageKey: "danggeun_start_message_v1",
-    startApi: "/api/admin/agent/danggeun-practice/start",
     title: "연습 후보",
     emoji: "🧪",
     helpLine: "연습 모드 — 실 SMS 발송 X. 입력은 지원자 빙의 (AI 자동 응답)",
-    newCandidateLabel: "+ 새 연습 후보",
-    newCandidateNote: "실 SMS 발송 X. 시작 멘트는 DB에 기록만 됩니다.",
     replyPlaceholder: "지원자가 보낸 문자처럼 입력 → AI가 자동 응답합니다",
     sendButtonLabel: "지원자로 보내기",
     practice: true,
@@ -229,20 +217,14 @@ function shortWorkHours(wh: string | null): string {
   return Array.from(new Set(out)).join(", ");
 }
 
-export default function DanggeunView({ branches, mode = "live" }: DanggeunViewProps) {
+export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
   const cfg = MODE_CONFIG[mode];
   // ── 시작 멘트 (편집은 클로드 조련하기에서. 여기선 등록 검증·발송용으로 읽기만) ──
   const [startMsg, setStartMsg] = useState("");
   const [startMsgLoaded, setStartMsgLoaded] = useState(false);
 
   // ── 새 후보 폼 ──────────────────────────────────────────
-  const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newBranch, setNewBranch] = useState(branches[0] ?? "");
-  const [newTargetFactsId, setNewTargetFactsId] = useState<number | "">("");
-  const [submitting, setSubmitting] = useState(false);
-
-  // ── facts (AI 참고자료 — 공고 정보) ──────────────────
+  // ── facts (AI 참고자료 — 공고 정보, 추천 모달에서 사용) ──
   const [factsList, setFactsList] = useState<FactsItem[]>([]);
 
   // ── 추천 모달 (live 모드만) ───────────────────────────
@@ -271,9 +253,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   const [agentStage, setAgentStage] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<AgentState>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // ── 모달 ──────────────────────────────────────────────
-  const [showNewModal, setShowNewModal] = useState(false);
 
   // ── 연습 데이터 초기화 (practice 모드 전용) ──────────
   const [resetting, setResetting] = useState(false);
@@ -321,10 +300,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
       })
       .catch((e) => console.error("[danggeun facts load]", e));
   }, []);
-
-  useEffect(() => {
-    if (!newBranch && branches.length > 0) setNewBranch(branches[0]);
-  }, [branches, newBranch]);
 
   // ── 대화창 로드 ────────────────────────────────────────
   // silent=true: 로딩 스피너 안 띄우고 조용히 데이터만 갱신 (발송 직후 reasoning/배지 매핑용)
@@ -419,59 +394,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
   }, [messages.length]);
 
   // ── 핸들러 ─────────────────────────────────────────────
-  const handleStart = async () => {
-    if (!newName.trim() || !newPhone.trim() || !newBranch) {
-      alert("이름, 전화번호, 지점은 필수입니다.");
-      return;
-    }
-    if (!startMsg.trim()) {
-      alert("시작 멘트를 먼저 저장해주세요.");
-      return;
-    }
-    const confirmMsg = cfg.practice
-      ? `${newName}(${newPhone})을 연습용 후보로 등록합니다. (실 SMS 발송 X) 진행할까요?`
-      : `${newName}(${newPhone})에게 시작 멘트를 실제로 발송합니다. 진행할까요?`;
-    if (!confirm(confirmMsg)) {
-      return;
-    }
-    setSubmitting(true);
-    try {
-      // 선택된 facts 항목이 있으면 그 title+body를 targetJobInfo로 함께 전달.
-      // applicants.introduction에 저장돼 AI가 응답 컨텍스트로 활용.
-      const selectedFacts = factsList.find((f) => f.id === newTargetFactsId);
-      const targetJobInfo = selectedFacts
-        ? `[${selectedFacts.title}]\n${selectedFacts.body}`
-        : "";
-      const res = await fetch(cfg.startApi, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName.trim(),
-          phone: newPhone.replace(/-/g, ""),
-          branch1: newBranch,
-          startMessage: startMsg,
-          targetJobInfo,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error || "등록 실패");
-        return;
-      }
-      setNewName("");
-      setNewPhone("");
-      setNewTargetFactsId("");
-      setShowNewModal(false);
-      await fetchCandidates();
-      if (json.applicant?.id) setSelectedId(json.applicant.id);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "등록 실패");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ── 추천 받기 (live 모드 전용) ────────────────────────
+  // ── 연습 데이터 초기화 (practice 모드 전용) ────────────
   const handleResetPractice = async () => {
     if (!confirm("연습 데이터(연습용 후보·대화)를 전부 삭제합니다.\n라이브 당근 데이터는 안 건드립니다. 진행할까요?")) {
       return;
@@ -652,9 +575,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
               ⚠ 시작 멘트 미설정 — 클로드 조련하기에서 설정
             </span>
           )}
-          <button className="dg-btn dg-btn-primary" onClick={() => setShowNewModal(true)}>
-            {cfg.newCandidateLabel}
-          </button>
           {!cfg.practice && (
             <button
               className="dg-btn dg-btn-ghost-bordered"
@@ -693,7 +613,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
             ) : filteredCandidates.length === 0 ? (
               <div className="dg-empty">
                 {candidates.length === 0
-                  ? "아직 등록된 당근 후보가 없습니다. 우측 상단 '+ 새 당근 후보'로 시작하세요."
+                  ? "아직 등록된 당근 후보가 없습니다. [지원자 목록 → + 지원자 추가]에서 지원경로 '당근'으로 등록하면 여기 나타납니다."
                   : "검색 결과 없음"}
               </div>
             ) : (
@@ -739,7 +659,7 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
         <main className="dg-right">
           {selectedCandidate == null ? (
             <div className="dg-placeholder">
-              <p>좌측에서 후보를 선택하거나 우측 상단 '+ 새 당근 후보'로 등록하세요.</p>
+              <p>좌측에서 후보를 선택하세요. 새 후보 등록은 [지원자 목록 → + 지원자 추가]에서 진행합니다.</p>
             </div>
           ) : (
             <>
@@ -987,99 +907,6 @@ export default function DanggeunView({ branches, mode = "live" }: DanggeunViewPr
           )}
         </main>
       </div>
-
-      {/* 모달: 새 후보 등록 */}
-      {showNewModal && (
-        <div className="dg-modal-bg" onClick={() => !submitting && setShowNewModal(false)}>
-          <div className="dg-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="dg-modal-head">
-              <h3 className="dg-modal-title">새 당근 후보 등록</h3>
-              <button className="dg-btn-ghost" onClick={() => setShowNewModal(false)}>
-                ×
-              </button>
-            </div>
-            <p className="dg-modal-desc">{cfg.newCandidateNote}</p>
-            {!startMsg && (
-              <div className="dg-warn">
-                ⚠ 시작 멘트가 아직 없습니다. [클로드 조련하기 → 자동 발송 메시지]에서 danggeun_start를 먼저 설정해주세요.
-              </div>
-            )}
-            <div className="dg-field">
-              <label className="dg-label">이름</label>
-              <input
-                className="dg-input"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="홍길동"
-              />
-            </div>
-            <div className="dg-field">
-              <label className="dg-label">전화번호</label>
-              <input
-                className="dg-input"
-                value={newPhone}
-                onChange={(e) => setNewPhone(formatPhone(e.target.value))}
-                placeholder="010-0000-0000"
-              />
-            </div>
-            <div className="dg-field">
-              <label className="dg-label">희망 지점</label>
-              <select
-                className="dg-input"
-                value={newBranch}
-                onChange={(e) => setNewBranch(e.target.value)}
-              >
-                {branches.length === 0 && <option value="">지점 로딩 중...</option>}
-                {branches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="dg-field">
-              <label className="dg-label">
-                어떤 공고로 모집? <span style={{ color: "#9CA3AF", fontWeight: 400 }}>(AI 참고자료에서 선택 — AI 응답 컨텍스트에 인용됨)</span>
-              </label>
-              <select
-                className="dg-input"
-                value={newTargetFactsId}
-                onChange={(e) =>
-                  setNewTargetFactsId(e.target.value ? Number(e.target.value) : "")
-                }
-              >
-                <option value="">선택 안함 (AI가 일반 응답)</option>
-                {factsList.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.title}
-                  </option>
-                ))}
-              </select>
-              {factsList.length === 0 && (
-                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0" }}>
-                  AI 참고자료 탭에서 공고 정보를 먼저 추가해주세요.
-                </p>
-              )}
-            </div>
-            <div className="dg-modal-actions">
-              <button
-                className="dg-btn dg-btn-ghost-bordered"
-                onClick={() => setShowNewModal(false)}
-                disabled={submitting}
-              >
-                취소
-              </button>
-              <button
-                className="dg-btn dg-btn-primary"
-                onClick={handleStart}
-                disabled={submitting || !startMsg}
-              >
-                {submitting ? "발송 중..." : "대화 시작 (실 발송)"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 모달: 추천 받기 (live 모드만) */}
       {showRecommendModal && (

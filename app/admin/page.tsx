@@ -994,8 +994,7 @@ export default function AdminPage() {
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length,
-    filterPass: data.filter((a) => a.filter_pass === "Y").length,
-    screening: data.filter((a) => a.filter_pass === "Y" && a.status === "스크리닝").length,
+    screening: data.filter((a) => a.status === "스크리닝").length,
     onboarding: data.filter((a) => a.status === "온보딩").length,
     onboardingComplete: data.filter((a) => a.status === "온보딩 완료").length,
     deployed: data.filter((a) => a.status === "확정").length,
@@ -1006,7 +1005,6 @@ export default function AdminPage() {
   const branchStats = allBranchNames.map((b) => ({
     name: b,
     total: data.filter((a) => a.branch === b).length,
-    pass: data.filter((a) => a.branch === b && a.filter_pass === "Y").length,
     screening: data.filter((a) => a.branch === b && a.status === "스크리닝").length,
   }));
 
@@ -1166,7 +1164,6 @@ export default function AdminPage() {
               <div className="stat-grid">
                 <div className="stat-card"><div className="stat-num">{stats.total}</div><div className="stat-label">전체 지원자</div></div>
                 <div className="stat-card accent"><div className="stat-num">{stats.today}</div><div className="stat-label">오늘 지원</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.filterPass}</div><div className="stat-label">필터 통과</div></div>
                 <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">온보딩</div></div>
                 <div className="stat-card"><div className="stat-num">{stats.onboardingComplete}</div><div className="stat-label">온보딩 완료</div></div>
@@ -1177,16 +1174,14 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>지점</th><th>전체</th><th>필터 통과</th><th>스크리닝</th><th>통과율</th></tr>
+                    <tr><th>지점</th><th>전체</th><th>스크리닝</th></tr>
                   </thead>
                   <tbody>
                     {branchStats.map((b) => (
                       <tr key={b.name}>
                         <td className="td-bold">{b.name}</td>
                         <td>{b.total}</td>
-                        <td>{b.pass}</td>
                         <td>{b.screening > 0 ? <span className="td-warn">{b.screening}</span> : 0}</td>
-                        <td>{b.total > 0 ? Math.round((b.pass / b.total) * 100) + "%" : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1372,7 +1367,6 @@ export default function AdminPage() {
                     <div><span className="dl">희망지점</span>{selected.branch1}{selected.branch2 ? ` / ${selected.branch2}` : ""}</div>
                     <div><span className="dl">희망시간</span>{selected.work_hours}</div>
                     <div><span className="dl">본인명의</span>{selected.self_ownership}</div>
-                    <div><span className="dl">필터</span>{selected.filter_pass === "Y" ? "통과" : "탈락"}</div>
                   </div>
                   {selected.introduction && (
                     <div className="detail-section">
@@ -1396,7 +1390,7 @@ export default function AdminPage() {
               <p className="page-desc">
                 지원자가 <strong>희망한</strong> 시간대·지점 기준 풀 분포입니다.
                 셀을 클릭하면 해당 조건의 지원자 목록이 표시됩니다.
-                (필터 통과 + 활성 상태만 집계)
+                (활성 상태만 집계 — 이탈·부적합 제외)
               </p>
 
               <div className="matrix-wrap">
@@ -1412,7 +1406,6 @@ export default function AdminPage() {
                     {allBranchNames.map((b) => {
                       const rowTotal = data.filter(
                         (a) =>
-                          a.filter_pass === "Y" &&
                           ACTIVE_STATUSES.includes(a.status) &&
                           (a.branch1 === b || a.branch2 === b)
                       ).length;
@@ -1422,7 +1415,6 @@ export default function AdminPage() {
                           {SLOTS.map((s) => {
                             const n = data.filter(
                               (a) =>
-                                a.filter_pass === "Y" &&
                                 ACTIVE_STATUSES.includes(a.status) &&
                                 (a.branch1 === b || a.branch2 === b) &&
                                 matchesSlot(a.work_hours, s)
@@ -1448,7 +1440,6 @@ export default function AdminPage() {
                         <td key={s} className="td-total">
                           {data.filter(
                             (a) =>
-                              a.filter_pass === "Y" &&
                               ACTIVE_STATUSES.includes(a.status) &&
                               matchesSlot(a.work_hours, s)
                           ).length}
@@ -1456,7 +1447,7 @@ export default function AdminPage() {
                       ))}
                       <td className="td-total">
                         {data.filter(
-                          (a) => a.filter_pass === "Y" && ACTIVE_STATUSES.includes(a.status)
+                          (a) => ACTIVE_STATUSES.includes(a.status)
                         ).length}
                       </td>
                     </tr>
@@ -1467,7 +1458,6 @@ export default function AdminPage() {
               {slotCell && (() => {
                 const list = data.filter(
                   (a) =>
-                    a.filter_pass === "Y" &&
                     ACTIVE_STATUSES.includes(a.status) &&
                     (a.branch1 === slotCell.branch || a.branch2 === slotCell.branch) &&
                     matchesSlot(a.work_hours, slotCell.slot)
@@ -2000,9 +1990,9 @@ export default function AdminPage() {
           ) : tab === "playground" ? (
             <PlaygroundView branches={allBranchNames} />
           ) : tab === "danggeun" ? (
-            <DanggeunView branches={allBranchNames} mode="live" />
+            <DanggeunView mode="live" />
           ) : tab === "danggeun-practice" ? (
-            <DanggeunView branches={allBranchNames} mode="practice" />
+            <DanggeunView mode="practice" />
           ) : tab === "klod" ? (
             <PromptExamplesView />
           ) : tab === "contact" ? (
