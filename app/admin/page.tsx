@@ -67,7 +67,7 @@ interface Heartbeat {
   app_version: string | null;
 }
 
-type Tab = "dashboard" | "applicants" | "contact" | "inbox" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "danggeun-practice" | "klod";
+type Tab = "dashboard" | "applicants" | "contact" | "inbox" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "baemin" | "danggeun-practice" | "klod";
 
 interface RecommendResponse {
   success: boolean;
@@ -1033,6 +1033,11 @@ export default function AdminPage() {
             onClick={() => setTab("danggeun")} title="당근마켓구인">
             <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
             <span className="nav-label">당근마켓구인</span>
+          </button>
+          <button className={`nav-btn ${tab === "baemin" ? "nav-active" : ""}`}
+            onClick={() => setTab("baemin")} title="배달의민족구인">
+            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>📱</span>
+            <span className="nav-label">배달의민족구인</span>
           </button>
           <button className={`nav-btn ${tab === "klod" ? "nav-active" : ""}`}
             onClick={() => setTab("klod")} title="클로드 조련하기">
@@ -2000,6 +2005,8 @@ export default function AdminPage() {
             <PlaygroundView branches={allBranchNames} />
           ) : tab === "danggeun" ? (
             <DanggeunView mode="live" />
+          ) : tab === "baemin" ? (
+            <DanggeunView mode="baemin" />
           ) : tab === "danggeun-practice" ? (
             <DanggeunView mode="practice" />
           ) : tab === "klod" ? (

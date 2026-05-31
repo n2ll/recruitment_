@@ -17,7 +17,7 @@ import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
 import { sentByLabel } from "./sent-by-label";
 
 interface DanggeunViewProps {
-  mode?: "live" | "practice";
+  mode?: "live" | "practice" | "baemin";
 }
 
 interface ModeConfig {
@@ -28,11 +28,14 @@ interface ModeConfig {
   replyPlaceholder: string;
   sendButtonLabel: string;
   practice: boolean;
+  channelLabel: string;          // 빈 목록 안내 등에서 사용 ("당근" / "배민" / "연습")
+  showRecommend: boolean;        // ⭐ 추천 받기 버튼 노출 여부
+  needsStartMessage: boolean;    // 시작 멘트 발송 채널인지 (배민은 X — 지원자가 먼저 보냄)
 }
 
 // 새 후보 등록은 [지원자 목록 → + 지원자 추가]로 일원화됨.
-// 이 View는 등록된 당근/연습용 후보의 대화·진행 상태 모니터링만 담당.
-const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
+// 이 View는 등록된 채널별 후보의 대화·진행 상태 모니터링만 담당.
+const MODE_CONFIG: Record<"live" | "practice" | "baemin", ModeConfig> = {
   live: {
     source: "danggeun",
     title: "당근 후보",
@@ -41,6 +44,9 @@ const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
     replyPlaceholder: "매니저 답장을 직접 작성하면 즉시 실 발송됩니다",
     sendButtonLabel: "보내기",
     practice: false,
+    channelLabel: "당근",
+    showRecommend: true,
+    needsStartMessage: true,
   },
   practice: {
     source: "danggeun_practice",
@@ -50,6 +56,21 @@ const MODE_CONFIG: Record<"live" | "practice", ModeConfig> = {
     replyPlaceholder: "지원자가 보낸 문자처럼 입력 → AI가 자동 응답합니다",
     sendButtonLabel: "지원자로 보내기",
     practice: true,
+    channelLabel: "연습용",
+    showRecommend: false,
+    needsStartMessage: true,
+  },
+  baemin: {
+    source: "baemin",
+    title: "배민 후보",
+    emoji: "📱",
+    helpLine: "배민 유입 후보 — 지원자가 먼저 SMS / AI 자동 응대 / Realtime",
+    replyPlaceholder: "매니저 답장을 직접 작성하면 즉시 실 발송됩니다",
+    sendButtonLabel: "보내기",
+    practice: false,
+    channelLabel: "배민",
+    showRecommend: false,
+    needsStartMessage: false,
   },
 };
 
@@ -570,12 +591,12 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
           <span className="dg-help">{cfg.helpLine}</span>
         </div>
         <div className="dg-toolbar-actions">
-          {startMsgLoaded && !startMsg && (
+          {cfg.needsStartMessage && startMsgLoaded && !startMsg && (
             <span className="dg-btn dg-btn-warn" style={{ cursor: "default" }}>
               ⚠ 시작 멘트 미설정 — 클로드 조련하기에서 설정
             </span>
           )}
-          {!cfg.practice && (
+          {cfg.showRecommend && (
             <button
               className="dg-btn dg-btn-ghost-bordered"
               onClick={() => setShowRecommendModal(true)}
@@ -613,7 +634,7 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
             ) : filteredCandidates.length === 0 ? (
               <div className="dg-empty">
                 {candidates.length === 0
-                  ? "아직 등록된 당근 후보가 없습니다. [지원자 목록 → + 지원자 추가]에서 지원경로 '당근'으로 등록하면 여기 나타납니다."
+                  ? `아직 등록된 ${cfg.channelLabel} 후보가 없습니다. [지원자 목록 → + 지원자 추가]에서 지원경로를 '${cfg.channelLabel}'으로 등록하면 여기 나타납니다.`
                   : "검색 결과 없음"}
               </div>
             ) : (
