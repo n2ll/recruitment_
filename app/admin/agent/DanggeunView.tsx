@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
-import { SCREENING_KEYS, ONBOARDING_KEYS } from "./types";
+import { SCREENING_KEYS } from "./types";
 import { sentByLabel } from "./sent-by-label";
 
 interface DanggeunViewProps {
@@ -829,35 +829,42 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
                 </div>
               )}
 
-              {(agentStage === "screening" || agentStage === "onboarding") && (
+              {(agentStage === "screening" || agentStage === "onboarding" || agentStage === "active") && (
                 <div className="dg-checklist">
                   <div className="dg-checklist-title">
-                    {agentStage === "screening" ? "스크리닝 체크리스트" : "스크리닝 완료 (정보 수집) 체크리스트"}
+                    스크리닝 체크리스트
                     {(() => {
-                      const keys = agentStage === "screening" ? SCREENING_KEYS : ONBOARDING_KEYS;
-                      const cl = (agentStage === "screening"
-                        ? agentState.screening
-                        : agentState.onboarding) ?? {};
-                      const done = keys.filter((k) => cl[k] === true).length;
+                      const sc = agentState.screening ?? {};
+                      const ob = agentState.onboarding ?? {};
+                      const doneScreening = SCREENING_KEYS.filter((k) => sc[k] === true).length;
+                      const doneId = ob["배민_아이디_수신"] === true ? 1 : 0;
+                      const totalItems = SCREENING_KEYS.length + 1;
                       return (
                         <span className="dg-checklist-count">
-                          {done} / {keys.length}
+                          {doneScreening + doneId} / {totalItems}
                         </span>
                       );
                     })()}
                   </div>
                   <div className="dg-checklist-items">
-                    {(agentStage === "screening" ? SCREENING_KEYS : ONBOARDING_KEYS).map((k) => {
-                      const cl = (agentStage === "screening"
-                        ? agentState.screening
-                        : agentState.onboarding) ?? {};
-                      const done = cl[k] === true;
+                    {SCREENING_KEYS.map((k) => {
+                      const sc = agentState.screening ?? {};
+                      const done = sc[k] === true;
                       return (
                         <span key={k} className={`dg-checklist-item ${done ? "dg-chk-done" : ""}`}>
                           {done ? "✓" : "·"} {k.replace(/_/g, " ")}
                         </span>
                       );
                     })}
+                    {(() => {
+                      const ob = agentState.onboarding ?? {};
+                      const done = ob["배민_아이디_수신"] === true;
+                      return (
+                        <span className={`dg-checklist-item ${done ? "dg-chk-done" : ""}`}>
+                          {done ? "✓" : "·"} 배민 아이디 수신
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
