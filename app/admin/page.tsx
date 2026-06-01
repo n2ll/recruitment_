@@ -149,7 +149,6 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
 }
 
 const ACTIVE_STATUSES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자"];
-const CONFIRMED_STATUSES = ["확정"];
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
 
@@ -1236,10 +1235,35 @@ export default function AdminPage() {
                           {a.note === "중복지원" && <span className="dup-tag">중복</span>}
                         </td>
                         <td>{a.phone}</td>
-                        <td>{a.branch}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <select
+                            className="inline-select inline-branch"
+                            value={a.branch ?? ""}
+                            onChange={(e) => patchApplicant(a.id, { branch: e.target.value || null })}
+                          >
+                            <option value="">—</option>
+                            {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
+                          </select>
+                        </td>
                         <td>{a.own_vehicle}</td>
-                        <td>{a.available_date}</td>
-                        <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="date"
+                            className="inline-date"
+                            value={a.available_date ?? ""}
+                            onChange={(e) => patchApplicant(a.id, { available_date: e.target.value || null })}
+                          />
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <select
+                            className="inline-select inline-status"
+                            value={a.status}
+                            onChange={(e) => patchApplicant(a.id, { status: e.target.value })}
+                            style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}
+                          >
+                            {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
                         <td>{sourceLabel(a.source)}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
                       </tr>
@@ -1403,7 +1427,7 @@ export default function AdminPage() {
               <p className="page-desc">
                 지원자가 <strong>희망한</strong> 시간대·지점 기준 풀 분포입니다.
                 셀을 클릭하면 해당 조건의 지원자 목록이 표시됩니다.
-                (활성 상태만 집계 — 이탈·부적합 제외)
+                (활성 상태만 집계 — 부적합 제외)
               </p>
 
               <div className="matrix-wrap">
@@ -2372,6 +2396,30 @@ const css = `
     display: inline-block; padding: 2px 8px; border-radius: 6px;
     font-size: 11px; font-weight: 600; color: #fff;
   }
+  /* 인라인 편집 (지점·시작가능일·상태) — 노션 스타일 */
+  .inline-select, .inline-date {
+    padding: 3px 6px; border: 1px solid transparent; border-radius: 4px;
+    font-size: 12px; font-family: inherit; background: transparent;
+    cursor: pointer; outline: none; color: inherit;
+  }
+  .inline-select:hover, .inline-date:hover {
+    border-color: #E5E7EB; background: #FAFAF8;
+  }
+  .inline-select:focus, .inline-date:focus {
+    border-color: #1F2937; background: #fff;
+  }
+  .inline-status {
+    color: #fff; font-weight: 600; font-size: 11px;
+    padding: 2px 8px; border-radius: 6px;
+    -webkit-appearance: none; appearance: none;
+    padding-right: 18px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+  }
+  .inline-status option { color: #111827; background: #fff; }
+  .inline-branch { min-width: 80px; }
+  .inline-date { width: 110px; }
   .dup-tag {
     display: inline-block; padding: 1px 5px; border-radius: 4px;
     font-size: 10px; font-weight: 600; color: #ef4444; background: #fef2f2;
