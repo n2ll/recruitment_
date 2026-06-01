@@ -1217,7 +1217,7 @@ export default function AdminPage() {
               </div>
             </div>
           ) : tab === "applicants" ? (
-            <div className="content">
+            <div className="content content-wide">
               <div className="applicants-head">
                 <h2 className="page-title">지원자 목록 <span className="count">{filtered.length}명</span></h2>
                 <button
@@ -2387,6 +2387,7 @@ const css = `
   .admin.pinned .main { margin-left: 220px; }
   .admin:not(.pinned) .main { margin-left: 60px; }
   .content { padding: 32px; max-width: 1200px; }
+  .content-wide { max-width: 1800px; }
   .loading { padding: 100px; text-align: center; color: #9ca3af; font-size: 15px; }
 
   .page-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
