@@ -32,15 +32,13 @@ interface FormData {
 
 const SOURCE_OPTIONS = [
   { label: "당근", value: "danggeun" },
-  { label: "페이스북", value: "facebook" },
-  { label: "네이버 검색", value: "naver" },
-  { label: "해당없음", value: "direct" },
+  { label: "배민", value: "baemin" },
 ];
 
 function normalizeSource(raw: string | null): string {
   const known = SOURCE_OPTIONS.map((s) => s.value);
   if (raw && known.includes(raw)) return raw;
-  return "danggeun"; // 당근이 메인 유입 채널 — URL에 source 없으면 기본 당근
+  return "danggeun"; // URL에 source 없으면 당근 기본
 }
 
 const KAKAO_CHANNEL_URL =

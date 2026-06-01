@@ -29,7 +29,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { runAgentForCandidate } from "@/lib/agent/router";
 import { triageInbound, isHardSpam } from "@/lib/agent/baemin-triage";
-import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
+import { sendSms } from "@/lib/solapi";
+import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
+
+// (참고) baemin은 폼 작성 후에 job_candidates를 생성하므로 ensureBaeminSystemJob을 여기서 호출 안 함.
 
 export const dynamic = "force-dynamic";
 // router는 응답 텀(최대 45s) + AI + 발송으로 60s 가까이 가니 충분히 잡아둠
@@ -207,8 +210,9 @@ export async function POST(req: NextRequest) {
   if (isAutoBaemin) {
     const ext = triage.extracted;
     const PH = "미확인";
-    const isWeekend = String(ext.time_raw ?? "").includes("주말");
 
+    // 1) 임시 baemin applicants 생성 (폼 작성 전이므로 status='스크리닝 전').
+    //    job_candidates는 폼 제출 후 /api/apply 흐름에서 생성. 지금은 AI 응대 X.
     const { data: newApplicant, error: appErr } = await supabase
       .from("applicants")
       .insert({
@@ -225,12 +229,12 @@ export async function POST(req: NextRequest) {
         available_date: PH,
         self_ownership: PH,
         source: "baemin",
-        status: "스크리닝 중",
+        status: "스크리닝 전",
         filter_pass: null,
         introduction: ext.experience?.trim() || null,
         note: `자동 분류 (배민, conf ${triage.confidence.toFixed(2)}): ${triage.reasoning}`,
       })
-      .select("id")
+      .select("id, name")
       .single();
 
     if (appErr || !newApplicant) {
@@ -243,66 +247,69 @@ export async function POST(req: NextRequest) {
         triage,
       });
     }
+    const applicantId = (newApplicant as { id: number; name: string | null }).id;
 
-    const applicantId = (newApplicant as { id: number }).id;
-    let jobId: number | null = null;
-    let candidateId: number | null = null;
-    try {
-      jobId = await ensureBaeminSystemJob(supabase);
-      const { data: jcIns } = await supabase
-        .from("job_candidates")
-        .insert({
-          job_id: jobId,
-          applicant_id: applicantId,
-          agent_stage: "screening",
-          agent_state: {
-            screening: {
-              프로모션_종료가능성_안내: true,
-              정산주기_안내: true,
-              업무시간_체계_이해: true,
-              ...(isWeekend ? {} : { 공휴일_업무여부_확인: true }),
-            },
-            meta: { screening_entered_at: new Date().toISOString() },
-          },
-        })
-        .select("id")
-        .single();
-      candidateId = ((jcIns as { id: number } | null)?.id as number) ?? null;
-    } catch (e) {
-      console.error("[supabase-webhook] baemin job_candidates create failed", e);
-    }
-
+    // 2) 메시지에 applicant_id + classification 채우기
     await supabase
       .from("messages")
       .update({
         applicant_id: applicantId,
         classification: "baemin",
-        job_id: jobId,
       })
       .eq("id", msg.id);
 
-    if (candidateId != null) {
-      const agentResult = await runAgentForCandidate({
-        supabase,
-        candidate_id: candidateId,
-        inbound_message_id: String(msg.id),
-        inbound_text: text,
-        received_at: receivedAt,
-      });
-      return NextResponse.json({
-        ok: true,
-        classification: "baemin",
-        applicant_id: applicantId,
-        triage,
-        agent_invoked: true,
-        agent: agentResult,
-      });
+    // 3) 지원자에게 apply 폼 URL을 SMS로 안내. system_message 'baemin_apply_invite' 본문 사용,
+    //    없으면 fallback. {{이름}}/{{지원폼주소}} placeholder 치환.
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+      "https://recruitment-z9vp.vercel.app";
+    const normalizedBase = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+    const applyUrl = `${normalizedBase}/apply?source=baemin`;
+    const nameForFill = ext.name?.trim() ? ` ${ext.name.trim()}` : "";
+
+    const stored = (await getSystemMessage(supabase, "baemin_apply_invite"))?.trim();
+    const fallback = [
+      `안녕하세요${nameForFill}님, 옹고잉 배송원 지원 감사드립니다!`,
+      "",
+      "정식 지원을 위해 아래 폼 작성을 부탁드릴게요^^",
+      applyUrl,
+      "",
+      "작성 완료되시면 영업일 기준 1~2일 내 안내드리겠습니다.",
+    ].join("\n");
+    const sendBody = stored
+      ? fillTemplate(stored, { 이름: nameForFill, 지원폼주소: applyUrl })
+      : fallback;
+
+    let inviteMessageId: string | null = null;
+    try {
+      const r = await sendSms(phone, sendBody);
+      inviteMessageId = r.messageId ?? null;
+      if (!r.success) {
+        console.error("[supabase-webhook] baemin apply invite SMS fail", r.error);
+      }
+    } catch (e) {
+      console.error("[supabase-webhook] baemin apply invite SMS exception", e);
     }
+
+    // 4) outbound messages 기록
+    await supabase.from("messages").insert({
+      applicant_id: applicantId,
+      applicant_phone: phone,
+      direction: "outbound",
+      body: sendBody,
+      status: "sent",
+      sent_by: "system-baemin-invite",
+      solapi_msg_id: inviteMessageId,
+      message_type: "sms",
+    });
+
     return NextResponse.json({
       ok: true,
       classification: "baemin",
       applicant_id: applicantId,
       triage,
+      apply_url_sent: true,
       agent_invoked: false,
     });
   }

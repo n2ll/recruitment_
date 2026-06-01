@@ -120,6 +120,17 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
   },
   {
     category: "system_message",
+    sort_order: 25,
+    title: "baemin_apply_invite",
+    body: `안녕하세요{{이름}}님, 옹고잉 배송원 지원 감사드립니다!
+
+정식 지원을 위해 아래 폼 작성을 부탁드릴게요^^
+{{지원폼주소}}
+
+작성 완료되시면 영업일 기준 1~2일 내 안내드리겠습니다.`,
+  },
+  {
+    category: "system_message",
     sort_order: 30,
     title: "screening_announce",
     body: `{{이름}}님, 본격적인 진행을 위해 몇 가지 안내드릴게요!

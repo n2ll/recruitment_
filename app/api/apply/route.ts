@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { sendNotification, sendSms } from "@/lib/solapi";
 import { geocodeAddress } from "@/lib/kakao-geocode";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
+import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
 import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
 
 // 희망 근무 시간대 축약 — "평일(월~금) 오전 타임..., 주말..." → "평일오전, 주말오후"
@@ -67,14 +68,24 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // ── 중복 지원 체크 (전화번호 기준) ──────────────────────
+    // ── 기존 applicant 조회 (전화번호 기준) ──────────────────
+    // 배민 흐름: SMS 인입 → triage가 baemin applicant를 미리 만들어둠 (status='스크리닝 전').
+    // 그 후 지원자가 이 폼을 작성하면 INSERT 대신 기존 row를 UPDATE해 데이터 일관성 유지.
+    // 그 외에는 옛 동작 그대로 (중복지원 표시 + 새 row INSERT).
     const { data: existing } = await supabase
       .from("applicants")
-      .select("id")
+      .select("id, source, status")
       .eq("phone", phone)
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    const isDuplicate = existing && existing.length > 0;
+    const existingRow = existing?.[0] ?? null;
+    const isDuplicate = !!existingRow;
+    // 폼 작성 전 단계의 baemin 임시 row면 UPDATE 대상
+    const updateMode =
+      !!existingRow &&
+      existingRow.source === "baemin" &&
+      (existingRow.status === "스크리닝 전" || existingRow.status === null);
 
     // ── 자동 필터 3조건 ──────────────────────────────────────
     const VALID_LICENSES = ["1종 보통", "2종 보통", "1종 대형"];
@@ -83,51 +94,68 @@ export async function POST(req: NextRequest) {
       VALID_LICENSES.includes(licenseType) &&
       selfOwnership === "문제 없음";
 
-    // source='danggeun'은 AI가 자동 응대 → 스크리닝 중. 그 외(direct/facebook/naver) 매니저 대기 → 스크리닝 전.
-    const autoEngages = source === "danggeun";
+    // source='danggeun'/'baemin'은 AI가 자동 응대 → 스크리닝 중. 그 외는 매니저 대기 → 스크리닝 전.
+    const autoEngages = source === "danggeun" || source === "baemin";
     const autoStatus = !filterPass ? "부적합" : (autoEngages ? "스크리닝 중" : "스크리닝 전");
 
     // ── 주소 지오코딩 (실패해도 저장 진행) ─────────────────
     const geo = location?.trim() ? await geocodeAddress(location) : null;
 
-    // ── Supabase에 저장 ─────────────────────────────────────
+    // ── Supabase에 저장 (UPDATE or INSERT) ─────────────────
     const consent = marketingConsent === true;
-    const { data: inserted, error } = await supabase
-      .from("applicants")
-      .insert({
-        name,
-        birth_date: birthDate,
-        phone,
-        location,
-        own_vehicle: ownVehicle,
-        license_type: licenseType,
-        vehicle_type: vehicleType,
-        branch1,
-        branch2: branch2 || null,
-        work_hours: Array.isArray(workHours) ? workHours.join(", ") : workHours,
-        introduction: introduction?.trim() || null,
-        experience: experience || null,
-        available_date: availableDate,
-        self_ownership: selfOwnership,
-        source: source || "direct",
-        branch: branch1,
-        status: autoStatus,
-        filter_pass: filterPass ? "Y" : "N",
-        note: isDuplicate ? "중복지원" : null,
-        marketing_consent: consent,
-        marketing_consent_at: consent ? new Date().toISOString() : null,
-        lat: geo?.lat ?? null,
-        lng: geo?.lng ?? null,
-        sido: geo?.sido ?? null,
-        sigungu: geo?.sigungu ?? null,
-        bname: geo?.bname ?? null,
-        road_address: geo?.road_address ?? null,
-      })
-      .select()
-      .single();
+    const rowPayload = {
+      name,
+      birth_date: birthDate,
+      phone,
+      location,
+      own_vehicle: ownVehicle,
+      license_type: licenseType,
+      vehicle_type: vehicleType,
+      branch1,
+      branch2: branch2 || null,
+      work_hours: Array.isArray(workHours) ? workHours.join(", ") : workHours,
+      introduction: introduction?.trim() || null,
+      experience: experience || null,
+      available_date: availableDate,
+      self_ownership: selfOwnership,
+      source: source || "direct",
+      branch: branch1,
+      status: autoStatus,
+      filter_pass: filterPass ? "Y" : "N",
+      note: updateMode ? null : (isDuplicate ? "중복지원" : null),
+      marketing_consent: consent,
+      marketing_consent_at: consent ? new Date().toISOString() : null,
+      lat: geo?.lat ?? null,
+      lng: geo?.lng ?? null,
+      sido: geo?.sido ?? null,
+      sigungu: geo?.sigungu ?? null,
+      bname: geo?.bname ?? null,
+      road_address: geo?.road_address ?? null,
+    };
+
+    let inserted: typeof rowPayload & { id: number } | null = null;
+    let error: { message?: string } | null = null;
+    if (updateMode) {
+      const { data, error: upErr } = await supabase
+        .from("applicants")
+        .update(rowPayload)
+        .eq("id", existingRow!.id)
+        .select()
+        .single();
+      inserted = (data as typeof rowPayload & { id: number } | null) ?? null;
+      error = upErr;
+    } else {
+      const { data, error: inErr } = await supabase
+        .from("applicants")
+        .insert(rowPayload)
+        .select()
+        .single();
+      inserted = (data as typeof rowPayload & { id: number } | null) ?? null;
+      error = inErr;
+    }
 
     if (error || !inserted) {
-      console.error("[Supabase insert error]", error);
+      console.error("[Supabase insert/update error]", error);
       return NextResponse.json(
         { error: "데이터 저장 중 오류가 발생했습니다." },
         { status: 500 }
@@ -164,7 +192,7 @@ export async function POST(req: NextRequest) {
       let sentByLabel: string;
       let useTemplate: "danggeun" | "apply_received" = "apply_received";
 
-      if (inserted.source === "danggeun") {
+      if (inserted.source === "danggeun" || inserted.source === "baemin") {
         const danggeunStart = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
         if (danggeunStart) {
           // 시작 멘트 {{이름}}/{{지점}}/{{시간대}} 치환
@@ -173,7 +201,7 @@ export async function POST(req: NextRequest) {
             지점: inserted.branch ?? "",
             시간대: shortWorkHours(inserted.work_hours),
           });
-          sentByLabel = "danggeun-start";
+          sentByLabel = inserted.source === "baemin" ? "baemin-start" : "danggeun-start";
           useTemplate = "danggeun";
         } else {
           // DB에 시작 멘트 미저장 — 폴백으로 접수 안내
@@ -234,18 +262,20 @@ export async function POST(req: NextRequest) {
       console.error("[apply notify exception]", notifyErr);
     }
 
-    // source='danggeun'으로 들어온 폼 지원자는 자동 AI 응대 흐름에 올린다.
-    // 시스템 더미 공고 + job_candidates(exploration) 자동 생성 → 다음 인입 SMS 시
-    // /api/messages/inbound가 router를 태우게 됨.
-    if (inserted.source === "danggeun") {
+    // source='danggeun' 또는 'baemin'으로 들어온 폼 지원자는 자동 AI 응대 흐름에 올린다.
+    // (배민은 SMS 인입 → 폼 발송 → 폼 제출 시점에 비로소 job_candidates 생성)
+    if (inserted.source === "danggeun" || inserted.source === "baemin") {
       try {
-        const danggeunJobId = await ensureDanggeunSystemJob(supabase);
+        const isBaeminFlow = inserted.source === "baemin";
+        const sysJobId = isBaeminFlow
+          ? await ensureBaeminSystemJob(supabase)
+          : await ensureDanggeunSystemJob(supabase);
         // 희망시간대에 '주말'이 없으면 평일 슬롯 → 공휴일 업무 확인 자동 통과
         const isWeekendSlot = String(inserted.work_hours ?? "").includes("주말");
         const { error: jcErr } = await supabase.from("job_candidates").insert({
-          job_id: danggeunJobId,
+          job_id: sysJobId,
           applicant_id: inserted.id,
-          agent_stage: "screening", // 탐색은 base 능력, 프로세스는 스크리닝부터
+          agent_stage: "screening",
           agent_state: {
             screening: {
               프로모션_종료가능성_안내: true,
@@ -257,10 +287,10 @@ export async function POST(req: NextRequest) {
           },
         });
         if (jcErr) {
-          console.error("[apply] danggeun job_candidates insert error", jcErr);
+          console.error("[apply] job_candidates insert error", jcErr);
         }
       } catch (e) {
-        console.error("[apply] ensureDanggeunSystemJob failed", e);
+        console.error("[apply] system job ensure failed", e);
       }
     }
 

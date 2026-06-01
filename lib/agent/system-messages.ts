@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type SystemMessageKey =
   | "danggeun_start"
   | "apply_received"
+  | "baemin_apply_invite"
   | "screening_announce"
   | "onboarding_guide"
   | "onboarding_reminder"
