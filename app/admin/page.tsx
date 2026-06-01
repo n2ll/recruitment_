@@ -1578,10 +1578,18 @@ export default function AdminPage() {
                         <td className="td-bold">{b}</td>
                         {SLOTS.map((s) => {
                           const capacity = getSlotCapacity(branch, s);
+                          const slotMatch = (val: string | null) =>
+                            (val ?? "").split(",").map((t) => t.trim()).includes(s);
                           const confirmed = data.filter(
                             (a) =>
                               a.status === "확정인력" &&
-                              (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(s) &&
+                              slotMatch(a.confirmed_slot) &&
+                              a.confirmed_branch === b
+                          ).length;
+                          const waiting = data.filter(
+                            (a) =>
+                              a.status === "대기자" &&
+                              slotMatch(a.confirmed_slot) &&
                               a.confirmed_branch === b
                           ).length;
                           const cellClass =
@@ -1596,6 +1604,7 @@ export default function AdminPage() {
                               onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
                             >
                               <div className="conf-main">{confirmed}/{capacity}</div>
+                              {waiting > 0 && <div className="conf-sub">대기 {waiting}</div>}
                             </td>
                           );
                         })}
@@ -1607,39 +1616,62 @@ export default function AdminPage() {
               </div>
 
               {slotCell && (() => {
-                const list = data.filter(
+                const slotMatch = (val: string | null) =>
+                  (val ?? "").split(",").map((t) => t.trim()).includes(slotCell.slot);
+                const confirmedList = data.filter(
                   (a) =>
-                    (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(slotCell.slot) &&
+                    slotMatch(a.confirmed_slot) &&
                     a.confirmed_branch === slotCell.branch &&
                     a.status === "확정인력"
+                );
+                const waitingList = data.filter(
+                  (a) =>
+                    slotMatch(a.confirmed_slot) &&
+                    a.confirmed_branch === slotCell.branch &&
+                    a.status === "대기자"
+                );
+                const Row = (a: Applicant) => (
+                  <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
+                    <td className="td-bold">{a.name}</td>
+                    <td>{a.phone}</td>
+                    <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
+                    <td>{a.start_date || "-"}</td>
+                    <td>{a.current_branch || "-"}</td>
+                  </tr>
                 );
                 return (
                   <div className="slot-drill">
                     <div className="slot-drill-header">
-                      <h3>{slotCell.branch} · {slotCell.slot} · 배치된 {list.length}명</h3>
+                      <h3>{slotCell.branch} · {slotCell.slot} · 확정 {confirmedList.length}명 · 대기 {waitingList.length}명</h3>
                       <button className="close-btn" onClick={() => setSlotCell(null)}>X</button>
                     </div>
-                    {list.length === 0 ? (
-                      <div className="empty">배치된 인원이 없습니다. 지원자 목록에서 확정 슬롯/지점을 지정해주세요.</div>
+                    {/* 확정인력 */}
+                    <div className="slot-section-title">✓ 확정인력 ({confirmedList.length})</div>
+                    {confirmedList.length === 0 ? (
+                      <div className="empty">배치된 확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 슬롯/지점을 지정해주세요.</div>
                     ) : (
                       <div className="table-wrap">
                         <table className="table">
                           <thead>
                             <tr><th>성함</th><th>연락처</th><th>상태</th><th>시작일</th><th>현재 근무지</th></tr>
                           </thead>
-                          <tbody>
-                            {list.map((a) => (
-                              <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
-                                <td className="td-bold">{a.name}</td>
-                                <td>{a.phone}</td>
-                                <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
-                                <td>{a.start_date || "-"}</td>
-                                <td>{a.current_branch || "-"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
+                          <tbody>{confirmedList.map(Row)}</tbody>
                         </table>
                       </div>
+                    )}
+                    {/* 대기자 (있을 때만 노출) */}
+                    {waitingList.length > 0 && (
+                      <>
+                        <div className="slot-section-title slot-section-waiting">⏳ 대기자 ({waitingList.length})</div>
+                        <div className="table-wrap">
+                          <table className="table">
+                            <thead>
+                              <tr><th>성함</th><th>연락처</th><th>상태</th><th>시작일</th><th>현재 근무지</th></tr>
+                            </thead>
+                            <tbody>{waitingList.map(Row)}</tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </div>
                 );
@@ -2551,6 +2583,13 @@ const css = `
   .lg-half { background: #dbeafe; border: 1px solid #3b82f6; }
   .lg-short { background: #fee2e2; border: 1px solid #ef4444; }
   .lg-zero { background: #fafafa; border: 1px solid #d1d5db; }
+
+  .slot-section-title {
+    font-size: 12px; font-weight: 700; color: #065F46;
+    margin: 16px 0 6px; letter-spacing: 0.02em;
+  }
+  .slot-section-title:first-child { margin-top: 0; }
+  .slot-section-waiting { color: #92400E; }
 
   .slot-drill {
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
