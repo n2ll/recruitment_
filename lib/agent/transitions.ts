@@ -214,7 +214,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           .eq("id", applicant_id)
           .in("status", ["스크리닝 전", "스크리닝 중", "스크리닝 완료"]);
 
-        // (온보딩 진입 슬랙은 제거 — '온보딩 준비 완료'(아이디·차량번호 수신) 시점에
+        // (온보딩 진입 슬랙은 제거 — '준비 완료'(배민 아이디 수신) 시점에
         //  onboarding stage에서 발송한다.)
 
         // 앱·교육 안내 (가이드 알림톡 ⑥) — 본문은 아래 buildOnboardingGuide 참조
@@ -229,7 +229,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           // 본문에 {{마감시각}} placeholder가 없거나 치환 후에도 deadlineStr이 보이지 않으면 끝에 자동 부착.
           const guideText = baseGuide.includes(deadlineStr)
             ? baseGuide
-            : `${baseGuide}\n\n⏰ ${deadlineStr}까지 아이디와 차량번호를 반드시 회신해주세요.`;
+            : `${baseGuide}\n\n⏰ ${deadlineStr}까지 배민 커넥트 아이디를 반드시 회신해주세요.`;
           if (await isAlreadySentRecently(guideText)) {
             // 이미 발송됨 — 중복 방지
           } else {
@@ -268,7 +268,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
 
       if (transition.to === "active") {
         // onboarding → active: 자동 단계 전이지만 매니저 확정은 아님.
-        // 아이디·차량번호 회신까지 = 스크리닝 완료. 이후 매니저가 통화로 확인 후 '확정인력'으로 직접 변경.
+        // 배민 아이디 회신까지 = 스크리닝 완료. 이후 매니저가 통화로 확인 후 '확정인력'으로 직접 변경.
         // 첫 출근 룰 자동 발송은 D-day cron이 별도 처리해야 하므로 생략.
         await supabase
           .from("job_candidates")
@@ -285,7 +285,7 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
     }
   }
 
-  // 배민ID + 차량번호 둘 다 수신 시 만남장소 자동 발송은 제거됨.
+  // 배민 아이디 수신 시 만남장소 자동 발송은 제거됨.
   // 현 설계: AI는 "감사합니다, 곧 다시 연락드리겠습니다" 마무리 + 슬랙 '온보딩 준비 완료'까지만,
   // 이후 만남장소 안내·확정은 매니저가 직접 진행한다.
 
@@ -391,7 +391,6 @@ export function buildOnboardingGuideText(_name: string | null): string {
     "1. 배민 커넥트 앱 설치 후 가입",
     "2. 앱 가입 시 안전보건교육 영상(2시간) 필수 시청 필요",
     "3. 가입 및 교육 수료 후 마이페이지 > 내 정보에서 '아이디' 확인 후, 아이디 회신 부탁드립니다.",
-    "4. 차량번호도 함께 회신 부탁드립니다.",
     "",
     "[참고 자료]",
     "가입 가이드: https://www.youtube.com/watch?v=bMM112zT7JY",

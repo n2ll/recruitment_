@@ -10,7 +10,6 @@ import type {
 } from "./types";
 
 export const SCREENING_KEYS: (keyof ScreeningChecklist)[] = [
-  "시작일_근무가능",
   "자차_재확인",
   "프로모션_종료가능성_안내",
   "정산주기_안내",
@@ -23,7 +22,6 @@ export const SCREENING_KEYS: (keyof ScreeningChecklist)[] = [
 export const ONBOARDING_KEYS: (keyof OnboardingChecklist)[] = [
   "앱설치_교육_안내발송됨",
   "배민_아이디_수신",
-  "차량번호_수신",
   "만남장소_안내발송됨",
 ];
 

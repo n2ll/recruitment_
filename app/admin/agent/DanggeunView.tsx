@@ -759,7 +759,7 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
                   const note =
                     target === "screening"
                       ? "스크리닝부터 다시 진행합니다. (진행 상태 = 스크리닝 중)"
-                      : "스크리닝 체크리스트를 완료한 것으로 처리하고 온보딩(아이디·차량번호 수집)으로 넘어갑니다. 앱설치 안내가 자동 발송됩니다. (진행 상태 = 스크리닝 완료)";
+                      : "스크리닝 체크리스트를 완료한 것으로 처리하고 정보 수집(배민 아이디) 단계로 넘어갑니다. 앱설치 안내가 자동 발송됩니다. (진행 상태 = 스크리닝 완료)";
                   if (!confirm(`'${targetLabel}' 단계로 변경합니다.\n\n${note}\n\n진행할까요?`)) return;
                   try {
                     const res = await fetch("/api/admin/agent/set-stage", {
@@ -781,7 +781,7 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
 
               {agentStage === "onboarding" && (
                 <div className="dg-banner dg-banner-info">
-                  📦 <b>스크리닝 완료 — AI가 배민 아이디·차량번호 수집 중.</b> 둘 다 받으면 "곧 연락드리겠습니다"로 마무리 + 슬랙 '준비 완료' 알림이 갑니다.
+                  📦 <b>스크리닝 완료 — AI가 배민 아이디 수집 중.</b> 받으면 "곧 연락드리겠습니다"로 마무리 + 슬랙 '준비 완료' 알림이 갑니다.
                 </div>
               )}
               {agentStage === "paused" && (

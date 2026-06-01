@@ -118,12 +118,11 @@ export async function POST(req: NextRequest) {
   }
 
   // (2) 만남장소 자동 발송 — onboarding state post-process 시뮬
-  // (배민ID + 차량번호 둘 다 true & 아직 미발송 상태일 때 시스템이 자동 발송)
+  // (배민 아이디 수신 & 아직 미발송 상태일 때 시스템이 자동 발송)
   if (payload.stage === "onboarding" || result.transition.kind === "advance") {
     const onb = result.state_update.onboarding;
     const willSendVenue =
       onb?.배민_아이디_수신 === true &&
-      onb?.차량번호_수신 === true &&
       onb?.만남장소_안내발송됨 !== true;
 
     if (willSendVenue) {

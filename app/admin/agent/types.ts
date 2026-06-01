@@ -70,7 +70,6 @@ export interface CandidateRow {
 
 export interface AgentState {
   screening?: Partial<{
-    시작일_근무가능: boolean;
     자차_재확인: boolean;
     프로모션_종료가능성_안내: boolean;
     정산주기_안내: boolean;
@@ -82,14 +81,12 @@ export interface AgentState {
   onboarding?: Partial<{
     앱설치_교육_안내발송됨: boolean;
     배민_아이디_수신: boolean;
-    차량번호_수신: boolean;
     만남장소_안내발송됨: boolean;
   }>;
   meta?: Record<string, unknown>;
 }
 
 export const SCREENING_KEYS = [
-  "시작일_근무가능",
   "자차_재확인",
   "프로모션_종료가능성_안내",
   "정산주기_안내",
@@ -102,7 +99,6 @@ export const SCREENING_KEYS = [
 export const ONBOARDING_KEYS = [
   "앱설치_교육_안내발송됨",
   "배민_아이디_수신",
-  "차량번호_수신",
   "만남장소_안내발송됨",
 ] as const;
 

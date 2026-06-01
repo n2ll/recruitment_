@@ -19,8 +19,11 @@ export type StageName = "exploration" | "screening" | "onboarding" | "active" | 
  * - false: 아직 미확인
  * - 일부 항목은 "지원자 답이 부정"이면 abort 트리거 (시작일 불가, 자차 없음, 본인명의 불가)
  */
+/**
+ * 스크리닝 체크리스트 — '시작일'은 매니저 확정 후 안내하므로 제거.
+ * "에이전트 질문에 긍정 = 근무 확정"이 절대 아니라는 점을 반영해 시작일을 묻지 않는다.
+ */
 export interface ScreeningChecklist {
-  시작일_근무가능: boolean;            // 시작일에 즉시 근무 가능
   자차_재확인: boolean;                // 폼 거짓 케이스 대비 — 재확인
   프로모션_종료가능성_안내: boolean;   // "프로모션 5천원 1~2개월 후 종료 가능"
   정산주기_안내: boolean;              // "건당 매주, 프로모션 2주"
@@ -31,15 +34,14 @@ export interface ScreeningChecklist {
 }
 
 /**
- * 온보딩(onboarding) 체크리스트 — 4항목.
+ * 온보딩(onboarding) 체크리스트 — 차량번호 수집 제거.
  * - 진입 즉시 자동 발송: 앱설치+교육 안내 → 앱설치_교육_안내발송됨=true
- * - 지원자 회신에서: 배민_아이디_수신, 차량번호_수신
+ * - 지원자 회신에서: 배민_아이디_수신
  * - D-1 cron이 만남장소_안내발송됨=true
  */
 export interface OnboardingChecklist {
   앱설치_교육_안내발송됨: boolean;
   배민_아이디_수신: boolean;
-  차량번호_수신: boolean;
   만남장소_안내발송됨: boolean;
 }
 

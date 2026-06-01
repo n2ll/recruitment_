@@ -140,7 +140,6 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
 1. 배민 커넥트 앱 설치 후 가입
 2. 앱 가입 시 안전보건교육 영상(2시간) 필수 시청 필요
 3. 가입 및 교육 수료 후 마이페이지 > 내 정보에서 '아이디' 확인 후, 아이디 회신 부탁드립니다.
-4. 차량번호도 함께 회신 부탁드립니다.
 
 [참고 자료]
 가입 가이드: https://www.youtube.com/watch?v=bMM112zT7JY
@@ -150,11 +149,9 @@ export const PROMPT_EXAMPLES_SEED: SeedExample[] = [
     category: "system_message",
     sort_order: 45,
     title: "onboarding_reminder",
-    body: `{{이름}}님, 아직 배민 아이디·차량번호 회신이 확인되지 않습니다.
+    body: `{{이름}}님, 아직 배민 커넥트 아이디 회신이 확인되지 않습니다.
 
-진행을 위해 두 정보 모두 회신 부탁드립니다.
-1. 배민 커넥트 아이디 (마이페이지 > 내 정보)
-2. 차량번호
+진행을 위해 마이페이지 > 내 정보에서 아이디 확인 후 회신 부탁드립니다.
 
 * 회신이 없을 경우 진행이 자동 중단될 수 있습니다.`,
   },

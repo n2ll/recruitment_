@@ -96,7 +96,7 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   if (!stageName || stageName === "paused" || stageName === "abort") {
     return { ok: true, skipped: `stage=${stageName ?? "null"} — agent skipped` };
   }
-  // onboarding도 AI가 응답한다 — 배민 아이디·차량번호 수집 후 "감사합니다 곧 연락드리겠습니다" 마무리.
+  // onboarding도 AI가 응답한다 — 배민 아이디 수집 후 "감사합니다 곧 연락드리겠습니다" 마무리.
   const blockReplyForStage = false;
 
   // 답장 텀(sleep) 동안 같은 후보가 추가 메시지를 보냈으면, 더 늦은 핸들러가

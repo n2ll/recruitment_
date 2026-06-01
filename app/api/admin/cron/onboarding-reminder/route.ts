@@ -5,13 +5,13 @@
  *
  *  단계 A — 리마인더 SMS (가이드 발송 후 24h 미회신)
  *    조건: onboarding_entered_at < now-24h AND reminder_sent_at IS NULL
- *          AND 아이디 또는 차량번호 미수신
+ *          AND 배민 아이디 미수신
  *    동작: system_message 'onboarding_reminder' 본문으로 SMS 발송
  *          + meta.onboarding_reminder_sent_at 기록 (1회만)
  *
  *  단계 B — 매니저 전화 인계 슬랙 (리마인더 발송 후 3h 미회신)
  *    조건: reminder_sent_at < now-3h AND manager_handoff_alerted_at IS NULL
- *          AND 아이디 또는 차량번호 미수신
+ *          AND 배민 아이디 미수신
  *    동작: sendSlackOnboardingHandoff 호출 + meta.manager_handoff_alerted_at 기록
  *
  * 둘 다 수신된 후보는 어느 단계도 발동 안 함.
@@ -32,11 +32,9 @@ const HANDOFF_DELAY_MS = 3 * 60 * 60 * 1000;   // 리마인더 발송 후 매니
 
 const FALLBACK_BODY = (name: string) =>
   [
-    `${name}님, 아직 배민 아이디·차량번호 회신이 확인되지 않습니다.`,
+    `${name}님, 아직 배민 커넥트 아이디 회신이 확인되지 않습니다.`,
     "",
-    "진행을 위해 두 정보 모두 회신 부탁드립니다.",
-    "1. 배민 커넥트 아이디 (마이페이지 > 내 정보)",
-    "2. 차량번호",
+    "진행을 위해 마이페이지 > 내 정보에서 아이디 확인 후 회신 부탁드립니다.",
     "",
     "* 회신이 없을 경우 진행이 자동 중단될 수 있습니다.",
   ].join("\n");
@@ -81,8 +79,8 @@ export async function GET(req: NextRequest) {
       source: string | null; branch1: string | null;
     };
 
-    // 이미 둘 다 수신 — 어떤 단계도 발동 안 함
-    if (ob.배민_아이디_수신 === true && ob.차량번호_수신 === true) continue;
+    // 이미 아이디 수신 — 단계 발동 안 함
+    if (ob.배민_아이디_수신 === true) continue;
     if (!meta.onboarding_entered_at) {
       results.push({ candidate_id: row.id as number, stage: "skip", success: false, reason: "no onboarding_entered_at" });
       continue;
