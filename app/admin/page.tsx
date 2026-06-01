@@ -1237,7 +1237,8 @@ export default function AdminPage() {
                 <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
 
-              <div className="table-wrap">
+              <div className={`applicants-grid ${selected ? "has-detail" : ""}`}>
+              <div className="table-wrap applicants-table-wrap">
                 <table className="table">
                   <thead>
                     <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>시간대</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
@@ -1246,7 +1247,11 @@ export default function AdminPage() {
                     {filtered.map((a) => (
                       <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
                         <td className="td-bold">
+                          {/* 이름 클릭 → 메시지 대화창 열기 기능은 보류 (행 클릭 = 상세로 통일).
+                              나중에 다시 활성화하려면 아래 span의 onClick·class를 복원하세요.
                           <span className="name-link" onClick={(e) => { e.stopPropagation(); openChat(a); }}>{a.name}</span>
+                          */}
+                          <span>{a.name}</span>
                           {a.note === "중복지원" && <span className="dup-tag">중복</span>}
                         </td>
                         <td>{a.phone}</td>
@@ -1436,6 +1441,7 @@ export default function AdminPage() {
                 </div>
                 );
               })()}
+              </div> {/* /applicants-grid */}
             </div>
           ) : tab === "hope-slots" ? (
             <div className="content">
@@ -2472,6 +2478,21 @@ const css = `
     display: inline-block; padding: 1px 5px; border-radius: 4px;
     font-size: 10px; font-weight: 600; color: #ef4444; background: #fef2f2;
     margin-left: 6px;
+  }
+
+  /* 지원자 목록 — 표 + 우측 상세 패널 grid */
+  .applicants-grid { display: flex; gap: 16px; align-items: flex-start; }
+  .applicants-table-wrap { flex: 1; min-width: 0; }
+  .applicants-grid.has-detail .detail-panel {
+    width: 420px; flex-shrink: 0; margin-top: 0;
+    position: sticky; top: 16px;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+  @media (max-width: 1280px) {
+    .applicants-grid { flex-direction: column; }
+    .applicants-grid.has-detail .detail-panel {
+      width: 100%; position: static; max-height: none;
+    }
   }
 
   .detail-panel {
