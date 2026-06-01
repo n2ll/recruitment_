@@ -136,6 +136,21 @@ function getSlotCapacity(branch: Branch | undefined, slot: SlotKey): number {
   return typeof v === "number" ? v : DEFAULT_SLOT_CAPACITY[slot];
 }
 
+// work_hours 값을 짧은 표기로 ("평일(월~금) 오전 타임 (09:00 ~ 14:00)" → "평일 오전")
+function shortWorkHours(wh: string | null | undefined): string {
+  if (!wh) return "";
+  return wh
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((token) => {
+      const day = token.includes("주말") ? "주말" : token.includes("평일") ? "평일" : "";
+      const time = token.includes("오전") ? "오전" : token.includes("오후") ? "오후" : "";
+      return day && time ? `${day} ${time}` : token;
+    })
+    .join(", ");
+}
+
 // work_hours 텍스트(콤마 join된 4슬롯 중 선택값) → 슬롯 매칭
 function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boolean {
   if (!workHours) return false;
@@ -1246,7 +1261,7 @@ export default function AdminPage() {
                           </select>
                         </td>
                         <td>{a.own_vehicle}</td>
-                        <td className="td-muted">{a.work_hours || "—"}</td>
+                        <td className="td-muted">{shortWorkHours(a.work_hours) || "—"}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="date"
