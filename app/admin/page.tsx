@@ -26,11 +26,11 @@ interface Applicant {
   work_hours: string;
   introduction: string | null;
   experience: string | null;
-  available_date: string;
+  available_date: string | null;
   self_ownership: string;
   screening: string | null;
   status: string;
-  branch: string;
+  branch: string | null;
   source: string;
   filter_pass: string | null;
   note: string | null;
