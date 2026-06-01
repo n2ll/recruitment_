@@ -1225,7 +1225,7 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>시간대</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
@@ -1246,6 +1246,7 @@ export default function AdminPage() {
                           </select>
                         </td>
                         <td>{a.own_vehicle}</td>
+                        <td className="td-muted">{a.work_hours || "—"}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="date"
