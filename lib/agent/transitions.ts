@@ -191,21 +191,28 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
           meta: { screening_entered_at: now },
         };
 
-        // applicants.status를 단계명과 통일 — '스크리닝'
-        await supabase.from("applicants").update({ status: "스크리닝" }).eq("id", applicant_id);
+        // applicants.status를 자동 AI 상태와 통일 — '스크리닝 중'
+        // (매니저가 이미 확정인력/대기자/부적합으로 설정했으면 건드리지 않음)
+        await supabase
+          .from("applicants")
+          .update({ status: "스크리닝 중" })
+          .eq("id", applicant_id)
+          .in("status", ["스크리닝 전", "스크리닝 중"]);
       }
 
       if (transition.to === "onboarding") {
-        // screening → onboarding: 앱·교육 안내 자동 발송 + applicants.status='온보딩'
+        // screening → onboarding: 앱·교육 안내 자동 발송 + applicants.status='스크리닝 완료'
         // (별도 "확정 안내" 메시지는 보내지 않음 — AI의 마지막 응답 + 가이드 본문이 그 역할 대신)
         await supabase
           .from("job_candidates")
           .update({ confirmed_at: now })
           .eq("id", candidate_id);
+        // 자동 status는 매니저 미터치 케이스에만 갱신
         await supabase
           .from("applicants")
-          .update({ status: "온보딩" })
-          .eq("id", applicant_id);
+          .update({ status: "스크리닝 완료" })
+          .eq("id", applicant_id)
+          .in("status", ["스크리닝 전", "스크리닝 중", "스크리닝 완료"]);
 
         // (온보딩 진입 슬랙은 제거 — '온보딩 준비 완료'(아이디·차량번호 수신) 시점에
         //  onboarding stage에서 발송한다.)
@@ -260,17 +267,19 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       }
 
       if (transition.to === "active") {
-        // onboarding → active: 자동 단계 전이지만 '확정' 처리는 아님.
-        // 아이디·차량번호 회신까지 = 온보딩 완료. 이후 매니저가 통화로 확인 후 status='확정'으로 직접 변경.
-        // 첫 출근 룰 자동 발송은 이 시점이 아니라 실제 근무 D-day 별도 cron이 해야 정상이라 생략.
+        // onboarding → active: 자동 단계 전이지만 매니저 확정은 아님.
+        // 아이디·차량번호 회신까지 = 스크리닝 완료. 이후 매니저가 통화로 확인 후 '확정인력'으로 직접 변경.
+        // 첫 출근 룰 자동 발송은 D-day cron이 별도 처리해야 하므로 생략.
         await supabase
           .from("job_candidates")
           .update({ activated_at: now })
           .eq("id", candidate_id);
+        // 자동 status는 매니저 미터치 케이스에만 '스크리닝 완료'로 유지/갱신
         await supabase
           .from("applicants")
-          .update({ status: "온보딩 완료" })
-          .eq("id", applicant_id);
+          .update({ status: "스크리닝 완료" })
+          .eq("id", applicant_id)
+          .in("status", ["스크리닝 전", "스크리닝 중", "스크리닝 완료"]);
       }
       break;
     }

@@ -42,7 +42,7 @@ export interface ApplicantFormValue {
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 const LICENSE_TYPES = ["1종 보통", "2종 보통", "1종 대형", "1종 자동", "2종 자동", "없음"];
 const SELF_OWNERSHIP_OPTIONS = ["문제 없음", "문제 있음 (지원불가)", "확인 필요"];
-const STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합"];
+const STATUSES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자", "부적합"];
 const SOURCES: Array<{ value: string; label: string }> = [
   { value: "manual", label: "수기 등록" },
   { value: "danggeun", label: "당근 (자동 AI 응대 + 시작 멘트 발송)" },
@@ -69,7 +69,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
     branch1: "", branch2: "", work_hours: "",
     available_date: "", self_ownership: "",
     introduction: "", experience: "",
-    source: "manual", status: "스크리닝", note: "",
+    source: "manual", status: "스크리닝 전", note: "",
     start_date: "", confirmed_slot: "", confirmed_branch: "", current_branch: "",
     churn_reason: "",
     marketing_consent: false, kakao_channel_friend: false,
@@ -230,7 +230,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
             <h4>상태·확정</h4>
             <div className="afm-grid">
               <Field label="진행 상태">
-                <select className="afm-inp" value={form.status ?? "스크리닝"} onChange={(e) => set("status", e.target.value)}>
+                <select className="afm-inp" value={form.status ?? "스크리닝 전"} onChange={(e) => set("status", e.target.value)}>
                   {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Field>

@@ -111,11 +111,13 @@ export async function POST(req: NextRequest) {
         console.error("[agent/set-stage] active update error", upErr);
         return NextResponse.json({ error: upErr.message }, { status: 500 });
       }
-      // '완료' 단계 = 온보딩 정보 회신까지 완료. status='확정'은 매니저가 통화 후 직접 변경.
+      // '스크리닝 완료' 단계로 자동 갱신 (매니저가 이미 확정인력/대기자/부적합 설정했으면 건드리지 않음).
+      // 매니저가 통화 후 '확정인력'으로 직접 변경하는 흐름.
       await supabase
         .from("applicants")
-        .update({ status: "온보딩 완료" })
-        .eq("id", applicant.id);
+        .update({ status: "스크리닝 완료" })
+        .eq("id", applicant.id)
+        .in("status", ["스크리닝 전", "스크리닝 중", "스크리닝 완료"]);
       return NextResponse.json({
         ok: true,
         from_stage: currentStage,

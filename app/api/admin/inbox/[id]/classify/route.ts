@@ -83,7 +83,7 @@ export async function POST(
           available_date: PH,
           self_ownership: PH,
           source: "baemin",
-          status: "스크리닝",
+          status: "스크리닝 중",
           filter_pass: null,
           introduction: ext.experience?.trim() || null,
           note: `매니저 수동 분류 (배민): ${triageRes.reasoning}`,

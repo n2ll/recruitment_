@@ -18,11 +18,11 @@ const ALLOWED_FIELDS = new Set([
 ]);
 
 const VALID_STATUS = new Set([
-  "스크리닝",
-  "온보딩",
-  "온보딩 완료",
-  "확정",
-  "이탈",
+  "스크리닝 전",
+  "스크리닝 중",
+  "스크리닝 완료",
+  "확정인력",
+  "대기자",
   "부적합",
 ]);
 
@@ -72,8 +72,8 @@ export async function PATCH(
     );
   }
 
-  // 상태 이탈로 전환 시 current_branch/churned_at 자동 처리
-  if (updates.status === "이탈") {
+  // 상태 부적합으로 전환 시 current_branch/churned_at 자동 처리 (예전 '이탈'과 동일 의미)
+  if (updates.status === "부적합") {
     updates.current_branch = null;
     updates.churned_at = new Date().toISOString();
   }

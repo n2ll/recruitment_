@@ -83,7 +83,9 @@ export async function POST(req: NextRequest) {
       VALID_LICENSES.includes(licenseType) &&
       selfOwnership === "문제 없음";
 
-    const autoStatus = filterPass ? "스크리닝" : "부적합";
+    // source='danggeun'은 AI가 자동 응대 → 스크리닝 중. 그 외(direct/facebook/naver) 매니저 대기 → 스크리닝 전.
+    const autoEngages = source === "danggeun";
+    const autoStatus = !filterPass ? "부적합" : (autoEngages ? "스크리닝 중" : "스크리닝 전");
 
     // ── 주소 지오코딩 (실패해도 저장 진행) ─────────────────
     const geo = location?.trim() ? await geocodeAddress(location) : null;

@@ -9,7 +9,6 @@ import PromptExamplesView from "./prompts/PromptExamplesView";
 import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
 import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
-import { STAGE_LABEL } from "./agent/types";
 import PendingInboxView from "./inbox/PendingInboxView";
 
 interface Applicant {
@@ -102,16 +101,16 @@ interface RecommendResponse {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  스크리닝: "#6b7280",
-  온보딩: "#f59e0b",
-  "온보딩 완료": "#0EA5E9",
-  확정: "#10b981",
-  이탈: "#475569",
-  부적합: "#ef4444",
+  "스크리닝 전":   "#9CA3AF",  // 회색 (대기/시작 전)
+  "스크리닝 중":   "#6b7280",  // 진한 회색
+  "스크리닝 완료": "#0EA5E9",  // 하늘색
+  "확정인력":      "#10b981",  // 초록 (매니저 확정)
+  "대기자":        "#f59e0b",  // 주황 (매니저 보류)
+  "부적합":        "#ef4444",  // 빨강
 };
 
 const ALL_STATUSES = [
-  "스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합",
+  "스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자", "부적합",
 ];
 
 interface Branch {
@@ -149,7 +148,7 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
-const ACTIVE_STATUSES = ["스크리닝", "온보딩", "온보딩 완료", "확정"];
+const ACTIVE_STATUSES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자"];
 const CONFIRMED_STATUSES = ["확정"];
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
@@ -997,10 +996,11 @@ export default function AdminPage() {
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length,
-    screening: data.filter((a) => a.status === "스크리닝").length,
-    onboarding: data.filter((a) => a.status === "온보딩").length,
-    onboardingComplete: data.filter((a) => a.status === "온보딩 완료").length,
-    deployed: data.filter((a) => a.status === "확정").length,
+    screeningPre: data.filter((a) => a.status === "스크리닝 전").length,
+    screeningInProg: data.filter((a) => a.status === "스크리닝 중").length,
+    screeningDone: data.filter((a) => a.status === "스크리닝 완료").length,
+    confirmed: data.filter((a) => a.status === "확정인력").length,
+    waiting: data.filter((a) => a.status === "대기자").length,
   };
 
   // 지점 on/off는 /apply(공개 폼)에만 영향. 매니저용 admin 화면은 모든 지점 노출.
@@ -1008,7 +1008,7 @@ export default function AdminPage() {
   const branchStats = allBranchNames.map((b) => ({
     name: b,
     total: data.filter((a) => a.branch === b).length,
-    screening: data.filter((a) => a.branch === b && a.status === "스크리닝").length,
+    screening: data.filter((a) => a.branch === b && a.status === "스크리닝 중").length,
   }));
 
   const selected = data.find((a) => a.id === selectedId);
@@ -1177,10 +1177,11 @@ export default function AdminPage() {
               <div className="stat-grid">
                 <div className="stat-card"><div className="stat-num">{stats.total}</div><div className="stat-label">전체 지원자</div></div>
                 <div className="stat-card accent"><div className="stat-num">{stats.today}</div><div className="stat-label">오늘 지원</div></div>
-                <div className="stat-card warn"><div className="stat-num">{stats.screening}</div><div className="stat-label">스크리닝</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.onboarding}</div><div className="stat-label">온보딩</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.onboardingComplete}</div><div className="stat-label">온보딩 완료</div></div>
-                <div className="stat-card success"><div className="stat-num">{stats.deployed}</div><div className="stat-label">확정</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.screeningPre}</div><div className="stat-label">스크리닝 전</div></div>
+                <div className="stat-card warn"><div className="stat-num">{stats.screeningInProg}</div><div className="stat-label">스크리닝 중</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.screeningDone}</div><div className="stat-label">스크리닝 완료</div></div>
+                <div className="stat-card success"><div className="stat-num">{stats.confirmed}</div><div className="stat-label">확정인력</div></div>
+                <div className="stat-card"><div className="stat-num">{stats.waiting}</div><div className="stat-label">대기자</div></div>
               </div>
 
               <h3 className="section-title">지점별 현황</h3>
@@ -1225,7 +1226,7 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>면허</th><th>시작가능일</th><th>단계 (AI)</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
@@ -1237,9 +1238,7 @@ export default function AdminPage() {
                         <td>{a.phone}</td>
                         <td>{a.branch}</td>
                         <td>{a.own_vehicle}</td>
-                        <td>{a.license_type}</td>
                         <td>{a.available_date}</td>
-                        <td>{a.agent_stage ? <span className="stage-pill">{STAGE_LABEL[a.agent_stage] ?? a.agent_stage}</span> : <span className="td-muted">—</span>}</td>
                         <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
                         <td>{sourceLabel(a.source)}</td>
                         <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
@@ -1361,13 +1360,13 @@ export default function AdminPage() {
                         }}
                       />
                     </label>
-                    {currentStatus === "이탈" && (
+                    {(currentStatus === "부적합" || currentStatus === "대기자") && (
                       <label className="edit-field edit-field-wide">
-                        <span className="dl">이탈 사유</span>
+                        <span className="dl">사유 메모</span>
                         <input
                           type="text"
                           className="edit-select"
-                          placeholder="사유 입력"
+                          placeholder="부적합/대기 사유"
                           value={(draftVal("churn_reason") as string) || ""}
                           onChange={(e) => setDraft("churn_reason", e.target.value || null)}
                         />
@@ -1541,7 +1540,7 @@ export default function AdminPage() {
                           const capacity = getSlotCapacity(branch, s);
                           const confirmed = data.filter(
                             (a) =>
-                              a.status === "확정" &&
+                              a.status === "확정인력" &&
                               (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(s) &&
                               a.confirmed_branch === b
                           ).length;
@@ -1572,7 +1571,7 @@ export default function AdminPage() {
                   (a) =>
                     (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).includes(slotCell.slot) &&
                     a.confirmed_branch === slotCell.branch &&
-                    a.status === "확정"
+                    a.status === "확정인력"
                 );
                 return (
                   <div className="slot-drill">

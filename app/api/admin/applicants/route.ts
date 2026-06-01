@@ -20,7 +20,7 @@ const CREATE_FIELDS = new Set([
   "churn_reason", "marketing_consent", "kakao_channel_friend",
 ]);
 
-const VALID_STATUS_SET = new Set(["스크리닝", "온보딩", "온보딩 완료", "확정", "이탈", "부적합"]);
+const VALID_STATUS_SET = new Set(["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자", "부적합"]);
 const VALID_SLOT_SET = new Set(["평일오전", "평일오후", "주말오전", "주말오후"]);
 
 function validConfirmedSlot(v: unknown): boolean {
@@ -107,7 +107,12 @@ export async function POST(req: NextRequest) {
     row.branch1 = branch1;
     row.branch = row.branch ?? branch1;
     row.source = row.source ?? "manual";
-    row.status = row.status ?? "스크리닝";
+    // 기본 상태: 당근·배민(자동 AI 응대) → '스크리닝 중', 그 외 → '스크리닝 전'
+    if (!row.status) {
+      row.status = (row.source === "danggeun" || row.source === "danggeun_practice" || row.source === "baemin")
+        ? "스크리닝 중"
+        : "스크리닝 전";
+    }
     if (row.marketing_consent === true) {
       row.marketing_consent_at = new Date().toISOString();
     }
@@ -152,7 +157,7 @@ export async function POST(req: NextRequest) {
       ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
     };
 
-    if (isDanggeun && data.status === "스크리닝") {
+    if (isDanggeun && data.status === "스크리닝 중") {
       try {
         const startMsg = (await getSystemMessage(supabase, "danggeun_start"))?.trim();
         if (startMsg) {
@@ -206,7 +211,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (isBaemin && data.status === "스크리닝") {
+    if (isBaemin && data.status === "스크리닝 중") {
       // 배민은 지원자가 먼저 보낸 흐름이라 시작 멘트 발송 없음 — job_candidates만 생성해
       // 인입 라우터가 다음 답장부터 스크리닝 stage로 처리할 수 있게 한다.
       try {

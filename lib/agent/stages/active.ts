@@ -22,7 +22,7 @@ export const activeStage: Stage = {
         confirmed_branch: ctx.job?.branch ?? null,
         current_branch: ctx.job?.branch ?? null,
         work_hours: ctx.applicant.work_hours,
-        status: "확정",
+        status: "스크리닝 완료",
         available_date: ctx.applicant.available_date,
         own_vehicle: ctx.applicant.own_vehicle,
         introduction: ctx.applicant.introduction,

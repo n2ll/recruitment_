@@ -125,9 +125,9 @@ interface RecCandidate {
 
 const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
-  screening: "스크리닝",
-  onboarding: "온보딩",
-  active: "완료",
+  screening: "스크리닝 중",
+  onboarding: "스크리닝 완료",  // 내부적으로 onboarding/active 모두 '스크리닝 완료'로 표시
+  active: "스크리닝 완료",
   paused: "매니저 인계",
   abort: "중단",
 };
@@ -150,8 +150,9 @@ function stageBadge(stage: string | null) {
   };
 }
 
-// 탐색은 base 능력으로 상시 깔려 있어 progress에 표시하지 않음. 프로세스는 스크리닝부터.
-const STAGE_FLOW = ["screening", "onboarding", "active"] as const;
+// progress 2단계 — 스크리닝 중 → 스크리닝 완료.
+// 내부적으로 onboarding/active도 모두 '스크리닝 완료' 노드(=onboarding)에 매핑된다.
+const STAGE_FLOW = ["screening", "onboarding"] as const;
 type FlowStage = (typeof STAGE_FLOW)[number];
 
 function StageProgress({
@@ -164,8 +165,11 @@ function StageProgress({
   // paused / abort는 별도 표시
   const isPaused = stage === "paused";
   const isAbort = stage === "abort";
-  // exploration(잔존 후보)은 스크리닝 직전으로 간주
-  const effective = stage === "exploration" ? "screening" : stage;
+  // exploration → screening 노드. active도 onboarding 노드(='스크리닝 완료')에 매핑.
+  const effective =
+    stage === "exploration" ? "screening"
+    : stage === "active" ? "onboarding"
+    : stage;
   const currentIdx = STAGE_FLOW.indexOf(effective as FlowStage);
   const clickable = !!onStageClick && !isAbort; // abort 상태에선 단계 변경 불가
 
@@ -754,10 +758,8 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
                   const targetLabel = STAGE_LABEL[target];
                   const note =
                     target === "screening"
-                      ? "스크리닝부터 다시 진행합니다."
-                      : target === "onboarding"
-                      ? "스크리닝을 완료한 것으로 처리하고 온보딩 단계로 넘어갑니다. (앱설치 안내 자동 발송)"
-                      : "스크리닝·온보딩을 완료한 것으로 처리하고 완료 단계로 넘어갑니다. (자동 발송 없음, 진행 상태='온보딩 완료')";
+                      ? "스크리닝부터 다시 진행합니다. (진행 상태 = 스크리닝 중)"
+                      : "스크리닝 체크리스트를 완료한 것으로 처리하고 온보딩(아이디·차량번호 수집)으로 넘어갑니다. 앱설치 안내가 자동 발송됩니다. (진행 상태 = 스크리닝 완료)";
                   if (!confirm(`'${targetLabel}' 단계로 변경합니다.\n\n${note}\n\n진행할까요?`)) return;
                   try {
                     const res = await fetch("/api/admin/agent/set-stage", {
@@ -779,7 +781,7 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
 
               {agentStage === "onboarding" && (
                 <div className="dg-banner dg-banner-info">
-                  📦 <b>온보딩 — AI가 배민 아이디·차량번호 수집 중.</b> 둘 다 받으면 "곧 연락드리겠습니다"로 마무리 + 슬랙에 '온보딩 준비 완료' 알림이 갑니다.
+                  📦 <b>스크리닝 완료 — AI가 배민 아이디·차량번호 수집 중.</b> 둘 다 받으면 "곧 연락드리겠습니다"로 마무리 + 슬랙 '준비 완료' 알림이 갑니다.
                 </div>
               )}
               {agentStage === "paused" && (
@@ -830,7 +832,7 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
               {(agentStage === "screening" || agentStage === "onboarding") && (
                 <div className="dg-checklist">
                   <div className="dg-checklist-title">
-                    {agentStage === "screening" ? "스크리닝 체크리스트" : "온보딩 체크리스트"}
+                    {agentStage === "screening" ? "스크리닝 체크리스트" : "스크리닝 완료 (정보 수집) 체크리스트"}
                     {(() => {
                       const keys = agentStage === "screening" ? SCREENING_KEYS : ONBOARDING_KEYS;
                       const cl = (agentStage === "screening"

@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
           available_date: PH,
           self_ownership: PH,
           source: "baemin",
-          status: "스크리닝",
+          status: "스크리닝 중",
           filter_pass: null,
           introduction: ext.experience?.trim() || null,
           note: `자동 분류 (배민, conf ${triage.confidence.toFixed(2)}): ${triage.reasoning}`,
