@@ -1054,7 +1054,7 @@ export default function AdminPage() {
             onClick={() => setTab("applicants")} title="지원자 목록">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 15v-1.5a3 3 0 00-3-3H8a3 3 0 00-3 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/></svg>
             <span className="nav-label">지원자 목록</span>
-            {stats.screening > 0 && <span className="badge">{stats.screening}</span>}
+            {stats.screeningInProg > 0 && <span className="badge">{stats.screeningInProg}</span>}
           </button>
           <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
             onClick={() => setTab("contact")} title="배송원 컨택">
