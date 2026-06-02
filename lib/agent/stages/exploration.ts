@@ -226,13 +226,16 @@ ${inboundText}
 
       const data = (await res.json()) as {
         content: Array<{ type: string; input?: ExplorationToolInput }>;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
       };
       const block = data.content?.find((c) => c.type === "tool_use");
       if (!block?.input) {
         return failResult("no tool_use block");
       }
 
-      return toStageResult(block.input, ctx);
+      const result = toStageResult(block.input, ctx);
+      result.usage = { model: MODEL, ...(data.usage ?? {}) };
+      return result;
     } catch (e) {
       console.error("[exploration] exception", e);
       return failResult(e instanceof Error ? e.message : "unknown");

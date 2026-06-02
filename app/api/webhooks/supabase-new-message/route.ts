@@ -31,6 +31,7 @@ import { runAgentForCandidate } from "@/lib/agent/router";
 import { triageInbound, isHardSpam } from "@/lib/agent/baemin-triage";
 import { sendSms } from "@/lib/solapi";
 import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
+import { recordUsage, toMessageTokens } from "@/lib/agent/usage";
 
 // (참고) baemin은 폼 작성 후에 job_candidates를 생성하므로 ensureBaeminSystemJob을 여기서 호출 안 함.
 
@@ -205,6 +206,26 @@ export async function POST(req: NextRequest) {
   }
 
   const triage = await triageInbound({ phone, body: text });
+
+  // Triage 사용량 적재 — ai_usage_daily + inbound 메시지 행에 토큰 컬럼 채우기.
+  if (triage.usage?.model) {
+    await recordUsage(supabase, {
+      model: triage.usage.model,
+      purpose: "triage",
+      usage: triage.usage,
+    });
+    const tokenCols = toMessageTokens(triage.usage.model, triage.usage);
+    await supabase
+      .from("messages")
+      .update({
+        model: tokenCols.model,
+        tokens_in: tokenCols.tokens_in,
+        tokens_out: tokenCols.tokens_out,
+        cache_read_tokens: tokenCols.cache_read_tokens,
+      })
+      .eq("id", msg.id);
+  }
+
   const isAutoBaemin = triage.is_baemin && triage.confidence >= 0.7;
 
   if (isAutoBaemin) {

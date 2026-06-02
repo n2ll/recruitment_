@@ -45,6 +45,13 @@ export interface TriageResult {
   confidence: number;
   reasoning: string;
   extracted: TriageExtracted;
+  /** Claude 응답 usage + 모델명. webhook이 inbound 행에 저장 + ai_usage_daily 적재. */
+  usage?: {
+    model: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+  } | null;
 }
 
 interface TriageToolInput {
@@ -145,10 +152,14 @@ export async function triageInbound(opts: { phone: string; body: string }): Prom
       console.error("[baemin-triage] HTTP", res.status, errBody);
       return { is_baemin: false, confidence: 0, reasoning: `Haiku HTTP ${res.status}`, extracted: {} };
     }
-    const data = (await res.json()) as { content: Array<{ type: string; input?: TriageToolInput }> };
+    const data = (await res.json()) as {
+      content: Array<{ type: string; input?: TriageToolInput }>;
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+    };
     const block = data.content?.find((c) => c.type === "tool_use");
+    const usage = { model: MODEL, ...(data.usage ?? {}) };
     if (!block?.input) {
-      return { is_baemin: false, confidence: 0, reasoning: "no tool_use block", extracted: {} };
+      return { is_baemin: false, confidence: 0, reasoning: "no tool_use block", extracted: {}, usage };
     }
     const out = block.input;
     return {
@@ -163,6 +174,7 @@ export async function triageInbound(opts: { phone: string; body: string }): Prom
         baemin_id: out.baemin_id || undefined,
         experience: out.experience || undefined,
       },
+      usage,
     };
   } catch (e) {
     console.error("[baemin-triage] exception", e);

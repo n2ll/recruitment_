@@ -17,6 +17,7 @@ import { explorationStage } from "./stages/exploration";
 import { onboardingStage } from "./stages/onboarding";
 import { screeningStage } from "./stages/screening";
 import { activeStage } from "./stages/active";
+import { recordUsage, toMessageTokens, type UsagePurpose } from "./usage";
 import type {
   AgentState,
   ApplicantContext,
@@ -155,6 +156,15 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   const ctx: StageContext = { job, applicant, history, state };
   const result = await stage.process(ctx, cleanInbound);
 
+  // Claude 사용량 → ai_usage_daily 적재. stage 이름 = purpose.
+  if (result.usage?.model) {
+    await recordUsage(supabase, {
+      model: result.usage.model,
+      purpose: stage.name as UsagePurpose,
+      usage: result.usage,
+    });
+  }
+
   // 4) 응답 발송 (simulate=true면 SOLAPI 건너뛰고 DB만 기록)
   // advance 전이 시엔 transitions.ts가 안내 묶음(SCREENING_ANNOUNCE/GUIDE 등)을 자동 발송하므로
   // AI가 동시에 reply_text를 넣었어도 중복 방지를 위해 무시한다.
@@ -178,6 +188,7 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
       }
     }
     if (sendOk) {
+      const tokenCols = toMessageTokens(result.usage?.model ?? "", result.usage ?? null);
       const { data: outMsg } = await supabase
         .from("messages")
         .insert({
@@ -190,6 +201,10 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
           solapi_msg_id: sendMessageId,
           message_type: "sms",
           job_id: jc.job_id,
+          model: tokenCols.model,
+          tokens_in: tokenCols.tokens_in,
+          tokens_out: tokenCols.tokens_out,
+          cache_read_tokens: tokenCols.cache_read_tokens,
         })
         .select("id")
         .single();

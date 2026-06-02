@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     let summary = "";
 
     if (!address) {
-      const extracted = await extractJobInfo(posting);
+      const extracted = await extractJobInfo(posting, createServiceClient());
       if (!extracted) {
         return NextResponse.json(
           { error: "공고에서 주소를 추출하지 못했습니다. 직접 입력해주세요." },

@@ -120,6 +120,13 @@ export interface StageResult {
   state_update: AgentState;     // 이번 턴에 갱신된 부분만 (deep-merge)
   transition: StageTransition;
   reasoning: string;            // 매니저용 한 줄 설명
+  /** Claude 응답 usage + 모델명. router가 outbound 행에 저장 + ai_usage_daily 적재. */
+  usage?: {
+    model: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+  } | null;
 }
 
 export interface Stage {

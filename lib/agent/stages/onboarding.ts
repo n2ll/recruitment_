@@ -189,11 +189,13 @@ onboarding_turn tool로 응답해라.`;
       }
       const data = (await res.json()) as {
         content: Array<{ type: string; input?: OnboardingToolInput }>;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
       };
       const block = data.content?.find((c) => c.type === "tool_use");
       if (!block?.input) return failResult("no tool_use block");
 
       const result = toStageResult(block.input, ctx);
+      result.usage = { model: MODEL, ...(data.usage ?? {}) };
 
       // 배민 아이디가 '이번 턴에 처음' 채워진 시점:
       //  1) 슬랙 '준비 완료' 알림

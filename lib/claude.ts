@@ -1,6 +1,12 @@
 /**
  * Claude API — 구인 공고 텍스트에서 구조화된 정보 추출 (Tool Use)
+ *
+ * 사용량 적재: 두 함수 모두 optional `supabase`를 받아 응답이 오면 ai_usage_daily에 UPSERT.
+ * 공고 생성/추출은 messages 테이블에 안 들어가는 호출이라 daily 집계만 한다.
  */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordUsage } from "./agent/usage";
 
 export interface ExtractedJobInfo {
   address: string;
@@ -45,16 +51,18 @@ const POSTING_SYSTEM_PROMPT = `너는 인력 공급 회사(내이루리)의 공�
 generate_posting tool로만 응답해라.`;
 
 export async function generateJobPosting(
-  rough: string
+  rough: string,
+  supabase?: SupabaseClient
 ): Promise<GeneratedPosting | null> {
   const apiKey = process.env.CLAUDE_API;
   if (!apiKey) {
     console.error("[claude] CLAUDE_API env missing");
     return null;
   }
+  const MODEL = "claude-sonnet-4-6";
 
   const body = {
-    model: "claude-sonnet-4-6",
+    model: MODEL,
     max_tokens: 2048,
     system: POSTING_SYSTEM_PROMPT,
     tools: [
@@ -101,7 +109,11 @@ export async function generateJobPosting(
     }
     const data = (await res.json()) as {
       content: Array<{ type: string; name?: string; input?: GeneratedPosting }>;
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
     };
+    if (supabase) {
+      await recordUsage(supabase, { model: MODEL, purpose: "job_generate", usage: data.usage });
+    }
     const block = data.content?.find((c) => c.type === "tool_use");
     if (!block || !block.input) {
       console.error("[claude] no tool_use block", JSON.stringify(data));
@@ -114,15 +126,19 @@ export async function generateJobPosting(
   }
 }
 
-export async function extractJobInfo(posting: string): Promise<ExtractedJobInfo | null> {
+export async function extractJobInfo(
+  posting: string,
+  supabase?: SupabaseClient
+): Promise<ExtractedJobInfo | null> {
   const apiKey = process.env.CLAUDE_API;
   if (!apiKey) {
     console.error("[claude] CLAUDE_API env missing");
     return null;
   }
+  const MODEL = "claude-sonnet-4-6";
 
   const body = {
-    model: "claude-sonnet-4-6",
+    model: MODEL,
     max_tokens: 512,
     tools: [
       {
@@ -175,7 +191,12 @@ export async function extractJobInfo(posting: string): Promise<ExtractedJobInfo 
       console.error("[claude] HTTP", res.status, await res.text());
       return null;
     }
-    const data = (await res.json()) as AnthropicResponse;
+    const data = (await res.json()) as AnthropicResponse & {
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+    };
+    if (supabase) {
+      await recordUsage(supabase, { model: MODEL, purpose: "job_extract", usage: data.usage });
+    }
     const block = data.content?.find((c) => c.type === "tool_use");
     if (!block || block.type !== "tool_use") {
       console.error("[claude] no tool_use block", JSON.stringify(data));
