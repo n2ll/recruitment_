@@ -136,6 +136,22 @@ function getSlotCapacity(branch: Branch | undefined, slot: SlotKey): number {
   return typeof v === "number" ? v : DEFAULT_SLOT_CAPACITY[slot];
 }
 
+// birth_date(YYMMDD) → 만 나이. 50~99 → 19xx, 00~49 → 20xx.
+function calcAge(birth_date: string | null | undefined): number | null {
+  if (!birth_date || !/^\d{6}$/.test(birth_date)) return null;
+  const yy = parseInt(birth_date.slice(0, 2), 10);
+  const mm = parseInt(birth_date.slice(2, 4), 10);
+  const dd = parseInt(birth_date.slice(4, 6), 10);
+  const year = yy >= 50 ? 1900 + yy : 2000 + yy;
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const beforeBirthday =
+    today.getMonth() + 1 < mm ||
+    (today.getMonth() + 1 === mm && today.getDate() < dd);
+  if (beforeBirthday) age--;
+  return age;
+}
+
 // work_hours 값을 짧은 표기로 ("평일(월~금) 오전 타임 (09:00 ~ 14:00)" → "평일 오전")
 function shortWorkHours(wh: string | null | undefined): string {
   if (!wh) return "";
@@ -1241,7 +1257,7 @@ export default function AdminPage() {
               <div className="table-wrap applicants-table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>성함</th><th>연락처</th><th>지점</th><th>차량</th><th>시간대</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
+                    <tr><th>성함</th><th style={{ width: 50 }}>나이</th><th>연락처</th><th>지점</th><th>차량</th><th>시간대</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
                   </thead>
                   <tbody>
                     {filtered.map((a) => (
@@ -1254,6 +1270,7 @@ export default function AdminPage() {
                           <span>{a.name}</span>
                           {a.note === "중복지원" && <span className="dup-tag">중복</span>}
                         </td>
+                        <td className="td-muted">{calcAge(a.birth_date) ?? "—"}</td>
                         <td>{a.phone}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <select
