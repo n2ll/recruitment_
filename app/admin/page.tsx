@@ -1270,7 +1270,7 @@ export default function AdminPage() {
                           <span>{a.name}</span>
                           {a.note === "중복지원" && <span className="dup-tag">중복</span>}
                         </td>
-                        <td className="td-muted">{calcAge(a.birth_date) ?? "—"}</td>
+                        <td>{calcAge(a.birth_date) ?? "—"}</td>
                         <td>{a.phone}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <select
@@ -1283,7 +1283,7 @@ export default function AdminPage() {
                           </select>
                         </td>
                         <td>{a.own_vehicle}</td>
-                        <td className="td-muted">{shortWorkHours(a.work_hours) || "—"}</td>
+                        <td>{shortWorkHours(a.work_hours) || "—"}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="date"
