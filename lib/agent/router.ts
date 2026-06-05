@@ -165,6 +165,15 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
     });
   }
 
+  // stage가 applicants 행에 patch할 필드를 실어보냈으면 적용 (예: onboarding의 baemin_id 추출값)
+  if (result.applicant_patch && Object.keys(result.applicant_patch).length > 0) {
+    const { error: patchErr } = await supabase
+      .from("applicants")
+      .update(result.applicant_patch)
+      .eq("id", applicant.id);
+    if (patchErr) console.error("[router] applicant_patch failed", patchErr);
+  }
+
   // 4) 응답 발송 (simulate=true면 SOLAPI 건너뛰고 DB만 기록)
   // advance 전이 시엔 transitions.ts가 안내 묶음(SCREENING_ANNOUNCE/GUIDE 등)을 자동 발송하므로
   // AI가 동시에 reply_text를 넣었어도 중복 방지를 위해 무시한다.

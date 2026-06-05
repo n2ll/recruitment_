@@ -15,6 +15,8 @@ const ALLOWED_FIELDS = new Set([
   "start_date", "confirmed_slot", "confirmed_branch", "current_branch",
   "churn_reason", "screening",
   "marketing_consent", "kakao_channel_friend",
+  // PPC 상세 페이지에서 매니저가 편집하는 필드
+  "baemin_id", "guide_sent", "onboarding_call_status",
 ]);
 
 const VALID_STATUS = new Set([

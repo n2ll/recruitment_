@@ -87,6 +87,7 @@ async function buildSystemPrompt(): Promise<string> {
 interface OnboardingToolInput {
   reply_text: string;
   checklist_update: Partial<OnboardingChecklist>;
+  baemin_id_text?: string;
   transition: "stay" | "pause" | "abort";
   transition_reason: string;
   reasoning: string;
@@ -111,6 +112,11 @@ const TOOL = {
           배민_아이디_수신: { type: "boolean" },
           만남장소_안내발송됨: { type: "boolean" },
         },
+      },
+      baemin_id_text: {
+        type: "string",
+        description:
+          "지원자가 보낸 배민 커넥트 아이디 원본 텍스트. 영문/숫자만. 없으면 빈 문자열. (예: 'eugene0909', 'tpwlsdms1')",
       },
       transition: {
         type: "string",
@@ -196,6 +202,12 @@ onboarding_turn tool로 응답해라.`;
 
       const result = toStageResult(block.input, ctx);
       result.usage = { model: MODEL, ...(data.usage ?? {}) };
+
+      // AI가 추출한 배민 아이디 텍스트가 있으면 applicants.baemin_id에 patch (router가 적용)
+      const idText = (block.input.baemin_id_text || "").trim();
+      if (idText && /^[A-Za-z0-9._-]{2,40}$/.test(idText)) {
+        result.applicant_patch = { ...(result.applicant_patch ?? {}), baemin_id: idText };
+      }
 
       // 배민 아이디가 '이번 턴에 처음' 채워진 시점:
       //  1) 슬랙 '준비 완료' 알림

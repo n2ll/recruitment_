@@ -127,6 +127,8 @@ export interface StageResult {
     output_tokens?: number;
     cache_read_input_tokens?: number;
   } | null;
+  /** applicants 테이블에 직접 patch할 필드 — onboarding의 baemin_id 같은 추출값 전달용. */
+  applicant_patch?: Record<string, unknown>;
 }
 
 export interface Stage {

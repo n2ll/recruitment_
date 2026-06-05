@@ -43,6 +43,13 @@ interface Applicant {
   churned_at: string | null;
   churn_reason: string | null;
   agent_stage?: string | null;   // GET 응답에 attached (당근마켓구인과 동일 출처)
+  // PPC 상세 페이지 필드
+  baemin_id: string | null;
+  guide_sent: boolean;
+  onboarding_call_status: string | null;
+  kakao_channel_friend: boolean | null;
+  bname: string | null;          // 거주지 동 단위 (지오코딩 결과)
+  sigungu: string | null;        // 거주지 시군구 (bname 없을 때 fallback)
 }
 
 interface Message {
@@ -124,11 +131,12 @@ interface Branch {
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 type SlotKey = typeof SLOTS[number];
 
+// 소싱팀 원칙: 오전 3, 오후 4 (평일/주말 동일).
 const DEFAULT_SLOT_CAPACITY: Record<SlotKey, number> = {
-  평일오전: 2,
-  평일오후: 2,
-  주말오전: 2,
-  주말오후: 2,
+  평일오전: 3,
+  평일오후: 4,
+  주말오전: 3,
+  주말오후: 4,
 };
 
 function getSlotCapacity(branch: Branch | undefined, slot: SlotKey): number {
@@ -336,6 +344,8 @@ export default function AdminPage() {
 
   // 슬롯 뷰 셀 선택 (drill-down 용)
   const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
+  // 확정 슬롯 탭에서 지점명 클릭 시 열리는 PPC 상세 패널 (시트 스타일 전체 보기 + 편집)
+  const [branchDetail, setBranchDetail] = useState<string | null>(null);
 
   // 상세 패널 임시 편집 상태 (명시적 저장)
   const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
@@ -1598,7 +1608,13 @@ export default function AdminPage() {
                       const b = branch.name;
                       return (
                       <tr key={b}>
-                        <td className="td-bold">{b}</td>
+                        <td
+                          className={`td-bold branch-name-cell ${branchDetail === b ? "branch-name-active" : ""}`}
+                          onClick={() => setBranchDetail(branchDetail === b ? null : b)}
+                          title="클릭하면 이 지점의 모든 인원 상세를 봅니다"
+                        >
+                          {b}
+                        </td>
                         {SLOTS.map((s) => {
                           const capacity = getSlotCapacity(branch, s);
                           const slotMatch = (val: string | null) =>
@@ -1695,6 +1711,148 @@ export default function AdminPage() {
                           </table>
                         </div>
                       </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* PPC 상세 패널 — 시트 스타일 전체 보기 + 인라인 편집 */}
+              {branchDetail && (() => {
+                const branchObj = branches.find((br) => br.name === branchDetail);
+                const morningCap = branchObj ? getSlotCapacity(branchObj, "평일오전") : 0;
+                const afternoonCap = branchObj ? getSlotCapacity(branchObj, "평일오후") : 0;
+                const inBranch = data.filter((a) => a.confirmed_branch === branchDetail);
+                const confirmed = inBranch.filter((a) => a.status === "확정인력");
+                const waiting = inBranch.filter((a) => a.status === "대기자");
+
+                const SLOT_CHIP_CLASS: Record<string, string> = {
+                  "평일오전": "chip-wd-am",
+                  "평일오후": "chip-wd-pm",
+                  "주말오전": "chip-we-am",
+                  "주말오후": "chip-we-pm",
+                };
+
+                const SlotChips = ({ raw }: { raw: string | null }) => {
+                  const tokens = (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+                  if (!tokens.length) return <span className="td-muted">—</span>;
+                  return (
+                    <div className="slot-chips">
+                      {tokens.map((t) => (
+                        <span key={t} className={`slot-chip ${SLOT_CHIP_CLASS[t] || ""}`}>{t}</span>
+                      ))}
+                    </div>
+                  );
+                };
+
+                const PpcRow = (a: Applicant) => (
+                  <tr key={a.id}>
+                    <td className="td-bold">{a.name}</td>
+                    <td>{calcAge(a.birth_date) ?? "—"}</td>
+                    <td>{a.phone}</td>
+                    <td>{a.bname || a.sigungu || "—"}</td>
+                    <td><SlotChips raw={a.confirmed_slot} /></td>
+                    <td>
+                      <input
+                        type="text"
+                        className="inline-memo"
+                        defaultValue={a.baemin_id ?? ""}
+                        placeholder="아이디"
+                        onBlur={(e) => {
+                          const next = e.target.value.trim();
+                          if (next !== (a.baemin_id ?? "")) patchApplicant(a.id, { baemin_id: next || null });
+                        }}
+                      />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        className="ppc-check"
+                        checked={!!a.kakao_channel_friend}
+                        onChange={(e) => patchApplicant(a.id, { kakao_channel_friend: e.target.checked })}
+                      />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        className="ppc-check"
+                        checked={!!a.guide_sent}
+                        onChange={(e) => patchApplicant(a.id, { guide_sent: e.target.checked })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        className="inline-memo"
+                        defaultValue={a.onboarding_call_status ?? ""}
+                        placeholder="통화 완료 / 카톡대체…"
+                        onBlur={(e) => {
+                          const next = e.target.value.trim();
+                          if (next !== (a.onboarding_call_status ?? "")) {
+                            patchApplicant(a.id, { onboarding_call_status: next || null });
+                          }
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        className="inline-memo"
+                        defaultValue={a.note === "중복지원" ? "" : (a.note ?? "")}
+                        placeholder="비고"
+                        onBlur={(e) => {
+                          const next = e.target.value.trim();
+                          const current = a.note === "중복지원" ? "" : (a.note ?? "");
+                          if (next !== current) patchApplicant(a.id, { note: next || null });
+                        }}
+                      />
+                    </td>
+                  </tr>
+                );
+
+                const PpcHeader = (
+                  <tr>
+                    <th>성함</th><th style={{ width: 50 }}>나이</th><th>휴대폰</th><th>거주지</th>
+                    <th style={{ minWidth: 160 }}>타임</th>
+                    <th style={{ width: 140 }}>아이디</th>
+                    <th style={{ width: 70 }}>채널추가</th>
+                    <th style={{ width: 70 }}>가이드</th>
+                    <th style={{ width: 140 }}>온보딩 통화</th>
+                    <th style={{ minWidth: 160 }}>비고</th>
+                  </tr>
+                );
+
+                return (
+                  <div className="ppc-detail">
+                    <div className="slot-drill-header">
+                      <h3>
+                        📍 {branchDetail} 상세
+                        <span className="ppc-cap">정원 평일 오전 {morningCap} / 오후 {afternoonCap}</span>
+                      </h3>
+                      <button className="close-btn" onClick={() => setBranchDetail(null)}>X</button>
+                    </div>
+
+                    <div className="slot-section-title">✓ 확정인력 ({confirmed.length})</div>
+                    {confirmed.length === 0 ? (
+                      <div className="empty">확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 지점을 지정해주세요.</div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table ppc-table">
+                          <thead>{PpcHeader}</thead>
+                          <tbody>{confirmed.map(PpcRow)}</tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="slot-section-title slot-section-waiting">⏳ 대기자 ({waiting.length})</div>
+                    {waiting.length === 0 ? (
+                      <div className="empty">대기자가 없습니다.</div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table ppc-table">
+                          <thead>{PpcHeader}</thead>
+                          <tbody>{waiting.map(PpcRow)}</tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 );
@@ -2639,6 +2797,31 @@ const css = `
   }
   .slot-drill-header h3 { font-size: 14px; font-weight: 700; }
   .td-slim { font-size: 11px; color: #6b7280; max-width: 280px; white-space: normal; }
+
+  /* PPC 상세 — 시트 스타일 (지점 단위 전체 보기 + 인라인 편집) */
+  .branch-name-cell { cursor: pointer; transition: background 0.1s; }
+  .branch-name-cell:hover { background: #F0F9FF; color: #0369A1; }
+  .branch-name-active { background: #E0F2FE !important; color: #075985; }
+  .ppc-detail {
+    background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
+    padding: 16px; margin-top: 12px;
+  }
+  .ppc-cap {
+    font-size: 11px; font-weight: 500; color: #6b7280; margin-left: 10px;
+    background: #F3F4F6; padding: 2px 8px; border-radius: 6px;
+  }
+  .ppc-table th { font-size: 11px; font-weight: 600; }
+  .ppc-table td { vertical-align: middle; padding: 6px 8px; }
+  .ppc-check { width: 16px; height: 16px; cursor: pointer; }
+  .slot-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .slot-chip {
+    display: inline-block; padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .chip-wd-am { background: #FEF3C7; color: #92400E; }   /* 평일오전 - 노랑 */
+  .chip-wd-pm { background: #FED7AA; color: #9A3412; }   /* 평일오후 - 주황 */
+  .chip-we-am { background: #E0E7FF; color: #3730A3; }   /* 주말오전 - 연보라 */
+  .chip-we-pm { background: #DDD6FE; color: #5B21B6; }   /* 주말오후 - 진보라 */
 
   /* 추천 받기 */
   .rec-input-wrap { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e8e8e0; margin-bottom: 20px; }
