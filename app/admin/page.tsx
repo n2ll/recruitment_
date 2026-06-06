@@ -1454,22 +1454,80 @@ export default function AdminPage() {
                     )}
                   </div>
 
+                  {/* 인적사항 */}
+                  <h4 className="detail-section-title">👤 인적사항</h4>
                   <div className="detail-grid">
-                    <div><span className="dl">거주지</span>{selected.location}</div>
-                    <div><span className="dl">차종</span>{selected.vehicle_type}</div>
-                    <div><span className="dl">희망지점</span>{selected.branch1}{selected.branch2 ? ` / ${selected.branch2}` : ""}</div>
-                    <div><span className="dl">희망시간</span>{selected.work_hours}</div>
-                    <div><span className="dl">본인명의</span>{selected.self_ownership}</div>
+                    <div><span className="dl">나이</span>{calcAge(selected.birth_date) ?? "—"}{selected.birth_date ? ` (${selected.birth_date.slice(0, 2)}/${selected.birth_date.slice(2, 4)}/${selected.birth_date.slice(4, 6)})` : ""}</div>
+                    <div><span className="dl">전화</span>{selected.phone}</div>
+                    <div><span className="dl">지원경로</span>{sourceLabel(selected.source)}</div>
+                    <div><span className="dl">지원일</span>{new Date(selected.created_at).toLocaleDateString("ko-KR")}</div>
+                    <div><span className="dl">AI 단계</span>{selected.agent_stage ?? "—"}</div>
+                    <div><span className="dl">안 읽음</span>{selected.unread_count || 0}</div>
                   </div>
+
+                  {/* 거주지 */}
+                  <h4 className="detail-section-title">🏠 거주지</h4>
+                  <div className="detail-grid">
+                    <div className="detail-wide"><span className="dl">주소</span>{selected.location || "—"}</div>
+                    <div><span className="dl">동(자동)</span>{selected.bname || "—"}</div>
+                    <div><span className="dl">시군구(자동)</span>{selected.sigungu || "—"}</div>
+                  </div>
+
+                  {/* 차량·면허 */}
+                  <h4 className="detail-section-title">🚗 차량·면허</h4>
+                  <div className="detail-grid">
+                    <div><span className="dl">자차</span>{selected.own_vehicle || "—"}</div>
+                    <div><span className="dl">면허</span>{selected.license_type || "—"}</div>
+                    <div><span className="dl">차종</span>{selected.vehicle_type || "—"}</div>
+                    <div><span className="dl">본인명의</span>{selected.self_ownership || "—"}</div>
+                  </div>
+
+                  {/* 희망 */}
+                  <h4 className="detail-section-title">📍 희망 지점·시간</h4>
+                  <div className="detail-grid">
+                    <div><span className="dl">1지망</span>{selected.branch1 || "—"}</div>
+                    <div><span className="dl">2지망</span>{selected.branch2 || "—"}</div>
+                    <div><span className="dl">희망시간</span>{selected.work_hours || "—"}</div>
+                    <div><span className="dl">시작가능일</span>{selected.available_date || "—"}</div>
+                  </div>
+
+                  {/* 온보딩 진행 */}
+                  <h4 className="detail-section-title">📱 온보딩 진행 (매니저 체크용)</h4>
+                  <div className="detail-grid">
+                    <div><span className="dl">배민 아이디</span>{selected.baemin_id || <span className="td-muted">미수집</span>}</div>
+                    <div><span className="dl">카톡 채널</span>{selected.kakao_channel_friend ? "✓ 친구추가됨" : "—"}</div>
+                    <div><span className="dl">가이드 전달</span>{selected.guide_sent ? "✓ 전달완료" : "—"}</div>
+                    <div><span className="dl">온보딩 통화</span>{selected.onboarding_call_status || "—"}</div>
+                  </div>
+
+                  {/* 확정·근무 (확정인력일 때 의미 있음) */}
+                  {(selected.confirmed_branch || selected.current_branch || selected.churned_at) && (
+                    <>
+                      <h4 className="detail-section-title">✓ 확정·근무</h4>
+                      <div className="detail-grid">
+                        <div><span className="dl">확정지점</span>{selected.confirmed_branch || "—"}</div>
+                        <div><span className="dl">현재 근무지점</span>{selected.current_branch || "—"}</div>
+                        <div><span className="dl">이탈일</span>{selected.churned_at ? new Date(selected.churned_at).toLocaleDateString("ko-KR") : "—"}</div>
+                        <div><span className="dl">이탈/대기 사유</span>{selected.churn_reason || "—"}</div>
+                      </div>
+                    </>
+                  )}
+
+                  {selected.note && selected.note !== "중복지원" && (
+                    <div className="detail-section">
+                      <h4 className="detail-section-title">📝 메모</h4>
+                      <p className="detail-text">{selected.note}</p>
+                    </div>
+                  )}
                   {selected.introduction && (
                     <div className="detail-section">
-                      <span className="dl">자기소개</span>
+                      <h4 className="detail-section-title">💬 자기소개</h4>
                       <p className="detail-text">{selected.introduction}</p>
                     </div>
                   )}
                   {selected.experience && (
                     <div className="detail-section">
-                      <span className="dl">경력</span>
+                      <h4 className="detail-section-title">📋 경력</h4>
                       <p className="detail-text">{selected.experience}</p>
                     </div>
                   )}
@@ -1634,11 +1692,22 @@ export default function AdminPage() {
                               slotMatch(a.confirmed_slot) &&
                               (a.confirmed_branch ?? a.branch1) === b
                           ).length;
+                          const waiting = data.filter(
+                            (a) =>
+                              a.status === "대기자" &&
+                              slotMatch(a.confirmed_slot) &&
+                              (a.confirmed_branch ?? a.branch1) === b
+                          ).length;
                           const cellClass =
                             capacity > 0 && confirmed >= capacity ? "cell-full"
                             : confirmed >= 1 ? "cell-half"
                             : "cell-zero";
-                          return <td key={s} className={`matrix-cell ${cellClass}`} />;
+                          return (
+                            <td key={s} className={`matrix-cell ${cellClass}`}>
+                              <div className="conf-main">{confirmed}<span className="conf-cap">/{capacity}</span></div>
+                              {waiting > 0 && <div className="conf-sub">대기 {waiting}</div>}
+                            </td>
+                          );
                         })}
                       </tr>
                       );
@@ -2686,9 +2755,19 @@ const css = `
   }
   .edit-date { cursor: pointer; }
   .edit-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
-  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-  .dl { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 2px; font-weight: 600; }
-  .detail-section { margin-bottom: 12px; }
+  .detail-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 24px;
+    margin-bottom: 20px; padding: 14px 16px;
+    background: #FAFAF8; border-radius: 8px;
+  }
+  .detail-grid .detail-wide { grid-column: span 2; }
+  .dl { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 3px; font-weight: 600; letter-spacing: 0.02em; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section-title {
+    font-size: 13px; font-weight: 700; color: #374151;
+    margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #F3F4F6;
+  }
+  .detail-section-title:first-of-type { margin-top: 4px; }
   .detail-text { font-size: 13px; line-height: 1.6; color: #374151; white-space: pre-wrap; }
 
   .empty { text-align: center; padding: 60px; color: #9ca3af; font-size: 14px; }
@@ -2748,6 +2827,7 @@ const css = `
   .cell-short { color: #991b1b; background: #fee2e2; }
   .cell-active { outline: 2px solid #F5C518; outline-offset: -2px; }
   .conf-main { font-size: 14px; font-weight: 700; }
+  .conf-cap { font-size: 11px; font-weight: 500; opacity: 0.55; margin-left: 1px; }
   .conf-sub { font-size: 10px; font-weight: 500; opacity: 0.7; margin-top: 2px; }
   .td-total { font-weight: 700; color: #6b7280; background: #fafaf7; }
   .matrix-total-row td { border-top: 2px solid #e8e8e0; background: #fafaf7; }
@@ -3342,6 +3422,7 @@ const css = `
     .admin.pinned .main { margin-left: 60px; }
     .content { padding: 16px; }
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
-    .detail-grid { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .detail-grid .detail-wide { grid-column: span 2; }
   }
 `;
