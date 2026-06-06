@@ -344,8 +344,10 @@ export default function AdminPage() {
 
   // 슬롯 뷰 셀 선택 (drill-down 용)
   const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
-  // 확정 슬롯 탭에서 지점명 클릭 시 열리는 PPC 상세 패널 (시트 스타일 전체 보기 + 편집)
+  // 확정 슬롯 탭에서 지점명 클릭 시 열리는 PPC 상세 (풀스크린 토글)
   const [branchDetail, setBranchDetail] = useState<string | null>(null);
+  // PPC 상세에서 시간대 필터 (복수 선택 가능. 비어 있으면 전체)
+  const [ppcSlotFilter, setPpcSlotFilter] = useState<Set<SlotKey>>(new Set());
 
   // 상세 패널 임시 편집 상태 (명시적 저장)
   const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
@@ -1583,10 +1585,12 @@ export default function AdminPage() {
             </div>
           ) : tab === "confirmed-slots" ? (
             <div className="content">
+              {!branchDetail && (
+              <>
               <h2 className="page-title">확정 슬롯 현황</h2>
               <p className="page-desc">
                 <strong>status='확정'</strong> 지원자 기준 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
-                셀을 클릭하면 배치된 인원이 표시됩니다.
+                셀을 클릭하면 그 슬롯 인원이, <strong>지점명을 클릭하면 풀스크린 상세 페이지</strong>가 열립니다.
               </p>
 
               <div className="matrix-legend">
@@ -1715,15 +1719,28 @@ export default function AdminPage() {
                   </div>
                 );
               })()}
+              </>
+              )}
 
-              {/* PPC 상세 패널 — 시트 스타일 전체 보기 + 인라인 편집 */}
+              {/* PPC 상세 풀스크린 — 매트릭스 자리에 통째로 표시 */}
               {branchDetail && (() => {
                 const branchObj = branches.find((br) => br.name === branchDetail);
                 const morningCap = branchObj ? getSlotCapacity(branchObj, "평일오전") : 0;
                 const afternoonCap = branchObj ? getSlotCapacity(branchObj, "평일오후") : 0;
                 const inBranch = data.filter((a) => a.confirmed_branch === branchDetail);
-                const confirmed = inBranch.filter((a) => a.status === "확정인력");
-                const waiting = inBranch.filter((a) => a.status === "대기자");
+                // 슬롯 필터 적용: 선택된 슬롯 중 하나라도 confirmed_slot에 들어 있으면 표시. 비어 있으면 전체.
+                const applyFilter = (list: Applicant[]) => {
+                  if (ppcSlotFilter.size === 0) return list;
+                  return list.filter((a) => {
+                    const tokens = (a.confirmed_slot ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+                    return tokens.some((t) => ppcSlotFilter.has(t as SlotKey));
+                  });
+                };
+                const confirmed = applyFilter(inBranch.filter((a) => a.status === "확정인력"));
+                const waiting = applyFilter(inBranch.filter((a) => a.status === "대기자"));
+                const totalConfirmed = inBranch.filter((a) => a.status === "확정인력").length;
+                const totalWaiting = inBranch.filter((a) => a.status === "대기자").length;
+                const filterOn = ppcSlotFilter.size > 0;
 
                 const SLOT_CHIP_CLASS: Record<string, string> = {
                   "평일오전": "chip-wd-am",
@@ -1822,18 +1839,64 @@ export default function AdminPage() {
                 );
 
                 return (
-                  <div className="ppc-detail">
-                    <div className="slot-drill-header">
-                      <h3>
-                        📍 {branchDetail} 상세
+                  <div className="ppc-fullscreen">
+                    <div className="ppc-toolbar">
+                      <button
+                        className="ppc-back-btn"
+                        onClick={() => { setBranchDetail(null); setPpcSlotFilter(new Set()); }}
+                      >
+                        ← 매트릭스로
+                      </button>
+                      <h2 className="ppc-title">
+                        📍 {branchDetail}
                         <span className="ppc-cap">정원 평일 오전 {morningCap} / 오후 {afternoonCap}</span>
-                      </h3>
-                      <button className="close-btn" onClick={() => setBranchDetail(null)}>X</button>
+                      </h2>
+                      <div className="ppc-summary">
+                        ✓ 확정 {totalConfirmed} · ⏳ 대기 {totalWaiting}
+                      </div>
                     </div>
 
-                    <div className="slot-section-title">✓ 확정인력 ({confirmed.length})</div>
+                    <div className="ppc-filter-bar">
+                      <span className="ppc-filter-label">시간대 필터:</span>
+                      {SLOTS.map((s) => {
+                        // 필터 비어 있을 때는 모두 풀컬러(=전체). 필터 켜지면 선택된 것만 풀컬러.
+                        const visual = !filterOn || ppcSlotFilter.has(s) ? "slot-chip-on" : "slot-chip-off";
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            className={`slot-chip slot-chip-btn ${SLOT_CHIP_CLASS[s] || ""} ${visual}`}
+                            onClick={() => {
+                              setPpcSlotFilter((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(s)) next.delete(s); else next.add(s);
+                                return next;
+                              });
+                            }}
+                          >
+                            {s}
+                          </button>
+                        );
+                      })}
+                      {filterOn && (
+                        <button
+                          type="button"
+                          className="ppc-filter-clear"
+                          onClick={() => setPpcSlotFilter(new Set())}
+                        >
+                          필터 해제
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="slot-section-title">
+                      ✓ 확정인력 ({confirmed.length}
+                      {filterOn && totalConfirmed !== confirmed.length && <span className="ppc-filtered-of"> / 전체 {totalConfirmed}</span>})
+                    </div>
                     {confirmed.length === 0 ? (
-                      <div className="empty">확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 지점을 지정해주세요.</div>
+                      <div className="empty">
+                        {filterOn ? "해당 시간대 확정인력이 없습니다." : "확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 지점을 지정해주세요."}
+                      </div>
                     ) : (
                       <div className="table-wrap">
                         <table className="table ppc-table">
@@ -1843,9 +1906,12 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    <div className="slot-section-title slot-section-waiting">⏳ 대기자 ({waiting.length})</div>
+                    <div className="slot-section-title slot-section-waiting">
+                      ⏳ 대기자 ({waiting.length}
+                      {filterOn && totalWaiting !== waiting.length && <span className="ppc-filtered-of"> / 전체 {totalWaiting}</span>})
+                    </div>
                     {waiting.length === 0 ? (
-                      <div className="empty">대기자가 없습니다.</div>
+                      <div className="empty">{filterOn ? "해당 시간대 대기자가 없습니다." : "대기자가 없습니다."}</div>
                     ) : (
                       <div className="table-wrap">
                         <table className="table ppc-table">
@@ -2802,14 +2868,37 @@ const css = `
   .branch-name-cell { cursor: pointer; transition: background 0.1s; }
   .branch-name-cell:hover { background: #F0F9FF; color: #0369A1; }
   .branch-name-active { background: #E0F2FE !important; color: #075985; }
-  .ppc-detail {
+  .ppc-fullscreen {
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
-    padding: 16px; margin-top: 12px;
+    padding: 20px; min-height: 70vh;
   }
+  .ppc-toolbar {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
+    padding-bottom: 16px; border-bottom: 1px solid #F3F4F6;
+  }
+  .ppc-back-btn {
+    padding: 6px 12px; border: 1px solid #D1D5DB; border-radius: 6px;
+    background: #fff; cursor: pointer; font-size: 13px; font-weight: 500;
+    color: #374151; transition: all 0.1s;
+  }
+  .ppc-back-btn:hover { background: #F9FAFB; border-color: #9CA3AF; }
+  .ppc-title { font-size: 18px; font-weight: 700; flex: 1; margin: 0; }
+  .ppc-summary { font-size: 13px; color: #4B5563; font-weight: 600; }
   .ppc-cap {
     font-size: 11px; font-weight: 500; color: #6b7280; margin-left: 10px;
     background: #F3F4F6; padding: 2px 8px; border-radius: 6px;
   }
+  .ppc-filter-bar {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .ppc-filter-label { font-size: 12px; color: #6B7280; font-weight: 500; margin-right: 4px; }
+  .ppc-filter-clear {
+    padding: 2px 8px; background: transparent; border: none; cursor: pointer;
+    color: #6B7280; font-size: 11px; font-weight: 500; text-decoration: underline;
+  }
+  .ppc-filter-clear:hover { color: #111827; }
+  .ppc-filtered-of { color: #9CA3AF; font-weight: 400; font-size: 11px; }
   .ppc-table th { font-size: 11px; font-weight: 600; }
   .ppc-table td { vertical-align: middle; padding: 6px 8px; }
   .ppc-check { width: 16px; height: 16px; cursor: pointer; }
@@ -2818,6 +2907,12 @@ const css = `
     display: inline-block; padding: 2px 7px; border-radius: 10px;
     font-size: 10px; font-weight: 600; white-space: nowrap;
   }
+  .slot-chip-btn {
+    cursor: pointer; border: 1.5px solid transparent; transition: all 0.1s;
+    font-size: 11px; padding: 4px 10px;
+  }
+  .slot-chip-off { opacity: 0.45; background: #F3F4F6 !important; color: #9CA3AF !important; }
+  .slot-chip-on { opacity: 1; border-color: currentColor; }
   .chip-wd-am { background: #FEF3C7; color: #92400E; }   /* 평일오전 - 노랑 */
   .chip-wd-pm { background: #FED7AA; color: #9A3412; }   /* 평일오후 - 주황 */
   .chip-we-am { background: #E0E7FF; color: #3730A3; }   /* 주말오전 - 연보라 */
