@@ -1047,11 +1047,22 @@ export default function AdminPage() {
 
   // 지점 on/off는 /apply(공개 폼)에만 영향. 매니저용 admin 화면은 모든 지점 노출.
   const allBranchNames = branches.map((b) => b.name);
-  const branchStats = allBranchNames.map((b) => ({
-    name: b,
-    total: data.filter((a) => a.branch === b).length,
-    screening: data.filter((a) => a.branch === b && a.status === "스크리닝 중").length,
-  }));
+  // 지점 매칭 — 확정/대기는 confirmed_branch 우선, 미확정은 branch1(1지망) fallback.
+  // 이래야 status만 바꾸고 confirmed_branch를 안 채운 케이스도 1지망 지점으로 잡힘.
+  const branchOf = (a: Applicant): string | null =>
+    a.confirmed_branch ?? a.branch1 ?? a.branch;
+  const branchStats = allBranchNames.map((b) => {
+    const inBranch = data.filter((a) => branchOf(a) === b);
+    return {
+      name: b,
+      total: inBranch.length,
+      pre: inBranch.filter((a) => a.status === "스크리닝 전").length,
+      inProg: inBranch.filter((a) => a.status === "스크리닝 중").length,
+      done: inBranch.filter((a) => a.status === "스크리닝 완료").length,
+      confirmed: inBranch.filter((a) => a.status === "확정인력").length,
+      waiting: inBranch.filter((a) => a.status === "대기자").length,
+    };
+  });
 
   const selected = data.find((a) => a.id === selectedId);
 
@@ -1230,14 +1241,26 @@ export default function AdminPage() {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>지점</th><th>전체</th><th>스크리닝</th></tr>
+                    <tr>
+                      <th>지점</th>
+                      <th>전체</th>
+                      <th>스크리닝 전</th>
+                      <th>스크리닝 중</th>
+                      <th>스크리닝 완료</th>
+                      <th>확정인력</th>
+                      <th>대기자</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {branchStats.map((b) => (
                       <tr key={b.name}>
                         <td className="td-bold">{b.name}</td>
                         <td>{b.total}</td>
-                        <td>{b.screening > 0 ? <span className="td-warn">{b.screening}</span> : 0}</td>
+                        <td>{b.pre || <span className="td-muted">0</span>}</td>
+                        <td>{b.inProg > 0 ? <span className="td-warn">{b.inProg}</span> : <span className="td-muted">0</span>}</td>
+                        <td>{b.done || <span className="td-muted">0</span>}</td>
+                        <td>{b.confirmed > 0 ? <span className="td-success">{b.confirmed}</span> : <span className="td-muted">0</span>}</td>
+                        <td>{b.waiting > 0 ? <span className="td-orange">{b.waiting}</span> : <span className="td-muted">0</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2679,7 +2702,9 @@ const css = `
   .row-selected { background: #FFFBEB; }
   .td-bold { font-weight: 600; }
   .td-warn { color: #f59e0b; font-weight: 700; }
-  .td-muted { color: #9CA3AF; font-size: 11px; }
+  .td-success { color: #10b981; font-weight: 700; }
+  .td-orange { color: #f97316; font-weight: 700; }
+  .td-muted { color: #D1D5DB; font-size: 12px; }
 
   .stage-pill {
     display: inline-block; padding: 2px 8px; border-radius: 6px;
