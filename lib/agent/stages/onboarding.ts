@@ -97,7 +97,7 @@ async function buildSystemPrompt(): Promise<string> {
  * 조건: 2~30자, 영문+숫자가 둘 다 포함, 점/밑줄/하이픈 허용.
  * 핸드폰번호(0으로 시작하는 10~11자리 숫자), URL, 단순 숫자만, 단순 영문만은 제외.
  */
-function detectBaeminIdFallback(text: string): string {
+export function detectBaeminIdFallback(text: string): string {
   // 라인/공백 단위로 토큰 분리 후 후보 추출
   const tokens = text.split(/[\s,;:|/()[\]{}<>"'`]+/).filter(Boolean);
   for (const raw of tokens) {
