@@ -1441,14 +1441,6 @@ export default function AdminPage() {
                       {a.name} 상세 정보
                       {hasChanges && <span className="dirty-tag">변경됨</span>}
                     </h3>
-                    <div className="detail-actions">
-                      <button
-                        className="cancel-btn"
-                        onClick={() => { setModalInitial(a as ApplicantFormValue); setModalMode("edit"); }}
-                      >
-                        ✏️ 전체 편집 (모달)
-                      </button>
-                    </div>
                   </div>
 
                   {/* 👤 인적사항 */}
@@ -1708,7 +1700,7 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* 자유 텍스트 영역은 [전체 편집] 모달에서 수정 */}
+                  {/* 자유 텍스트(메모/자기소개/경력)는 읽기 전용 — [+ 지원자 추가] 모달로 신규 생성 시에만 입력 */}
                   {a.note && a.note !== "중복지원" && (
                     <div className="detail-section">
                       <h4 className="detail-section-title">📝 메모</h4>
@@ -2922,9 +2914,9 @@ const css = `
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
     padding: 20px; margin-top: 16px;
   }
-  .detail-fullscreen { min-height: 70vh; }
+  .detail-fullscreen { min-height: 70vh; font-size: 13px; }
   .detail-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F3F4F6; }
-  .detail-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; }
+  .detail-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; }
   .close-btn {
     border: none; background: none; font-size: 16px; cursor: pointer;
     color: #9ca3af; font-weight: 700; padding: 4px 8px;
@@ -2954,12 +2946,14 @@ const css = `
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 24px;
     margin-bottom: 20px; padding: 14px 16px;
     background: #FAFAF8; border-radius: 8px;
+    font-size: 13px; color: #1F2937; line-height: 1.5;
   }
+  .detail-grid > div { font-size: 13px; }
   .detail-grid .detail-wide { grid-column: span 2; }
   .dl { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 3px; font-weight: 600; letter-spacing: 0.02em; }
-  .detail-section { margin-bottom: 16px; }
+  .detail-section { margin-bottom: 16px; font-size: 13px; }
   .detail-section-title {
-    font-size: 13px; font-weight: 700; color: #374151;
+    font-size: 14px; font-weight: 700; color: #374151;
     margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #F3F4F6;
   }
   .detail-section-title:first-of-type { margin-top: 4px; }
@@ -2969,7 +2963,7 @@ const css = `
     margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #F3F4F6;
   }
   .section-header-row:first-child { margin-top: 4px; }
-  .section-title-inline { margin: 0 !important; padding: 0 !important; border: none !important; }
+  .section-title-inline { font-size: 14px !important; margin: 0 !important; padding: 0 !important; border: none !important; }
   .section-edit-btn {
     padding: 3px 10px; border: 1px solid #D1D5DB; border-radius: 6px;
     background: #fff; cursor: pointer; font-size: 11px; font-weight: 500;
@@ -2978,7 +2972,7 @@ const css = `
   .section-edit-btn:hover { border-color: #1F2937; color: #111827; background: #FAFAF8; }
   .section-edit-actions { display: flex; gap: 6px; }
   .cancel-btn-sm, .save-btn-sm { font-size: 11px; padding: 4px 10px; }
-  .check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+  .check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
   .detail-text { font-size: 13px; line-height: 1.6; color: #374151; white-space: pre-wrap; }
 
   .empty { text-align: center; padding: 60px; color: #9ca3af; font-size: 14px; }
@@ -2994,7 +2988,7 @@ const css = `
   .slot-toggle-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .slot-toggle {
     padding: 6px 12px; border: 1.5px solid #E8E8E0; border-radius: 99px;
-    font-size: 12px; font-family: inherit; background: #fff; cursor: pointer; color: #6b7280;
+    font-size: 13px; font-family: inherit; background: #fff; cursor: pointer; color: #6b7280;
   }
   .slot-toggle:hover { border-color: #9CA3AF; color: #111827; }
   .slot-toggle-on {
