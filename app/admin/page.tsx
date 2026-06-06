@@ -342,9 +342,9 @@ export default function AdminPage() {
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
 
-  // 슬롯 뷰 셀 선택 (drill-down 용)
+  // 희망 슬롯 탭의 셀 드릴다운 (확정 슬롯 탭은 풀스크린 PPC로 이전됨)
   const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
-  // 확정 슬롯 탭에서 지점명 클릭 시 열리는 PPC 상세 (풀스크린 토글)
+  // 확정 슬롯 탭에서 지점 행 클릭 시 열리는 PPC 상세 (풀스크린 토글)
   const [branchDetail, setBranchDetail] = useState<string | null>(null);
   // PPC 상세에서 시간대 필터 (복수 선택 가능. 비어 있으면 전체)
   const [ppcSlotFilter, setPpcSlotFilter] = useState<Set<SlotKey>>(new Set());
@@ -1589,8 +1589,8 @@ export default function AdminPage() {
               <>
               <h2 className="page-title">확정 슬롯 현황</h2>
               <p className="page-desc">
-                <strong>status='확정'</strong> 지원자 기준 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
-                셀을 클릭하면 그 슬롯 인원이, <strong>지점명을 클릭하면 풀스크린 상세 페이지</strong>가 열립니다.
+                지점별 슬롯 충족 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
+                <strong>지점 행을 클릭하면 해당 지점 상세 페이지(풀스크린)</strong>가 열립니다.
               </p>
 
               <div className="matrix-legend">
@@ -1611,14 +1611,13 @@ export default function AdminPage() {
                     {branches.map((branch) => {
                       const b = branch.name;
                       return (
-                      <tr key={b}>
-                        <td
-                          className={`td-bold branch-name-cell ${branchDetail === b ? "branch-name-active" : ""}`}
-                          onClick={() => setBranchDetail(branchDetail === b ? null : b)}
-                          title="클릭하면 이 지점의 모든 인원 상세를 봅니다"
-                        >
-                          {b}
-                        </td>
+                      <tr
+                        key={b}
+                        className="branch-row clickable"
+                        onClick={() => setBranchDetail(b)}
+                        title="클릭하면 이 지점 상세 페이지로 이동합니다"
+                      >
+                        <td className="td-bold branch-name-cell">{b}</td>
                         {SLOTS.map((s) => {
                           const capacity = getSlotCapacity(branch, s);
                           const slotMatch = (val: string | null) =>
@@ -1629,27 +1628,11 @@ export default function AdminPage() {
                               slotMatch(a.confirmed_slot) &&
                               a.confirmed_branch === b
                           ).length;
-                          const waiting = data.filter(
-                            (a) =>
-                              a.status === "대기자" &&
-                              slotMatch(a.confirmed_slot) &&
-                              a.confirmed_branch === b
-                          ).length;
                           const cellClass =
                             capacity > 0 && confirmed >= capacity ? "cell-full"
                             : confirmed >= 1 ? "cell-half"
                             : "cell-zero";
-                          const active = slotCell?.branch === b && slotCell?.slot === s;
-                          return (
-                            <td
-                              key={s}
-                              className={`matrix-cell ${cellClass} ${active ? "cell-active" : ""}`}
-                              onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
-                            >
-                              <div className="conf-main">{confirmed}/{capacity}</div>
-                              {waiting > 0 && <div className="conf-sub">대기 {waiting}</div>}
-                            </td>
-                          );
+                          return <td key={s} className={`matrix-cell ${cellClass}`} />;
                         })}
                       </tr>
                       );
@@ -1658,67 +1641,6 @@ export default function AdminPage() {
                 </table>
               </div>
 
-              {slotCell && (() => {
-                const slotMatch = (val: string | null) =>
-                  (val ?? "").split(",").map((t) => t.trim()).includes(slotCell.slot);
-                const confirmedList = data.filter(
-                  (a) =>
-                    slotMatch(a.confirmed_slot) &&
-                    a.confirmed_branch === slotCell.branch &&
-                    a.status === "확정인력"
-                );
-                const waitingList = data.filter(
-                  (a) =>
-                    slotMatch(a.confirmed_slot) &&
-                    a.confirmed_branch === slotCell.branch &&
-                    a.status === "대기자"
-                );
-                const Row = (a: Applicant) => (
-                  <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
-                    <td className="td-bold">{a.name}</td>
-                    <td>{a.phone}</td>
-                    <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
-                    <td>{a.start_date || "-"}</td>
-                    <td>{a.current_branch || "-"}</td>
-                  </tr>
-                );
-                return (
-                  <div className="slot-drill">
-                    <div className="slot-drill-header">
-                      <h3>{slotCell.branch} · {slotCell.slot} · 확정 {confirmedList.length}명 · 대기 {waitingList.length}명</h3>
-                      <button className="close-btn" onClick={() => setSlotCell(null)}>X</button>
-                    </div>
-                    {/* 확정인력 */}
-                    <div className="slot-section-title">✓ 확정인력 ({confirmedList.length})</div>
-                    {confirmedList.length === 0 ? (
-                      <div className="empty">배치된 확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 슬롯/지점을 지정해주세요.</div>
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table">
-                          <thead>
-                            <tr><th>성함</th><th>연락처</th><th>상태</th><th>시작일</th><th>현재 근무지</th></tr>
-                          </thead>
-                          <tbody>{confirmedList.map(Row)}</tbody>
-                        </table>
-                      </div>
-                    )}
-                    {/* 대기자 (있을 때만 노출) */}
-                    {waitingList.length > 0 && (
-                      <>
-                        <div className="slot-section-title slot-section-waiting">⏳ 대기자 ({waitingList.length})</div>
-                        <div className="table-wrap">
-                          <table className="table">
-                            <thead>
-                              <tr><th>성함</th><th>연락처</th><th>상태</th><th>시작일</th><th>현재 근무지</th></tr>
-                            </thead>
-                            <tbody>{waitingList.map(Row)}</tbody>
-                          </table>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })()}
               </>
               )}
 
@@ -2865,9 +2787,9 @@ const css = `
   .td-slim { font-size: 11px; color: #6b7280; max-width: 280px; white-space: normal; }
 
   /* PPC 상세 — 시트 스타일 (지점 단위 전체 보기 + 인라인 편집) */
-  .branch-name-cell { cursor: pointer; transition: background 0.1s; }
-  .branch-name-cell:hover { background: #F0F9FF; color: #0369A1; }
-  .branch-name-active { background: #E0F2FE !important; color: #075985; }
+  .branch-row { cursor: pointer; transition: background 0.1s; }
+  .branch-row:hover { background: #F0F9FF; }
+  .branch-row:hover .branch-name-cell { color: #0369A1; }
   .ppc-fullscreen {
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
     padding: 20px; min-height: 70vh;
