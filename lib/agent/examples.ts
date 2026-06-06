@@ -1,8 +1,9 @@
 /**
- * 퓨샷 예시 + 사실 정보 로더 — Supabase `prompt_examples` 테이블에서 동적 로드.
+ * 퓨샷 예시 + 사실 정보 로더 — Supabase에서 동적 로드.
  *
- * - category='conversation' : 일반 대화 톤 (모든 stage) — 백엔드 전용, UI 비노출
- * - category='facts'        : AI가 사실로 인용 가능한 운영 정보 (지점별 시급/구인 상태/정책 등)
+ * - prompt_examples.category='conversation' : 일반 대화 톤 (모든 stage) — 백엔드 전용, UI 비노출
+ * - prompt_examples.category='facts'        : 공통 운영 정보 (전 지점 공통 — 정산·프로모션·업무시간 등)
+ * - branches.ai_facts                       : 지점별 AI 참고 정보 (자유 텍스트, 지점관리 탭에서 편집)
  *
  * 매니저가 admin UI에서 편집하면 다음 캐시 만료(60초) 이후 자동 반영.
  */
@@ -54,13 +55,52 @@ export async function loadFacts(): Promise<string> {
   return fetchCategory("facts");
 }
 
+interface CachedBranchFacts {
+  text: string;
+  expiresAt: number;
+}
+const branchFactsCache = new Map<string, CachedBranchFacts>();
+
+/**
+ * 특정 지점의 ai_facts(branches 테이블) 로드. 캐시 60초.
+ * branchName이 null/공백이면 빈 문자열 반환.
+ */
+async function loadBranchAiFacts(branchName: string | null | undefined): Promise<string> {
+  const key = (branchName ?? "").trim();
+  if (!key) return "";
+  const cached = branchFactsCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.text;
+  try {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from("branches")
+      .select("ai_facts")
+      .eq("name", key)
+      .maybeSingle();
+    if (error) {
+      console.error(`[agent/examples] branches.ai_facts fetch '${key}' error`, error);
+      return cached?.text ?? "";
+    }
+    const text = (data?.ai_facts as string | null)?.trim() ?? "";
+    branchFactsCache.set(key, { text, expiresAt: Date.now() + CACHE_TTL_MS });
+    return text;
+  } catch (e) {
+    console.error(`[agent/examples] branches.ai_facts exception '${key}'`, e);
+    return cached?.text ?? "";
+  }
+}
+
 /**
  * 시스템 프롬프트 끝에 붙일 톤 가이드 블록.
+ *
+ * @param branchName 지원자의 1지망 지점명 — 그 지점의 ai_facts를 별도 섹션으로 추가.
+ *                   비어 있으면 공통 facts만 포함.
  */
-export async function buildToneGuide(): Promise<string> {
-  const [conv, facts] = await Promise.all([
+export async function buildToneGuide(branchName?: string | null): Promise<string> {
+  const [conv, commonFacts, branchFacts] = await Promise.all([
     loadConversationExamples(),
     loadFacts(),
+    loadBranchAiFacts(branchName),
   ]);
   const lines = [
     "## 매니저 실제 대화 톤 — 반드시 모방",
@@ -75,14 +115,25 @@ export async function buildToneGuide(): Promise<string> {
     conv,
   ];
 
-  if (facts) {
+  if (commonFacts) {
     lines.push(
       "",
-      "## AI 참고자료 — 사실 (지점·시급·구인 상태·정책 등)",
-      "아래 정보는 매니저가 관리하는 최신 운영 정보다. 지원자가 질문하면 이 정보 안에서만 답해라.",
+      "## 공통 운영 정보 (전 지점 공통)",
+      "지원자가 질문하면 아래 정보 범위 안에서만 답해라.",
       "여기에 없는 사실(시급·시간대·인근 지하철역·시작일 등)은 추측하지 말고 매니저에게 인계해라.",
       "",
-      facts
+      commonFacts
+    );
+  }
+
+  if (branchFacts && branchName) {
+    lines.push(
+      "",
+      `## 📍 ${branchName} 지점 정보 (이 지원자 전용)`,
+      "위 공통 정보와 다른 내용이 아래에 있으면 **이 지점 정보가 우선**이다.",
+      "다른 지점의 사실은 절대 인용하거나 추측하지 마라.",
+      "",
+      branchFacts
     );
   }
 
@@ -92,4 +143,5 @@ export async function buildToneGuide(): Promise<string> {
 // 캐시 강제 무효화 (편집 직후 즉시 반영하고 싶을 때 사용)
 export function invalidateExamplesCache(): void {
   cache.clear();
+  branchFactsCache.clear();
 }

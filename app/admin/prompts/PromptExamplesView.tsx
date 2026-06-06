@@ -36,7 +36,7 @@ const CATEGORY_DESC: Record<Category, string> = {
   conversation:
     "매니저가 실제로 보낸 메시지 예시. AI가 이 톤·길이·말투를 그대로 모방합니다.",
   facts:
-    "AI가 지원자에게 사실로 인용 가능한 운영 정보. 예) '마포상암 — 평일오전 구인중, 시급 15,000원, 픽업 마포구 ...' 형태로 행마다 하나의 사실 단위.",
+    "AI가 지원자에게 사실로 인용 가능한 ⚠️공통⚠️ 운영 정보 (전 지점 공통 — 정산주기·프로모션·업무시간 체계 등). 지점별 정보(시급·근무시간·위치 등)는 [지점 관리] 탭에서 각 지점 행의 [🤖 AI] 버튼으로 편집합니다.",
   system_message:
     "시스템이 자동 발송하는 고정 문구. 제목=정해진 키(danggeun_start/apply_received/baemin_apply_invite/screening_announce/onboarding_guide/onboarding_reminder/first_day_rules). 본문에 {{이름}}, baemin_apply_invite는 {{지원폼주소}}, onboarding_guide는 {{마감시각}}도 지원. 제목은 바꾸지 마세요.",
 };

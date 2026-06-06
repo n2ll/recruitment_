@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
@@ -126,6 +126,7 @@ interface Branch {
   sort_order: number;
   active: boolean;
   slot_capacity?: Record<string, number>;
+  ai_facts?: string | null;
 }
 
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
@@ -560,6 +561,8 @@ export default function AdminPage() {
   const [localBranches, setLocalBranches] = useState<Branch[]>([]);
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  // 지점관리 행에서 AI 참고 정보(ai_facts) 입력 영역 펼침 (한 번에 하나만)
+  const [expandedAiFactsId, setExpandedAiFactsId] = useState<number | null>(null);
   const userEditedRef = useRef(false);
 
   // 사용자가 편집 중이면 서버 동기화로 덮어쓰지 않음
@@ -580,6 +583,7 @@ export default function AdminPage() {
       if (!sb) return true;
       if (lb.id !== sb.id) return true;
       if (lb.name !== sb.name || lb.active !== sb.active) return true;
+      if ((lb.ai_facts ?? "") !== (sb.ai_facts ?? "")) return true;
       // slot_capacity 변경 감지
       for (const k of SLOTS) {
         if (getSlotCapacity(lb, k) !== getSlotCapacity(sb, k)) return true;
@@ -641,6 +645,7 @@ export default function AdminPage() {
       const updates: Partial<Branch> = {};
       if (lb.name !== sb.name) updates.name = lb.name;
       if (lb.active !== sb.active) updates.active = lb.active;
+      if ((lb.ai_facts ?? "") !== (sb.ai_facts ?? "")) updates.ai_facts = lb.ai_facts ?? null;
       if (newSortOrder !== sb.sort_order) updates.sort_order = newSortOrder;
       // slot_capacity 변경 감지
       const capDiff = SLOTS.some(
@@ -2392,8 +2397,8 @@ export default function AdminPage() {
                         const isDragging = dragId === b.id;
                         const isDragOver = dragOverId === b.id && dragId !== b.id;
                         return (
+                          <Fragment key={b.id}>
                           <tr
-                            key={b.id}
                             draggable
                             onDragStart={() => handleDragStart(b.id)}
                             onDragOver={(e) => handleDragOver(e, b.id)}
@@ -2427,7 +2432,15 @@ export default function AdminPage() {
                             <td className="td-meta">
                               {usageCount > 0 ? `지원자 ${usageCount}명` : "사용 0"}
                             </td>
-                            <td>
+                            <td className="branch-row-actions">
+                              <button
+                                className={`branch-ai-btn ${(b.ai_facts ?? "").trim() ? "branch-ai-btn-filled" : ""}`}
+                                disabled={branchSaving}
+                                title={(b.ai_facts ?? "").trim() ? "AI 참고 정보 있음 — 편집" : "AI 참고 정보 추가"}
+                                onClick={() => setExpandedAiFactsId(expandedAiFactsId === b.id ? null : b.id)}
+                              >
+                                🤖 AI
+                              </button>
                               <button
                                 className="rec-btn-secondary"
                                 disabled={branchSaving}
@@ -2437,6 +2450,29 @@ export default function AdminPage() {
                               </button>
                             </td>
                           </tr>
+                          {expandedAiFactsId === b.id && (
+                            <tr className="branch-ai-row">
+                              <td colSpan={5}>
+                                <div className="branch-ai-wrap">
+                                  <div className="branch-ai-label">
+                                    🤖 <b>{b.name}</b> 지점 AI 참고 정보 (응대 시 이 지점 지원자에게만 주입됨)
+                                  </div>
+                                  <textarea
+                                    className="branch-ai-textarea"
+                                    rows={6}
+                                    placeholder={`예) 시급: 18,000~20,000원\n근무시간: 평일 08~16시\n위치: 서울 강북구 ...\n픽업: 강북미아 비마트 1층`}
+                                    value={b.ai_facts ?? ""}
+                                    disabled={branchSaving}
+                                    onChange={(e) => updateLocalBranch(b.id, { ai_facts: e.target.value })}
+                                  />
+                                  <div className="branch-ai-hint">
+                                    공통 정보(전 지점)는 [🧠 클로드 조련하기 → 운영 정보]에서 관리. 위 입력은 공통과 다른 내용이 있으면 <b>이 지점이 우선</b>됩니다.
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -3265,6 +3301,27 @@ const css = `
   .toggle input:checked + .toggle-slider { background: #10b981; }
   .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
   .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
+
+  /* 지점관리 — AI 참고 정보(ai_facts) 펼침 행 */
+  .branch-row-actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+  .branch-ai-btn {
+    padding: 4px 10px; border: 1px solid #D1D5DB; border-radius: 6px;
+    background: #fff; cursor: pointer; font-size: 12px; font-weight: 500;
+    color: #4B5563; font-family: inherit; transition: all 0.1s; white-space: nowrap;
+  }
+  .branch-ai-btn:hover:not(:disabled) { border-color: #6366F1; color: #4338CA; background: #EEF2FF; }
+  .branch-ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .branch-ai-btn-filled { background: #EEF2FF; color: #4338CA; border-color: #C7D2FE; }
+  .branch-ai-row td { padding: 0 !important; background: #F9FAFB; border-bottom: 2px solid #E5E7EB; }
+  .branch-ai-wrap { padding: 12px 20px 16px; }
+  .branch-ai-label { font-size: 12px; color: #4B5563; margin-bottom: 6px; }
+  .branch-ai-textarea {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+    font-size: 13px; font-family: inherit; resize: vertical; min-height: 80px;
+    background: #fff; outline: none; transition: border-color 0.15s; line-height: 1.5;
+  }
+  .branch-ai-textarea:focus { border-color: #6366F1; }
+  .branch-ai-hint { font-size: 11px; color: #9CA3AF; margin-top: 6px; }
 
   .rec-result { margin-top: 12px; }
   .rec-job-info {

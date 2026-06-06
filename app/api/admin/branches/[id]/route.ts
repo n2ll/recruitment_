@@ -8,6 +8,7 @@ interface PatchBody {
   sort_order?: number;
   active?: boolean;
   slot_capacity?: Record<string, number>;
+  ai_facts?: string | null;
 }
 
 export async function PATCH(
@@ -40,6 +41,11 @@ export async function PATCH(
     }
     if (typeof body.sort_order === "number") update.sort_order = body.sort_order;
     if (typeof body.active === "boolean") update.active = body.active;
+    if ("ai_facts" in body) {
+      // null 또는 string. 빈 문자열은 null로 정규화 (저장 일관성).
+      const v = body.ai_facts;
+      update.ai_facts = (typeof v === "string" && v.trim()) ? v : null;
+    }
     if (body.slot_capacity && typeof body.slot_capacity === "object") {
       // 안전: 숫자만 통과시키고 0 이상으로 클램프
       const sanitized: Record<string, number> = {};
@@ -62,7 +68,7 @@ export async function PATCH(
       .from("branches")
       .update(update)
       .eq("id", id)
-      .select("id, name, sort_order, active, slot_capacity")
+      .select("id, name, sort_order, active, slot_capacity, ai_facts")
       .single();
 
     if (error) {

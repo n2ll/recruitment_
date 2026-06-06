@@ -96,8 +96,8 @@ AI가 임의로 차단/회피하면 신뢰도와 모집 기회 모두 손해.
 ## 출력
 exploration_turn tool로만 응답.`;
 
-async function buildSystemPrompt(): Promise<string> {
-  return `${SYSTEM_PROMPT_BODY}\n\n${await buildToneGuide()}`;
+async function buildSystemPrompt(branchName?: string | null): Promise<string> {
+  return `${SYSTEM_PROMPT_BODY}\n\n${await buildToneGuide(branchName)}`;
 }
 
 interface ExplorationToolInput {
@@ -210,7 +210,7 @@ ${inboundText}
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 1024,
-          system: await buildSystemPrompt(),
+          system: await buildSystemPrompt(ctx.applicant.branch1 ?? ctx.job?.branch ?? null),
           tools: [TOOL],
           tool_choice: { type: "tool", name: "exploration_turn" },
           messages: [{ role: "user", content: userContent }],
