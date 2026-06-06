@@ -1795,7 +1795,6 @@ export default function AdminPage() {
                         type="text"
                         className="inline-memo"
                         defaultValue={a.baemin_id ?? ""}
-                        placeholder="아이디"
                         onBlur={(e) => {
                           const next = e.target.value.trim();
                           if (next !== (a.baemin_id ?? "")) patchApplicant(a.id, { baemin_id: next || null });
@@ -1823,7 +1822,6 @@ export default function AdminPage() {
                         type="text"
                         className="inline-memo"
                         defaultValue={a.onboarding_call_status ?? ""}
-                        placeholder="통화 완료 / 카톡대체…"
                         onBlur={(e) => {
                           const next = e.target.value.trim();
                           if (next !== (a.onboarding_call_status ?? "")) {
@@ -1837,7 +1835,6 @@ export default function AdminPage() {
                         type="text"
                         className="inline-memo"
                         defaultValue={a.note === "중복지원" ? "" : (a.note ?? "")}
-                        placeholder="비고"
                         onBlur={(e) => {
                           const next = e.target.value.trim();
                           const current = a.note === "중복지원" ? "" : (a.note ?? "");
