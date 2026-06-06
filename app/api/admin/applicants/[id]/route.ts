@@ -81,6 +81,21 @@ export async function PATCH(
   }
 
   const supabase = createServiceClient();
+
+  // status를 확정인력/대기자로 바꿀 때 confirmed_branch가 비어 있으면 branch1로 자동 채움.
+  // 매니저가 지원자 목록에서 status만 인라인 변경했을 때 PPC 매트릭스/상세에 안 보이는 문제 방지.
+  if (updates.status === "확정인력" || updates.status === "대기자") {
+    if (!("confirmed_branch" in updates)) {
+      const { data: cur } = await supabase
+        .from("applicants")
+        .select("confirmed_branch, branch1")
+        .eq("id", id)
+        .single();
+      if (cur && !cur.confirmed_branch && cur.branch1) {
+        updates.confirmed_branch = cur.branch1;
+      }
+    }
+  }
   const { data, error } = await supabase
     .from("applicants")
     .update(updates)

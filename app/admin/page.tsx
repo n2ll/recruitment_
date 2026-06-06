@@ -1265,7 +1265,7 @@ export default function AdminPage() {
                 <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
 
-              <div className={`applicants-grid ${selected ? "has-detail" : ""}`}>
+              {!selected && (
               <div className="table-wrap applicants-table-wrap">
                 <table className="table">
                   <thead>
@@ -1321,6 +1321,7 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
+              )}
 
               {selected && (() => {
                 const draftVal = <K extends keyof Applicant>(key: K): Applicant[K] =>
@@ -1339,9 +1340,15 @@ export default function AdminPage() {
                 const cancelEdits = () => setEditDraft({});
 
                 return (
-                <div className="detail-panel">
+                <div className="detail-panel detail-fullscreen">
                   <div className="detail-header">
-                    <h3>
+                    <button
+                      className="ppc-back-btn"
+                      onClick={() => { setSelectedId(null); setEditDraft({}); }}
+                    >
+                      ← 목록으로
+                    </button>
+                    <h3 className="detail-title">
                       {selected.name} 상세 정보
                       {hasChanges && <span className="dirty-tag">변경됨</span>}
                     </h3>
@@ -1366,7 +1373,6 @@ export default function AdminPage() {
                       >
                         {savingEdit ? "저장 중..." : "저장"}
                       </button>
-                      <button className="close-btn" onClick={() => setSelectedId(null)}>X</button>
                     </div>
                   </div>
 
@@ -1470,7 +1476,6 @@ export default function AdminPage() {
                 </div>
                 );
               })()}
-              </div> {/* /applicants-grid */}
             </div>
           ) : tab === "hope-slots" ? (
             <div className="content">
@@ -1622,11 +1627,12 @@ export default function AdminPage() {
                           const capacity = getSlotCapacity(branch, s);
                           const slotMatch = (val: string | null) =>
                             (val ?? "").split(",").map((t) => t.trim()).includes(s);
+                          // 매니저가 confirmed_branch를 안 채웠을 때는 branch1로 fallback (지원 시 1지망)
                           const confirmed = data.filter(
                             (a) =>
                               a.status === "확정인력" &&
                               slotMatch(a.confirmed_slot) &&
-                              a.confirmed_branch === b
+                              (a.confirmed_branch ?? a.branch1) === b
                           ).length;
                           const cellClass =
                             capacity > 0 && confirmed >= capacity ? "cell-full"
@@ -1649,7 +1655,9 @@ export default function AdminPage() {
                 const branchObj = branches.find((br) => br.name === branchDetail);
                 const morningCap = branchObj ? getSlotCapacity(branchObj, "평일오전") : 0;
                 const afternoonCap = branchObj ? getSlotCapacity(branchObj, "평일오후") : 0;
-                const inBranch = data.filter((a) => a.confirmed_branch === branchDetail);
+                // confirmed_branch가 없으면 branch1(지원 시 1지망)로 fallback. 매니저가
+                // 지원자 목록에서 status만 확정/대기로 바꾸고 지점을 안 채워도 PPC에서 보이게.
+                const inBranch = data.filter((a) => (a.confirmed_branch ?? a.branch1) === branchDetail);
                 // 슬롯 필터 적용: 선택된 슬롯 중 하나라도 confirmed_slot에 들어 있으면 표시. 비어 있으면 전체.
                 const applyFilter = (list: Applicant[]) => {
                   if (ppcSlotFilter.size === 0) return list;
@@ -2643,27 +2651,16 @@ const css = `
     margin-left: 6px;
   }
 
-  /* 지원자 목록 — 표 + 우측 상세 패널 grid */
-  .applicants-grid { display: flex; gap: 16px; align-items: flex-start; }
-  .applicants-table-wrap { flex: 1; min-width: 0; }
-  .applicants-grid.has-detail .detail-panel {
-    width: 420px; flex-shrink: 0; margin-top: 0;
-    position: sticky; top: 16px;
-    max-height: calc(100vh - 80px); overflow-y: auto;
-  }
-  @media (max-width: 1280px) {
-    .applicants-grid { flex-direction: column; }
-    .applicants-grid.has-detail .detail-panel {
-      width: 100%; position: static; max-height: none;
-    }
-  }
+  /* 지원자 목록 — 상세는 풀스크린 토글 (목록과 교차 표시) */
+  .applicants-table-wrap { width: 100%; }
 
   .detail-panel {
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
     padding: 20px; margin-top: 16px;
   }
-  .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .detail-header h3 { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .detail-fullscreen { min-height: 70vh; }
+  .detail-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F3F4F6; }
+  .detail-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; }
   .close-btn {
     border: none; background: none; font-size: 16px; cursor: pointer;
     color: #9ca3af; font-weight: 700; padding: 4px 8px;
