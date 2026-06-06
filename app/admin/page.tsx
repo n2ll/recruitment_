@@ -352,6 +352,13 @@ export default function AdminPage() {
   // 상세 패널 임시 편집 상태 (명시적 저장)
   const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  // 지원자 상세 풀스크린에서 어떤 섹션이 편집 모드인지 (한 번에 하나만)
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  // 지원자 바뀌면 편집 상태 자동 초기화 (다른 사람 데이터 오염 방지)
+  useEffect(() => {
+    setEditDraft({});
+    setEditingSection(null);
+  }, [selectedId]);
   useEffect(() => { setEditDraft({}); }, [selectedId]);
 
   // 추천 받기 state
@@ -1347,211 +1354,377 @@ export default function AdminPage() {
               )}
 
               {selected && (() => {
+                const a = selected;  // 별칭 — 클로저 안에서 selected 변수 shadowing 방지
                 const draftVal = <K extends keyof Applicant>(key: K): Applicant[K] =>
-                  (key in editDraft ? editDraft[key] : selected[key]) as Applicant[K];
+                  (key in editDraft ? editDraft[key] : a[key]) as Applicant[K];
                 const setDraft = <K extends keyof Applicant>(key: K, value: Applicant[K]) =>
                   setEditDraft((prev) => ({ ...prev, [key]: value }));
                 const hasChanges = Object.keys(editDraft).length > 0;
-                const currentStatus = (draftVal("status") as string) || "";
-                const saveEdits = async () => {
-                  if (!hasChanges || savingEdit) return;
-                  setSavingEdit(true);
-                  const ok = await patchApplicant(selected.id, editDraft);
-                  setSavingEdit(false);
-                  if (ok) setEditDraft({});
+
+                // 섹션별 편집 가능 필드 매핑 (시스템 컬럼 제외)
+                const SECTION_FIELDS: Record<string, (keyof Applicant)[]> = {
+                  personal: ["name", "birth_date", "phone", "status", "source"],
+                  address: ["location"],
+                  vehicle: ["own_vehicle", "license_type", "vehicle_type", "self_ownership"],
+                  hope: ["branch1", "branch2", "work_hours", "available_date"],
+                  onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
+                  confirmed: ["confirmed_branch", "confirmed_slot", "current_branch", "start_date", "churn_reason"],
                 };
-                const cancelEdits = () => setEditDraft({});
+
+                const isEditing = (section: string) => editingSection === section;
+
+                const saveSection = async (section: string) => {
+                  const fields = SECTION_FIELDS[section] ?? [];
+                  const patch: Partial<Applicant> = {};
+                  for (const k of fields) {
+                    if (k in editDraft) (patch as Record<string, unknown>)[k] = editDraft[k];
+                  }
+                  if (Object.keys(patch).length > 0) {
+                    setSavingEdit(true);
+                    const ok = await patchApplicant(a.id, patch);
+                    setSavingEdit(false);
+                    if (!ok) return;
+                    setEditDraft((prev) => {
+                      const next = { ...prev };
+                      for (const k of fields) delete next[k];
+                      return next;
+                    });
+                  }
+                  setEditingSection(null);
+                };
+
+                const cancelSection = (section: string) => {
+                  setEditDraft((prev) => {
+                    const next = { ...prev };
+                    for (const k of (SECTION_FIELDS[section] ?? [])) delete next[k];
+                    return next;
+                  });
+                  setEditingSection(null);
+                };
+
+                const SectionHeader = ({ section, title }: { section: string; title: string }) => (
+                  <div className="section-header-row">
+                    <h4 className="detail-section-title section-title-inline">{title}</h4>
+                    {isEditing(section) ? (
+                      <div className="section-edit-actions">
+                        <button className="cancel-btn cancel-btn-sm" onClick={() => cancelSection(section)} disabled={savingEdit}>
+                          취소
+                        </button>
+                        <button className="save-btn save-btn-sm" onClick={() => saveSection(section)} disabled={savingEdit}>
+                          {savingEdit ? "저장 중…" : "저장"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="section-edit-btn"
+                        onClick={() => {
+                          if (editingSection && editingSection !== section) cancelSection(editingSection);
+                          setEditingSection(section);
+                        }}
+                      >
+                        ✏️ 편집
+                      </button>
+                    )}
+                  </div>
+                );
 
                 return (
                 <div className="detail-panel detail-fullscreen">
                   <div className="detail-header">
                     <button
                       className="ppc-back-btn"
-                      onClick={() => { setSelectedId(null); setEditDraft({}); }}
+                      onClick={() => { setSelectedId(null); setEditDraft({}); setEditingSection(null); }}
                     >
                       ← 목록으로
                     </button>
                     <h3 className="detail-title">
-                      {selected.name} 상세 정보
+                      {a.name} 상세 정보
                       {hasChanges && <span className="dirty-tag">변경됨</span>}
                     </h3>
                     <div className="detail-actions">
                       <button
                         className="cancel-btn"
-                        onClick={() => { setModalInitial(selected as ApplicantFormValue); setModalMode("edit"); }}
+                        onClick={() => { setModalInitial(a as ApplicantFormValue); setModalMode("edit"); }}
                       >
-                        ✏️ 전체 편집
-                      </button>
-                      <button
-                        className="cancel-btn"
-                        onClick={cancelEdits}
-                        disabled={!hasChanges || savingEdit}
-                      >
-                        취소
-                      </button>
-                      <button
-                        className="save-btn"
-                        onClick={saveEdits}
-                        disabled={!hasChanges || savingEdit}
-                      >
-                        {savingEdit ? "저장 중..." : "저장"}
+                        ✏️ 전체 편집 (모달)
                       </button>
                     </div>
                   </div>
 
-                  {/* 편집 가능 영역 (명시적 저장) */}
-                  <div className="edit-grid">
-                    <label className="edit-field">
+                  {/* 👤 인적사항 */}
+                  <SectionHeader section="personal" title="👤 인적사항" />
+                  <div className="detail-grid">
+                    <div>
+                      <span className="dl">성함</span>
+                      {isEditing("personal") ? (
+                        <input className="edit-select" value={(draftVal("name") as string) || ""} onChange={(e) => setDraft("name", e.target.value)} />
+                      ) : (a.name)}
+                    </div>
+                    <div>
+                      <span className="dl">나이 (생년월일)</span>
+                      {isEditing("personal") ? (
+                        <input
+                          className="edit-select" maxLength={6} placeholder="YYMMDD"
+                          value={(draftVal("birth_date") as string) || ""}
+                          onChange={(e) => setDraft("birth_date", e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
+                        />
+                      ) : (
+                        <>
+                          {calcAge(a.birth_date) ?? "—"}
+                          {a.birth_date ? ` (${a.birth_date.slice(0, 2)}/${a.birth_date.slice(2, 4)}/${a.birth_date.slice(4, 6)})` : ""}
+                        </>
+                      )}
+                    </div>
+                    <div>
+                      <span className="dl">전화</span>
+                      {isEditing("personal") ? (
+                        <input className="edit-select" value={(draftVal("phone") as string) || ""} onChange={(e) => setDraft("phone", e.target.value)} />
+                      ) : (a.phone)}
+                    </div>
+                    <div>
                       <span className="dl">진행 상태</span>
-                      <select
-                        className="edit-select"
-                        value={currentStatus}
-                        onChange={(e) => setDraft("status", e.target.value)}
-                      >
-                        {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </label>
-                    <div className="edit-field edit-field-wide">
-                      <span className="dl">확정 슬롯 (복수 선택)</span>
-                      <div className="slot-toggle-row">
-                        {(() => {
-                          const raw = (draftVal("confirmed_slot") as string) || "";
-                          const selected = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
-                          return SLOTS.map((s) => {
-                            const on = selected.has(s);
+                      {isEditing("personal") ? (
+                        <select className="edit-select" value={(draftVal("status") as string) || ""} onChange={(e) => setDraft("status", e.target.value)}>
+                          {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="dl">지원경로</span>
+                      {isEditing("personal") ? (
+                        <select className="edit-select" value={(draftVal("source") as string) || ""} onChange={(e) => setDraft("source", e.target.value)}>
+                          <option value="danggeun">당근</option>
+                          <option value="baemin">배민</option>
+                          <option value="manual">수기</option>
+                          <option value="direct">기타</option>
+                        </select>
+                      ) : sourceLabel(a.source)}
+                    </div>
+                    <div><span className="dl">지원일</span>{new Date(a.created_at).toLocaleDateString("ko-KR")}</div>
+                    <div><span className="dl">AI 단계</span>{a.agent_stage ?? "—"}</div>
+                    <div><span className="dl">안 읽음</span>{a.unread_count || 0}</div>
+                  </div>
+
+                  {/* 🏠 거주지 */}
+                  <SectionHeader section="address" title="🏠 거주지" />
+                  <div className="detail-grid">
+                    <div className="detail-wide">
+                      <span className="dl">주소</span>
+                      {isEditing("address") ? (
+                        <input className="edit-select" value={(draftVal("location") as string) || ""} onChange={(e) => setDraft("location", e.target.value)} />
+                      ) : (a.location || "—")}
+                    </div>
+                    <div><span className="dl">동(자동)</span>{a.bname || "—"}</div>
+                    <div><span className="dl">시군구(자동)</span>{a.sigungu || "—"}</div>
+                  </div>
+
+                  {/* 🚗 차량·면허 */}
+                  <SectionHeader section="vehicle" title="🚗 차량·면허" />
+                  <div className="detail-grid">
+                    <div>
+                      <span className="dl">자차</span>
+                      {isEditing("vehicle") ? (
+                        <select className="edit-select" value={(draftVal("own_vehicle") as string) || ""} onChange={(e) => setDraft("own_vehicle", e.target.value)}>
+                          <option value="">—</option>
+                          <option value="있음">있음</option>
+                          <option value="없음">없음</option>
+                        </select>
+                      ) : (a.own_vehicle || "—")}
+                    </div>
+                    <div>
+                      <span className="dl">면허</span>
+                      {isEditing("vehicle") ? (
+                        <select className="edit-select" value={(draftVal("license_type") as string) || ""} onChange={(e) => setDraft("license_type", e.target.value)}>
+                          <option value="">—</option>
+                          <option value="1종 보통">1종 보통</option>
+                          <option value="2종 보통">2종 보통</option>
+                          <option value="1종 대형">1종 대형</option>
+                          <option value="없음">없음</option>
+                        </select>
+                      ) : (a.license_type || "—")}
+                    </div>
+                    <div>
+                      <span className="dl">차종</span>
+                      {isEditing("vehicle") ? (
+                        <input className="edit-select" value={(draftVal("vehicle_type") as string) || ""} onChange={(e) => setDraft("vehicle_type", e.target.value)} />
+                      ) : (a.vehicle_type || "—")}
+                    </div>
+                    <div>
+                      <span className="dl">본인명의</span>
+                      {isEditing("vehicle") ? (
+                        <select className="edit-select" value={(draftVal("self_ownership") as string) || ""} onChange={(e) => setDraft("self_ownership", e.target.value)}>
+                          <option value="">—</option>
+                          <option value="문제 없음">문제 없음</option>
+                          <option value="문제 있음">문제 있음</option>
+                        </select>
+                      ) : (a.self_ownership || "—")}
+                    </div>
+                  </div>
+
+                  {/* 📍 희망 지점·시간 */}
+                  <SectionHeader section="hope" title="📍 희망 지점·시간" />
+                  <div className="detail-grid">
+                    <div>
+                      <span className="dl">1지망</span>
+                      {isEditing("hope") ? (
+                        <select className="edit-select" value={(draftVal("branch1") as string) || ""} onChange={(e) => setDraft("branch1", e.target.value)}>
+                          <option value="">—</option>
+                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      ) : (a.branch1 || "—")}
+                    </div>
+                    <div>
+                      <span className="dl">2지망</span>
+                      {isEditing("hope") ? (
+                        <select className="edit-select" value={(draftVal("branch2") as string) || ""} onChange={(e) => setDraft("branch2", e.target.value || null)}>
+                          <option value="">—</option>
+                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      ) : (a.branch2 || "—")}
+                    </div>
+                    <div className="detail-wide">
+                      <span className="dl">희망시간 (복수)</span>
+                      {isEditing("hope") ? (
+                        <div className="slot-toggle-row">
+                          {SLOTS.map((s) => {
+                            const raw = (draftVal("work_hours") as string) || "";
+                            const set = new Set(raw.split(",").map((t) => t.trim()).filter(Boolean));
+                            const on = set.has(s);
                             return (
                               <button
-                                key={s}
-                                type="button"
+                                key={s} type="button"
                                 className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
                                 onClick={() => {
-                                  const next = new Set(selected);
+                                  const next = new Set(set);
                                   if (on) next.delete(s); else next.add(s);
-                                  // 입력 순서를 유지하기 위해 SLOTS 기준으로 재정렬
+                                  const joined = SLOTS.filter((x) => next.has(x)).join(", ");
+                                  setDraft("work_hours", joined);
+                                }}
+                              >{s}</button>
+                            );
+                          })}
+                        </div>
+                      ) : (a.work_hours || "—")}
+                    </div>
+                    <div>
+                      <span className="dl">시작가능일</span>
+                      {isEditing("hope") ? (
+                        <input type="date" className="edit-select edit-date" value={(draftVal("available_date") as string) || ""} onChange={(e) => setDraft("available_date", e.target.value || null)} />
+                      ) : (a.available_date || "—")}
+                    </div>
+                  </div>
+
+                  {/* 📱 온보딩 진행 */}
+                  <SectionHeader section="onboarding" title="📱 온보딩 진행 (매니저 체크용)" />
+                  <div className="detail-grid">
+                    <div>
+                      <span className="dl">배민 아이디</span>
+                      {isEditing("onboarding") ? (
+                        <input className="edit-select" value={(draftVal("baemin_id") as string) || ""} onChange={(e) => setDraft("baemin_id", e.target.value || null)} />
+                      ) : (a.baemin_id || <span className="td-muted">미수집</span>)}
+                    </div>
+                    <div>
+                      <span className="dl">카톡 채널</span>
+                      {isEditing("onboarding") ? (
+                        <label className="check-label">
+                          <input type="checkbox" className="ppc-check" checked={!!draftVal("kakao_channel_friend")} onChange={(e) => setDraft("kakao_channel_friend", e.target.checked)} />
+                          친구추가됨
+                        </label>
+                      ) : (a.kakao_channel_friend ? "✓ 친구추가됨" : "—")}
+                    </div>
+                    <div>
+                      <span className="dl">가이드 전달</span>
+                      {isEditing("onboarding") ? (
+                        <label className="check-label">
+                          <input type="checkbox" className="ppc-check" checked={!!draftVal("guide_sent")} onChange={(e) => setDraft("guide_sent", e.target.checked)} />
+                          전달완료
+                        </label>
+                      ) : (a.guide_sent ? "✓ 전달완료" : "—")}
+                    </div>
+                    <div>
+                      <span className="dl">온보딩 통화</span>
+                      {isEditing("onboarding") ? (
+                        <input className="edit-select" value={(draftVal("onboarding_call_status") as string) || ""} onChange={(e) => setDraft("onboarding_call_status", e.target.value || null)} />
+                      ) : (a.onboarding_call_status || "—")}
+                    </div>
+                  </div>
+
+                  {/* ✓ 확정·근무 */}
+                  <SectionHeader section="confirmed" title="✓ 확정·근무" />
+                  <div className="detail-grid">
+                    <div>
+                      <span className="dl">확정지점</span>
+                      {isEditing("confirmed") ? (
+                        <select className="edit-select" value={(draftVal("confirmed_branch") as string) || ""} onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}>
+                          <option value="">—</option>
+                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      ) : (a.confirmed_branch || "—")}
+                    </div>
+                    <div className="detail-wide">
+                      <span className="dl">확정 슬롯 (복수)</span>
+                      {isEditing("confirmed") ? (
+                        <div className="slot-toggle-row">
+                          {SLOTS.map((s) => {
+                            const raw = (draftVal("confirmed_slot") as string) || "";
+                            const set = new Set(raw.split(",").map((t) => t.trim()).filter(Boolean));
+                            const on = set.has(s);
+                            return (
+                              <button
+                                key={s} type="button"
+                                className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
+                                onClick={() => {
+                                  const next = new Set(set);
+                                  if (on) next.delete(s); else next.add(s);
                                   const joined = SLOTS.filter((x) => next.has(x)).join(",");
                                   setDraft("confirmed_slot", joined || null);
                                 }}
-                              >
-                                {s}
-                              </button>
+                              >{s}</button>
                             );
-                          });
-                        })()}
-                      </div>
+                          })}
+                        </div>
+                      ) : (a.confirmed_slot || "—")}
                     </div>
-                    <label className="edit-field">
-                      <span className="dl">확정 지점</span>
-                      <select
-                        className="edit-select"
-                        value={(draftVal("confirmed_branch") as string) || ""}
-                        onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}
-                      >
-                        <option value="">—</option>
-                        {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </label>
-                    <label className="edit-field">
+                    <div>
+                      <span className="dl">현재 근무지점</span>
+                      {isEditing("confirmed") ? (
+                        <input className="edit-select" value={(draftVal("current_branch") as string) || ""} onChange={(e) => setDraft("current_branch", e.target.value || null)} />
+                      ) : (a.current_branch || "—")}
+                    </div>
+                    <div>
                       <span className="dl">시작일</span>
-                      <input
-                        type="date"
-                        className="edit-select edit-date"
-                        value={(draftVal("start_date") as string) || ""}
-                        onChange={(e) => setDraft("start_date", e.target.value || null)}
-                        onClick={(e) => {
-                          const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
-                          try { el.showPicker?.(); } catch { /* unsupported */ }
-                        }}
-                      />
-                    </label>
-                    {(currentStatus === "부적합" || currentStatus === "대기자") && (
-                      <label className="edit-field edit-field-wide">
-                        <span className="dl">사유 메모</span>
-                        <input
-                          type="text"
-                          className="edit-select"
-                          placeholder="부적합/대기 사유"
-                          value={(draftVal("churn_reason") as string) || ""}
-                          onChange={(e) => setDraft("churn_reason", e.target.value || null)}
-                        />
-                      </label>
-                    )}
+                      {isEditing("confirmed") ? (
+                        <input type="date" className="edit-select edit-date" value={(draftVal("start_date") as string) || ""} onChange={(e) => setDraft("start_date", e.target.value || null)} />
+                      ) : (a.start_date || "—")}
+                    </div>
+                    <div><span className="dl">이탈일(자동)</span>{a.churned_at ? new Date(a.churned_at).toLocaleDateString("ko-KR") : "—"}</div>
+                    <div className="detail-wide">
+                      <span className="dl">이탈/대기 사유</span>
+                      {isEditing("confirmed") ? (
+                        <input className="edit-select" value={(draftVal("churn_reason") as string) || ""} onChange={(e) => setDraft("churn_reason", e.target.value || null)} />
+                      ) : (a.churn_reason || "—")}
+                    </div>
                   </div>
 
-                  {/* 인적사항 */}
-                  <h4 className="detail-section-title">👤 인적사항</h4>
-                  <div className="detail-grid">
-                    <div><span className="dl">나이</span>{calcAge(selected.birth_date) ?? "—"}{selected.birth_date ? ` (${selected.birth_date.slice(0, 2)}/${selected.birth_date.slice(2, 4)}/${selected.birth_date.slice(4, 6)})` : ""}</div>
-                    <div><span className="dl">전화</span>{selected.phone}</div>
-                    <div><span className="dl">지원경로</span>{sourceLabel(selected.source)}</div>
-                    <div><span className="dl">지원일</span>{new Date(selected.created_at).toLocaleDateString("ko-KR")}</div>
-                    <div><span className="dl">AI 단계</span>{selected.agent_stage ?? "—"}</div>
-                    <div><span className="dl">안 읽음</span>{selected.unread_count || 0}</div>
-                  </div>
-
-                  {/* 거주지 */}
-                  <h4 className="detail-section-title">🏠 거주지</h4>
-                  <div className="detail-grid">
-                    <div className="detail-wide"><span className="dl">주소</span>{selected.location || "—"}</div>
-                    <div><span className="dl">동(자동)</span>{selected.bname || "—"}</div>
-                    <div><span className="dl">시군구(자동)</span>{selected.sigungu || "—"}</div>
-                  </div>
-
-                  {/* 차량·면허 */}
-                  <h4 className="detail-section-title">🚗 차량·면허</h4>
-                  <div className="detail-grid">
-                    <div><span className="dl">자차</span>{selected.own_vehicle || "—"}</div>
-                    <div><span className="dl">면허</span>{selected.license_type || "—"}</div>
-                    <div><span className="dl">차종</span>{selected.vehicle_type || "—"}</div>
-                    <div><span className="dl">본인명의</span>{selected.self_ownership || "—"}</div>
-                  </div>
-
-                  {/* 희망 */}
-                  <h4 className="detail-section-title">📍 희망 지점·시간</h4>
-                  <div className="detail-grid">
-                    <div><span className="dl">1지망</span>{selected.branch1 || "—"}</div>
-                    <div><span className="dl">2지망</span>{selected.branch2 || "—"}</div>
-                    <div><span className="dl">희망시간</span>{selected.work_hours || "—"}</div>
-                    <div><span className="dl">시작가능일</span>{selected.available_date || "—"}</div>
-                  </div>
-
-                  {/* 온보딩 진행 */}
-                  <h4 className="detail-section-title">📱 온보딩 진행 (매니저 체크용)</h4>
-                  <div className="detail-grid">
-                    <div><span className="dl">배민 아이디</span>{selected.baemin_id || <span className="td-muted">미수집</span>}</div>
-                    <div><span className="dl">카톡 채널</span>{selected.kakao_channel_friend ? "✓ 친구추가됨" : "—"}</div>
-                    <div><span className="dl">가이드 전달</span>{selected.guide_sent ? "✓ 전달완료" : "—"}</div>
-                    <div><span className="dl">온보딩 통화</span>{selected.onboarding_call_status || "—"}</div>
-                  </div>
-
-                  {/* 확정·근무 (확정인력일 때 의미 있음) */}
-                  {(selected.confirmed_branch || selected.current_branch || selected.churned_at) && (
-                    <>
-                      <h4 className="detail-section-title">✓ 확정·근무</h4>
-                      <div className="detail-grid">
-                        <div><span className="dl">확정지점</span>{selected.confirmed_branch || "—"}</div>
-                        <div><span className="dl">현재 근무지점</span>{selected.current_branch || "—"}</div>
-                        <div><span className="dl">이탈일</span>{selected.churned_at ? new Date(selected.churned_at).toLocaleDateString("ko-KR") : "—"}</div>
-                        <div><span className="dl">이탈/대기 사유</span>{selected.churn_reason || "—"}</div>
-                      </div>
-                    </>
-                  )}
-
-                  {selected.note && selected.note !== "중복지원" && (
+                  {/* 자유 텍스트 영역은 [전체 편집] 모달에서 수정 */}
+                  {a.note && a.note !== "중복지원" && (
                     <div className="detail-section">
                       <h4 className="detail-section-title">📝 메모</h4>
-                      <p className="detail-text">{selected.note}</p>
+                      <p className="detail-text">{a.note}</p>
                     </div>
                   )}
-                  {selected.introduction && (
+                  {a.introduction && (
                     <div className="detail-section">
                       <h4 className="detail-section-title">💬 자기소개</h4>
-                      <p className="detail-text">{selected.introduction}</p>
+                      <p className="detail-text">{a.introduction}</p>
                     </div>
                   )}
-                  {selected.experience && (
+                  {a.experience && (
                     <div className="detail-section">
                       <h4 className="detail-section-title">📋 경력</h4>
-                      <p className="detail-text">{selected.experience}</p>
+                      <p className="detail-text">{a.experience}</p>
                     </div>
                   )}
                 </div>
@@ -2790,6 +2963,22 @@ const css = `
     margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #F3F4F6;
   }
   .detail-section-title:first-of-type { margin-top: 4px; }
+  /* 섹션 헤더 — [편집] 또는 [취소][저장] 버튼이 같은 줄에 */
+  .section-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #F3F4F6;
+  }
+  .section-header-row:first-child { margin-top: 4px; }
+  .section-title-inline { margin: 0 !important; padding: 0 !important; border: none !important; }
+  .section-edit-btn {
+    padding: 3px 10px; border: 1px solid #D1D5DB; border-radius: 6px;
+    background: #fff; cursor: pointer; font-size: 11px; font-weight: 500;
+    color: #4B5563; font-family: inherit; transition: all 0.1s;
+  }
+  .section-edit-btn:hover { border-color: #1F2937; color: #111827; background: #FAFAF8; }
+  .section-edit-actions { display: flex; gap: 6px; }
+  .cancel-btn-sm, .save-btn-sm { font-size: 11px; padding: 4px 10px; }
+  .check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
   .detail-text { font-size: 13px; line-height: 1.6; color: #374151; white-space: pre-wrap; }
 
   .empty { text-align: center; padding: 60px; color: #9ca3af; font-size: 14px; }
