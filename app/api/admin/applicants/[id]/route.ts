@@ -11,7 +11,7 @@ const ALLOWED_FIELDS = new Set([
   "branch1", "branch2", "branch",
   "work_hours", "available_date", "self_ownership",
   "introduction", "experience",
-  "source", "status", "filter_pass", "note",
+  "source", "status", "filter_pass", "note", "memo",
   "start_date", "confirmed_slot", "confirmed_branch", "current_branch",
   "churn_reason", "screening",
   "marketing_consent", "kakao_channel_friend",

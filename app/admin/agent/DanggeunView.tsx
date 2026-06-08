@@ -127,7 +127,8 @@ interface Candidate {
   start_date: string | null;
   churned_at: string | null;
   churn_reason: string | null;
-  note: string | null;
+  note: string | null;        // 시스템 태그 (중복지원 등)
+  memo: string | null;        // 매니저 자유 메모 — 어디서나 편집 가능
   introduction: string | null;
   experience: string | null;
 }
@@ -1223,6 +1224,7 @@ const SECTION_FIELDS: Record<string, (keyof Candidate)[]> = {
   hope: ["branch1", "branch2", "work_hours", "available_date"],
   onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
   confirmed: ["confirmed_branch", "current_branch", "start_date", "churn_reason"],
+  memo: ["memo"],
 };
 
 function ApplicantMiniDetail({
@@ -1569,6 +1571,26 @@ function ApplicantMiniDetail({
               {editing("confirmed") ? (
                 <input className="dgd-input" value={(draftVal("churn_reason") as string) || ""} onChange={(e) => setD("churn_reason", e.target.value || null)} />
               ) : (a.churn_reason || "—")}
+            </div>
+          </div>
+
+          {/* 📝 매니저 메모 — 어느 화면에서나 동일 값 + 편집 가능 */}
+          <SectionHead section="memo" title="📝 메모" />
+          <div className="dgd-grid">
+            <div className="dgd-wide">
+              {editing("memo") ? (
+                <textarea
+                  className="dgd-input"
+                  style={{ minHeight: 70, resize: "vertical", lineHeight: 1.5 }}
+                  value={(draftVal("memo") as string) || ""}
+                  onChange={(e) => setD("memo", e.target.value || null)}
+                  placeholder="자유 메모 — 특이사항·연락 참고 등"
+                />
+              ) : (
+                a.memo
+                  ? <p style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 12 }}>{a.memo}</p>
+                  : <span className="dgd-muted">메모 없음</span>
+              )}
             </div>
           </div>
         </div>

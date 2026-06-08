@@ -29,7 +29,8 @@ export interface ApplicantFormValue {
   source?: string | null;
   status?: string | null;
   filter_pass?: string | null;       // 'Y' | 'N' | null
-  note?: string | null;
+  note?: string | null;              // 시스템 태그 (중복지원 등) — 폼에선 다루지 않음
+  memo?: string | null;              // 매니저 자유 메모
   start_date?: string | null;
   confirmed_slot?: string | null;    // 콤마 join (다중)
   confirmed_branch?: string | null;
@@ -69,7 +70,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
     branch1: "", branch2: "", work_hours: "",
     available_date: "", self_ownership: "",
     introduction: "", experience: "",
-    source: "manual", status: "스크리닝 전", note: "",
+    source: "manual", status: "스크리닝 전", note: "", memo: "",
     start_date: "", confirmed_slot: "", confirmed_branch: "", current_branch: "",
     churn_reason: "",
     marketing_consent: false, kakao_channel_friend: false,
@@ -266,7 +267,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
             <h4>메모·자기소개</h4>
             <div className="afm-grid">
               <Field label="메모" wide>
-                <input className="afm-inp" value={form.note ?? ""} onChange={(e) => set("note", e.target.value)} />
+                <textarea className="afm-inp afm-area" rows={3} value={form.memo ?? ""} onChange={(e) => set("memo", e.target.value)} />
               </Field>
               <Field label="자기소개" wide>
                 <textarea className="afm-inp afm-area" rows={3} value={form.introduction ?? ""} onChange={(e) => set("introduction", e.target.value)} />

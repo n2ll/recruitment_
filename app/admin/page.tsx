@@ -33,7 +33,8 @@ interface Applicant {
   branch: string | null;
   source: string;
   filter_pass: string | null;
-  note: string | null;
+  note: string | null;        // 시스템 태그 ("중복지원" 등) — UI 읽기 전용
+  memo: string | null;        // 매니저 자유 메모 — UI에서 편집
   last_message_at: string | null;
   unread_count: number;
   start_date: string | null;
@@ -1374,6 +1375,7 @@ export default function AdminPage() {
                   hope: ["branch1", "branch2", "work_hours", "available_date"],
                   onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
                   confirmed: ["confirmed_branch", "current_branch", "start_date", "churn_reason"],
+                  memo: ["memo"],
                 };
 
                 const isEditing = (section: string) => editingSection === section;
@@ -1700,13 +1702,27 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* 자유 텍스트(메모/자기소개/경력)는 읽기 전용 — [+ 지원자 추가] 모달로 신규 생성 시에만 입력 */}
-                  {a.note && a.note !== "중복지원" && (
-                    <div className="detail-section">
-                      <h4 className="detail-section-title">📝 메모</h4>
-                      <p className="detail-text">{a.note}</p>
+                  {/* 📝 매니저 메모 — 어디서나 편집 가능. 시스템 태그(note)는 별도 컬럼. */}
+                  <SectionHeader section="memo" title="📝 메모" />
+                  <div className="detail-grid">
+                    <div className="detail-wide">
+                      {isEditing("memo") ? (
+                        <textarea
+                          className="edit-select"
+                          style={{ minHeight: 80, resize: "vertical", padding: 8, lineHeight: 1.5 }}
+                          value={(draftVal("memo") as string) || ""}
+                          onChange={(e) => setDraft("memo", e.target.value || null)}
+                          placeholder="자유 메모 — 연락 시 참고할 사항, 특이사항 등"
+                        />
+                      ) : (
+                        a.memo
+                          ? <p className="detail-text" style={{ whiteSpace: "pre-wrap" }}>{a.memo}</p>
+                          : <span className="td-muted">메모 없음</span>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* 자기소개·경력은 [+ 지원자 추가] 모달로 신규 생성 시에만 입력 (읽기 전용) */}
                   {a.introduction && (
                     <div className="detail-section">
                       <h4 className="detail-section-title">💬 자기소개</h4>
@@ -1996,11 +2012,10 @@ export default function AdminPage() {
                       <input
                         type="text"
                         className="inline-memo"
-                        defaultValue={a.note === "중복지원" ? "" : (a.note ?? "")}
+                        defaultValue={a.memo ?? ""}
                         onBlur={(e) => {
                           const next = e.target.value.trim();
-                          const current = a.note === "중복지원" ? "" : (a.note ?? "");
-                          if (next !== current) patchApplicant(a.id, { note: next || null });
+                          if (next !== (a.memo ?? "")) patchApplicant(a.id, { memo: next || null });
                         }}
                       />
                     </td>
