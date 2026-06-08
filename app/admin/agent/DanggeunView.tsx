@@ -19,11 +19,6 @@ import { sentByLabel } from "./sent-by-label";
 interface DanggeunViewProps {
   mode?: "live" | "practice" | "baemin";
   branches?: string[];
-  /**
-   * '상세정보' 버튼 클릭 시 부모(admin/page)에서 지원자 목록 탭으로 이동하고
-   * 해당 지원자 풀스크린 상세를 열도록 호출하는 콜백. 미지정이면 버튼 숨김.
-   */
-  onOpenApplicant?: (applicantId: number) => void;
 }
 
 const STATUS_OPTIONS = [
@@ -98,17 +93,84 @@ const MODE_CONFIG: Record<"live" | "practice" | "baemin", ModeConfig> = {
   },
 };
 
+// API GET /api/admin/applicants?source=X 는 select("*") 라 모든 컬럼을 반환한다.
+// 풀스크린 상세를 따로 만들지 않고 이 객체를 그대로 미니 상세 모달에 넘긴다.
 interface Candidate {
   id: number;
   name: string;
   phone: string;
   branch: string | null;
+  branch1: string | null;
+  branch2: string | null;
   status: string | null;
   created_at: string;
   last_message_at: string | null;
   unread_count: number;
   agent_stage: string | null;
   work_hours: string | null;
+  birth_date: string | null;
+  location: string | null;
+  bname: string | null;
+  sigungu: string | null;
+  own_vehicle: string | null;
+  license_type: string | null;
+  vehicle_type: string | null;
+  self_ownership: string | null;
+  available_date: string | null;
+  source: string | null;
+  baemin_id: string | null;
+  guide_sent: boolean | null;
+  onboarding_call_status: string | null;
+  kakao_channel_friend: boolean | null;
+  confirmed_branch: string | null;
+  current_branch: string | null;
+  start_date: string | null;
+  churned_at: string | null;
+  churn_reason: string | null;
+  note: string | null;
+  introduction: string | null;
+  experience: string | null;
+}
+
+type ApplicantPatch = Partial<Omit<Candidate, "id" | "created_at" | "last_message_at" | "unread_count" | "agent_stage" | "churned_at">>;
+
+const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
+type SlotKey = (typeof SLOTS)[number];
+
+function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boolean {
+  if (!workHours) return false;
+  const wantPyeongil = slot.startsWith("평일");
+  const wantMorning = slot.endsWith("오전");
+  return workHours.split(",").map((t) => t.trim()).some((tok) => {
+    const dayOk = wantPyeongil ? tok.includes("평일") : tok.includes("주말");
+    const timeOk = wantMorning ? tok.includes("오전") : tok.includes("오후");
+    return dayOk && timeOk;
+  });
+}
+
+function calcAge(birth: string | null): number | null {
+  if (!birth || !/^\d{6}$/.test(birth)) return null;
+  const yy = parseInt(birth.slice(0, 2), 10);
+  const mm = parseInt(birth.slice(2, 4), 10);
+  const dd = parseInt(birth.slice(4, 6), 10);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const fullYear = yy >= 50 ? 1900 + yy : 2000 + yy;
+  const today = new Date();
+  let age = today.getFullYear() - fullYear;
+  const beforeBirthday =
+    today.getMonth() + 1 < mm ||
+    (today.getMonth() + 1 === mm && today.getDate() < dd);
+  if (beforeBirthday) age--;
+  return age;
+}
+
+function sourceLabelLocal(s: string | null): string {
+  if (!s) return "—";
+  if (s === "danggeun" || s === "danggeun_practice") return "당근";
+  if (s === "baemin") return "배민";
+  if (s === "manual") return "수기";
+  if (s === "direct") return "직접";
+  return s;
 }
 
 interface Message {
@@ -266,12 +328,14 @@ function shortWorkHours(wh: string | null): string {
   return Array.from(new Set(out)).join(", ");
 }
 
-export default function DanggeunView({ mode = "live", branches = [], onOpenApplicant }: DanggeunViewProps) {
+export default function DanggeunView({ mode = "live", branches = [] }: DanggeunViewProps) {
   const cfg = MODE_CONFIG[mode];
   // 지점 필터(목록 좌측 패널) — '전체' / 미배정 / 각 지점
   const [branchFilter, setBranchFilter] = useState<string>("전체");
   // 인라인 상태 변경 중인 후보 (낙관적 표시용; 실패 시 fetch로 복구)
   const [statusSaving, setStatusSaving] = useState<number | null>(null);
+  // '상세정보' 미니 모달 — 우측 대화창 위에 오버레이로 뜸. 페이지 이동 없음.
+  const [detailOpen, setDetailOpen] = useState(false);
   // ── 시작 멘트 (편집은 클로드 조련하기에서. 여기선 등록 검증·발송용으로 읽기만) ──
   const [startMsg, setStartMsg] = useState("");
   const [startMsgLoaded, setStartMsgLoaded] = useState(false);
@@ -720,20 +784,11 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
             ) : (
               filteredCandidates.map((c) => {
                 const sb = stageBadge(c.agent_stage);
-                const status = c.status ?? "스크리닝 중";
                 return (
-                  <div
+                  <button
                     key={c.id}
-                    role="button"
-                    tabIndex={0}
                     className={`dg-list-item ${selectedId === c.id ? "dg-list-active" : ""}`}
                     onClick={() => setSelectedId(c.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedId(c.id);
-                      }
-                    }}
                   >
                     <div className="dg-list-row">
                       <span className="dg-list-name">{c.name}</span>
@@ -759,21 +814,7 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
                         </>
                       )}
                     </div>
-                    <div className="dg-list-actions" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        className="dg-status-select"
-                        value={status}
-                        disabled={statusSaving === c.id}
-                        onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                        style={{ background: STATUS_BG[status] || "#6b7280" }}
-                        title="진행 상태 변경"
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  </button>
                 );
               })
             )}
@@ -791,15 +832,13 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
                 <div>
                   <div className="dg-conv-name">
                     {selectedCandidate.name}
-                    {onOpenApplicant && (
-                      <button
-                        className="dg-btn-detail"
-                        onClick={() => onOpenApplicant(selectedCandidate.id)}
-                        title="지원자 목록 탭으로 이동해 풀스크린 상세 보기"
-                      >
-                        📋 상세정보
-                      </button>
-                    )}
+                    <button
+                      className="dg-btn-detail"
+                      onClick={() => setDetailOpen(true)}
+                      title="지원자 상세 정보(편집 가능) 열기"
+                    >
+                      📋 상세정보
+                    </button>
                     {(() => {
                       const sb = stageBadge(selectedCandidate.agent_stage);
                       return (
@@ -814,7 +853,19 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
                   </div>
                   <div className="dg-conv-sub">
                     {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
-                    {selectedCandidate.status ?? "-"}
+                    <select
+                      className="dg-status-select"
+                      value={selectedCandidate.status ?? "스크리닝 중"}
+                      disabled={statusSaving === selectedCandidate.id}
+                      onChange={(e) => handleStatusChange(selectedCandidate.id, e.target.value)}
+                      style={{ background: STATUS_BG[selectedCandidate.status ?? ""] || "#6b7280" }}
+                      title="진행 상태 변경"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="dg-conv-actions">
@@ -1046,6 +1097,22 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
         </main>
       </div>
 
+      {/* 모달: 지원자 미니 상세 정보 (편집 가능) */}
+      {detailOpen && selectedCandidate && (
+        <ApplicantMiniDetail
+          applicant={selectedCandidate}
+          branches={branches}
+          onClose={() => setDetailOpen(false)}
+          onPatched={(patch) => {
+            setCandidates((prev) =>
+              prev.map((c) =>
+                c.id === selectedCandidate.id ? { ...c, ...patch } : c
+              )
+            );
+          }}
+        />
+      )}
+
       {/* 모달: 추천 받기 (live 모드만) */}
       {showRecommendModal && (
         <div className="dg-modal-bg" onClick={() => setShowRecommendModal(false)}>
@@ -1136,6 +1203,371 @@ export default function DanggeunView({ mode = "live", branches = [], onOpenAppli
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 미니 상세 모달 — 지원자 목록 풀스크린 상세와 동일한 섹션 구성을
+// 모달 오버레이 안에 압축해서 보여준다. 섹션 단위로 편집 가능.
+// ─────────────────────────────────────────────────────────────────────
+const SECTION_FIELDS: Record<string, (keyof Candidate)[]> = {
+  personal: ["name", "birth_date", "phone", "status", "source"],
+  address: ["location"],
+  vehicle: ["own_vehicle", "license_type", "vehicle_type", "self_ownership"],
+  hope: ["branch1", "branch2", "work_hours", "available_date"],
+  onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
+  confirmed: ["confirmed_branch", "current_branch", "start_date", "churn_reason"],
+};
+
+function ApplicantMiniDetail({
+  applicant,
+  branches,
+  onClose,
+  onPatched,
+}: {
+  applicant: Candidate;
+  branches: string[];
+  onClose: () => void;
+  onPatched: (patch: ApplicantPatch) => void;
+}) {
+  const [draft, setDraft] = useState<Partial<Candidate>>({});
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // 모달이 닫혔다 다시 열릴 때 다른 후보로 바뀌면 편집 상태 초기화
+  useEffect(() => {
+    setDraft({});
+    setEditingSection(null);
+  }, [applicant.id]);
+
+  const a = applicant;
+  const draftVal = <K extends keyof Candidate>(k: K): Candidate[K] =>
+    (k in draft ? (draft[k] as Candidate[K]) : a[k]);
+  const setD = <K extends keyof Candidate>(k: K, v: Candidate[K]) =>
+    setDraft((prev) => ({ ...prev, [k]: v }));
+
+  const saveSection = async (section: string) => {
+    const fields = SECTION_FIELDS[section] ?? [];
+    const patch: ApplicantPatch = {};
+    for (const k of fields) {
+      if (k in draft) (patch as Record<string, unknown>)[k] = draft[k];
+    }
+    if (Object.keys(patch).length === 0) {
+      setEditingSection(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/applicants/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.error || "저장 실패");
+        return;
+      }
+      // 서버가 변환·자동 보정한 최종 값으로 부모에게 통지
+      onPatched(json.data as ApplicantPatch);
+      setDraft((prev) => {
+        const next = { ...prev };
+        for (const k of fields) delete next[k];
+        return next;
+      });
+      setEditingSection(null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelSection = (section: string) => {
+    setDraft((prev) => {
+      const next = { ...prev };
+      for (const k of SECTION_FIELDS[section] ?? []) delete next[k];
+      return next;
+    });
+    setEditingSection(null);
+  };
+
+  const SectionHead = ({ section, title }: { section: string; title: string }) => (
+    <div className="dgd-sec-head">
+      <h4 className="dgd-sec-title">{title}</h4>
+      {editingSection === section ? (
+        <div className="dgd-sec-actions">
+          <button className="dgd-btn dgd-btn-ghost" onClick={() => cancelSection(section)} disabled={saving}>취소</button>
+          <button className="dgd-btn dgd-btn-primary" onClick={() => saveSection(section)} disabled={saving}>
+            {saving ? "저장 중…" : "저장"}
+          </button>
+        </div>
+      ) : (
+        <button
+          className="dgd-btn-edit"
+          onClick={() => {
+            if (editingSection && editingSection !== section) cancelSection(editingSection);
+            setEditingSection(section);
+          }}
+        >✏️ 편집</button>
+      )}
+    </div>
+  );
+
+  const editing = (s: string) => editingSection === s;
+
+  return (
+    <div className="dgd-bg" onClick={onClose}>
+      <div className="dgd-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="dgd-head">
+          <h3 className="dgd-title">📋 {a.name} 상세정보</h3>
+          <button className="dgd-close" onClick={onClose} aria-label="닫기">×</button>
+        </div>
+        <div className="dgd-body">
+          {/* 👤 인적사항 */}
+          <SectionHead section="personal" title="👤 인적사항" />
+          <div className="dgd-grid">
+            <div>
+              <span className="dgd-dl">성함</span>
+              {editing("personal") ? (
+                <input className="dgd-input" value={(draftVal("name") as string) || ""} onChange={(e) => setD("name", e.target.value)} />
+              ) : (a.name)}
+            </div>
+            <div>
+              <span className="dgd-dl">나이 (생년월일)</span>
+              {editing("personal") ? (
+                <input className="dgd-input" maxLength={6} placeholder="YYMMDD"
+                  value={(draftVal("birth_date") as string) || ""}
+                  onChange={(e) => setD("birth_date", e.target.value.replace(/[^\d]/g, "").slice(0, 6))} />
+              ) : (
+                <>
+                  {calcAge(a.birth_date) ?? "—"}
+                  {a.birth_date ? ` (${a.birth_date.slice(0, 2)}/${a.birth_date.slice(2, 4)}/${a.birth_date.slice(4, 6)})` : ""}
+                </>
+              )}
+            </div>
+            <div>
+              <span className="dgd-dl">전화</span>
+              {editing("personal") ? (
+                <input className="dgd-input" value={(draftVal("phone") as string) || ""} onChange={(e) => setD("phone", e.target.value)} />
+              ) : (a.phone)}
+            </div>
+            <div>
+              <span className="dgd-dl">진행 상태</span>
+              {editing("personal") ? (
+                <select className="dgd-input" value={(draftVal("status") as string) || ""} onChange={(e) => setD("status", e.target.value)}>
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : (
+                <span className="dgd-status-badge" style={{ background: STATUS_BG[a.status ?? ""] || "#6b7280" }}>{a.status ?? "—"}</span>
+              )}
+            </div>
+            <div>
+              <span className="dgd-dl">지원경로</span>
+              {editing("personal") ? (
+                <select className="dgd-input" value={(draftVal("source") as string) || ""} onChange={(e) => setD("source", e.target.value)}>
+                  <option value="danggeun">당근</option>
+                  <option value="baemin">배민</option>
+                  <option value="manual">수기</option>
+                  <option value="direct">기타</option>
+                </select>
+              ) : sourceLabelLocal(a.source)}
+            </div>
+            <div><span className="dgd-dl">지원일</span>{new Date(a.created_at).toLocaleDateString("ko-KR")}</div>
+          </div>
+
+          {/* 🏠 거주지 */}
+          <SectionHead section="address" title="🏠 거주지" />
+          <div className="dgd-grid">
+            <div className="dgd-wide">
+              <span className="dgd-dl">주소</span>
+              {editing("address") ? (
+                <input className="dgd-input" value={(draftVal("location") as string) || ""} onChange={(e) => setD("location", e.target.value)} />
+              ) : (a.location || "—")}
+            </div>
+            <div><span className="dgd-dl">동(자동)</span>{a.bname || "—"}</div>
+            <div><span className="dgd-dl">시군구(자동)</span>{a.sigungu || "—"}</div>
+          </div>
+
+          {/* 🚗 차량·면허 */}
+          <SectionHead section="vehicle" title="🚗 차량·면허" />
+          <div className="dgd-grid">
+            <div>
+              <span className="dgd-dl">자차</span>
+              {editing("vehicle") ? (
+                <select className="dgd-input" value={(draftVal("own_vehicle") as string) || ""} onChange={(e) => setD("own_vehicle", e.target.value)}>
+                  <option value="">—</option>
+                  <option value="있음">있음</option>
+                  <option value="없음">없음</option>
+                </select>
+              ) : (a.own_vehicle || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">면허</span>
+              {editing("vehicle") ? (
+                <select className="dgd-input" value={(draftVal("license_type") as string) || ""} onChange={(e) => setD("license_type", e.target.value)}>
+                  <option value="">—</option>
+                  <option value="1종 보통">1종 보통</option>
+                  <option value="2종 보통">2종 보통</option>
+                  <option value="1종 대형">1종 대형</option>
+                  <option value="없음">없음</option>
+                </select>
+              ) : (a.license_type || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">차종</span>
+              {editing("vehicle") ? (
+                <input className="dgd-input" value={(draftVal("vehicle_type") as string) || ""} onChange={(e) => setD("vehicle_type", e.target.value)} />
+              ) : (a.vehicle_type || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">본인명의</span>
+              {editing("vehicle") ? (
+                <select className="dgd-input" value={(draftVal("self_ownership") as string) || ""} onChange={(e) => setD("self_ownership", e.target.value)}>
+                  <option value="">—</option>
+                  <option value="문제 없음">문제 없음</option>
+                  <option value="문제 있음">문제 있음</option>
+                </select>
+              ) : (a.self_ownership || "—")}
+            </div>
+          </div>
+
+          {/* 📍 희망 지점·시간 */}
+          <SectionHead section="hope" title="📍 희망 지점·시간" />
+          <div className="dgd-grid">
+            <div>
+              <span className="dgd-dl">1지망</span>
+              {editing("hope") ? (
+                <select className="dgd-input" value={(draftVal("branch1") as string) || ""} onChange={(e) => setD("branch1", e.target.value)}>
+                  <option value="">—</option>
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              ) : (a.branch1 || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">2지망</span>
+              {editing("hope") ? (
+                <select className="dgd-input" value={(draftVal("branch2") as string) || ""} onChange={(e) => setD("branch2", e.target.value || null)}>
+                  <option value="">—</option>
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              ) : (a.branch2 || "—")}
+            </div>
+            <div className="dgd-wide">
+              <span className="dgd-dl">희망시간 (복수)</span>
+              {editing("hope") ? (
+                <div className="dgd-slot-row">
+                  {SLOTS.map((s) => {
+                    const raw = (draftVal("work_hours") as string) || "";
+                    const set = new Set(raw.split(",").map((t) => t.trim()).filter(Boolean));
+                    const on = set.has(s);
+                    return (
+                      <button
+                        key={s} type="button"
+                        className={`dgd-slot-btn ${on ? "dgd-slot-on" : ""}`}
+                        onClick={() => {
+                          const next = new Set(set);
+                          if (on) next.delete(s); else next.add(s);
+                          const joined = SLOTS.filter((x) => next.has(x)).join(", ");
+                          setD("work_hours", joined);
+                        }}
+                      >{s}</button>
+                    );
+                  })}
+                </div>
+              ) : (a.work_hours || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">시작가능일</span>
+              {editing("hope") ? (
+                <input type="date" className="dgd-input" value={(draftVal("available_date") as string) || ""} onChange={(e) => setD("available_date", e.target.value || null)} />
+              ) : (a.available_date || "—")}
+            </div>
+          </div>
+
+          {/* 📱 온보딩 진행 */}
+          <SectionHead section="onboarding" title="📱 온보딩 진행" />
+          <div className="dgd-grid">
+            <div>
+              <span className="dgd-dl">배민 아이디</span>
+              {editing("onboarding") ? (
+                <input className="dgd-input" value={(draftVal("baemin_id") as string) || ""} onChange={(e) => setD("baemin_id", e.target.value || null)} />
+              ) : (a.baemin_id || <span className="dgd-muted">미수집</span>)}
+            </div>
+            <div>
+              <span className="dgd-dl">카톡 채널</span>
+              {editing("onboarding") ? (
+                <label className="dgd-check">
+                  <input type="checkbox" checked={!!draftVal("kakao_channel_friend")} onChange={(e) => setD("kakao_channel_friend", e.target.checked)} />
+                  친구추가됨
+                </label>
+              ) : (a.kakao_channel_friend ? "✓ 친구추가됨" : "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">가이드 전달</span>
+              {editing("onboarding") ? (
+                <label className="dgd-check">
+                  <input type="checkbox" checked={!!draftVal("guide_sent")} onChange={(e) => setD("guide_sent", e.target.checked)} />
+                  전달완료
+                </label>
+              ) : (a.guide_sent ? "✓ 전달완료" : "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">온보딩 통화</span>
+              {editing("onboarding") ? (
+                <input className="dgd-input" value={(draftVal("onboarding_call_status") as string) || ""} onChange={(e) => setD("onboarding_call_status", e.target.value || null)} />
+              ) : (a.onboarding_call_status || "—")}
+            </div>
+          </div>
+
+          {/* ✓ 확정·근무 */}
+          <SectionHead section="confirmed" title="✓ 확정·근무" />
+          <div className="dgd-grid">
+            <div>
+              <span className="dgd-dl">확정지점</span>
+              {editing("confirmed") ? (
+                <select className="dgd-input" value={(draftVal("confirmed_branch") as string) || ""} onChange={(e) => setD("confirmed_branch", e.target.value || null)}>
+                  <option value="">—</option>
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              ) : (a.confirmed_branch || "—")}
+            </div>
+            <div className="dgd-wide">
+              <span className="dgd-dl">슬롯 (희망시간대 그대로 사용)</span>
+              <div className="dgd-chip-row">
+                {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
+                  <span key={s} className="dgd-chip">{s}</span>
+                ))}
+                {!SLOTS.some((s) => matchesSlot(a.work_hours, s)) && <span className="dgd-muted">—</span>}
+              </div>
+              <div className="dgd-hint">편집은 위 [📍 희망 지점·시간] 섹션에서 진행</div>
+            </div>
+            <div>
+              <span className="dgd-dl">현재 근무지점</span>
+              {editing("confirmed") ? (
+                <select className="dgd-input" value={(draftVal("current_branch") as string) || ""} onChange={(e) => setD("current_branch", e.target.value || null)}>
+                  <option value="">—</option>
+                  {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              ) : (a.current_branch || "—")}
+            </div>
+            <div>
+              <span className="dgd-dl">시작일</span>
+              {editing("confirmed") ? (
+                <input type="date" className="dgd-input" value={(draftVal("start_date") as string) || ""} onChange={(e) => setD("start_date", e.target.value || null)} />
+              ) : (a.start_date || "—")}
+            </div>
+            <div><span className="dgd-dl">이탈일(자동)</span>{a.churned_at ? new Date(a.churned_at).toLocaleDateString("ko-KR") : "—"}</div>
+            <div className="dgd-wide">
+              <span className="dgd-dl">이탈/대기 사유</span>
+              {editing("confirmed") ? (
+                <input className="dgd-input" value={(draftVal("churn_reason") as string) || ""} onChange={(e) => setD("churn_reason", e.target.value || null)} />
+              ) : (a.churn_reason || "—")}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1664,5 +2096,192 @@ const css = `
     background: #EFF6FF;
     border-radius: 99px;
     padding: 2px 6px;
+  }
+
+  /* 미니 상세 모달 */
+  .dgd-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 24px;
+  }
+  .dgd-panel {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 92vh;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .dgd-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #FFFBEB;
+  }
+  .dgd-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .dgd-close {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+  .dgd-close:hover { background: #FEF3C7; color: #111827; }
+  .dgd-body {
+    padding: 16px 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .dgd-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .dgd-sec-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .dgd-sec-actions { display: flex; gap: 6px; }
+  .dgd-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .dgd-btn-ghost {
+    background: #fff;
+    border-color: #d1d5db;
+    color: #374151;
+  }
+  .dgd-btn-ghost:hover { background: #f3f4f6; }
+  .dgd-btn-primary {
+    background: #F5C518;
+    color: #3D2B00;
+  }
+  .dgd-btn-primary:hover { background: #E6B800; }
+  .dgd-btn-primary:disabled, .dgd-btn-ghost:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .dgd-btn-edit {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .dgd-btn-edit:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
+  .dgd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    font-size: 12px;
+    color: #111827;
+  }
+  .dgd-grid > div { display: flex; flex-direction: column; gap: 3px; }
+  .dgd-wide { grid-column: 1 / -1; }
+  .dgd-dl {
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .dgd-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    background: #fff;
+    color: #111827;
+  }
+  .dgd-input:focus {
+    outline: none;
+    border-color: #F5C518;
+    box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
+  }
+  .dgd-muted { color: #9CA3AF; }
+  .dgd-status-badge {
+    display: inline-block;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+  }
+  .dgd-hint {
+    font-size: 10px;
+    color: #9CA3AF;
+    margin-top: 4px;
+  }
+  .dgd-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #374151;
+    cursor: pointer;
+  }
+  .dgd-slot-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .dgd-slot-btn {
+    padding: 4px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 99px;
+    background: #fff;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .dgd-slot-on {
+    background: #F5C518;
+    color: #3D2B00;
+    border-color: #F5C518;
+  }
+  .dgd-chip-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .dgd-chip {
+    padding: 2px 8px;
+    background: #FFFBEB;
+    color: #92650A;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid #F5C518;
   }
 `;

@@ -2534,11 +2534,11 @@ export default function AdminPage() {
           ) : tab === "playground" ? (
             <PlaygroundView branches={allBranchNames} />
           ) : tab === "danggeun" ? (
-            <DanggeunView mode="live" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
+            <DanggeunView mode="live" branches={allBranchNames} />
           ) : tab === "baemin" ? (
-            <DanggeunView mode="baemin" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
+            <DanggeunView mode="baemin" branches={allBranchNames} />
           ) : tab === "danggeun-practice" ? (
-            <DanggeunView mode="practice" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
+            <DanggeunView mode="practice" branches={allBranchNames} />
           ) : tab === "klod" ? (
             <PromptExamplesView />
           ) : tab === "inbox" ? (
