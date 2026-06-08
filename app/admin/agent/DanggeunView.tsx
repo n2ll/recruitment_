@@ -1635,16 +1635,16 @@ const css = `
     -webkit-appearance: none;
     border: none;
     border-radius: 4px;
-    padding: 3px 18px 3px 8px;
+    padding: 3px 22px 3px 8px;
     font-size: 11px;
     font-weight: 700;
     color: #fff;
     cursor: pointer;
     font-family: inherit;
-    background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%), linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
-    background-position: calc(100% - 9px) 50%, calc(100% - 5px) 50%;
-    background-size: 4px 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path fill='white' d='M1 3l4 4 4-4z'/></svg>");
     background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 10px 10px;
   }
   .dg-status-select:focus { outline: 2px solid rgba(245,197,24,0.6); outline-offset: 1px; }
   .dg-status-select:disabled { opacity: 0.5; cursor: wait; }
