@@ -1660,6 +1660,12 @@ const css = `
   .dg-status-select::-ms-expand { display: none; }
   .dg-status-select:focus { outline: 2px solid rgba(245,197,24,0.6); outline-offset: 1px; }
   .dg-status-select:disabled { opacity: 0.5; cursor: wait; }
+  /* 펼친 옵션 메뉴는 흰 배경이라 흰글씨가 안 보임 — 옵션만 검정으로 복구 */
+  .dg-status-select option {
+    color: #111827;
+    background: #fff;
+    font-weight: 500;
+  }
   .dg-status-arrow {
     pointer-events: none;
     color: #fff;
