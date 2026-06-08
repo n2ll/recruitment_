@@ -18,7 +18,31 @@ import { sentByLabel } from "./sent-by-label";
 
 interface DanggeunViewProps {
   mode?: "live" | "practice" | "baemin";
+  branches?: string[];
+  /**
+   * '상세정보' 버튼 클릭 시 부모(admin/page)에서 지원자 목록 탭으로 이동하고
+   * 해당 지원자 풀스크린 상세를 열도록 호출하는 콜백. 미지정이면 버튼 숨김.
+   */
+  onOpenApplicant?: (applicantId: number) => void;
 }
+
+const STATUS_OPTIONS = [
+  "스크리닝 전",
+  "스크리닝 중",
+  "스크리닝 완료",
+  "확정인력",
+  "대기자",
+  "부적합",
+];
+
+const STATUS_BG: Record<string, string> = {
+  "스크리닝 전":   "#9CA3AF",
+  "스크리닝 중":   "#6b7280",
+  "스크리닝 완료": "#0EA5E9",
+  "확정인력":      "#10b981",
+  "대기자":        "#f59e0b",
+  "부적합":        "#ef4444",
+};
 
 interface ModeConfig {
   source: string;
@@ -242,8 +266,12 @@ function shortWorkHours(wh: string | null): string {
   return Array.from(new Set(out)).join(", ");
 }
 
-export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
+export default function DanggeunView({ mode = "live", branches = [], onOpenApplicant }: DanggeunViewProps) {
   const cfg = MODE_CONFIG[mode];
+  // 지점 필터(목록 좌측 패널) — '전체' / 미배정 / 각 지점
+  const [branchFilter, setBranchFilter] = useState<string>("전체");
+  // 인라인 상태 변경 중인 후보 (낙관적 표시용; 실패 시 fetch로 복구)
+  const [statusSaving, setStatusSaving] = useState<number | null>(null);
   // ── 시작 멘트 (편집은 클로드 조련하기에서. 여기선 등록 검증·발송용으로 읽기만) ──
   const [startMsg, setStartMsg] = useState("");
   const [startMsgLoaded, setStartMsgLoaded] = useState(false);
@@ -566,14 +594,48 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
     }
   };
 
+  // 후보 인라인 상태 변경 — 지원자목록 탭과 동일하게 PATCH /api/admin/applicants/:id
+  const handleStatusChange = async (applicantId: number, newStatus: string) => {
+    setStatusSaving(applicantId);
+    // 낙관적 업데이트
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === applicantId ? { ...c, status: newStatus } : c))
+    );
+    try {
+      const res = await fetch(`/api/admin/applicants/${applicantId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || "상태 변경 실패");
+        await fetchCandidates({ silent: true });
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "상태 변경 실패");
+      await fetchCandidates({ silent: true });
+    } finally {
+      setStatusSaving(null);
+    }
+  };
+
   // ── 파생 ───────────────────────────────────────────────
   const filteredCandidates = useMemo(() => {
     const q = search.trim();
-    if (!q) return candidates;
-    return candidates.filter(
-      (c) => c.name.includes(q) || c.phone.includes(q.replace(/-/g, ""))
-    );
-  }, [candidates, search]);
+    return candidates.filter((c) => {
+      if (branchFilter !== "전체") {
+        if (branchFilter === "미배정") {
+          if (c.branch) return false;
+        } else if (c.branch !== branchFilter) {
+          return false;
+        }
+      }
+      if (q && !(c.name.includes(q) || c.phone.includes(q.replace(/-/g, ""))))
+        return false;
+      return true;
+    });
+  }, [candidates, search, branchFilter]);
 
   const selectedCandidate = useMemo(
     () => candidates.find((c) => c.id === selectedId) ?? null,
@@ -626,12 +688,26 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
       {/* 본문: 좌(목록) + 우(대화) */}
       <div className="dg-body">
         <aside className="dg-list-pane">
-          <input
-            className="dg-input dg-search"
-            placeholder="이름 / 전화번호 검색"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <div className="dg-filters">
+            <select
+              className="dg-input dg-filter-select"
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              title="지점 필터"
+            >
+              <option value="전체">전체 지점</option>
+              <option value="미배정">미배정</option>
+              {branches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            <input
+              className="dg-input dg-search"
+              placeholder="이름 / 전화번호 검색"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
           <div className="dg-list">
             {listLoading ? (
               <div className="dg-empty">로딩 중...</div>
@@ -644,11 +720,20 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
             ) : (
               filteredCandidates.map((c) => {
                 const sb = stageBadge(c.agent_stage);
+                const status = c.status ?? "스크리닝 중";
                 return (
-                  <button
+                  <div
                     key={c.id}
+                    role="button"
+                    tabIndex={0}
                     className={`dg-list-item ${selectedId === c.id ? "dg-list-active" : ""}`}
                     onClick={() => setSelectedId(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedId(c.id);
+                      }
+                    }}
                   >
                     <div className="dg-list-row">
                       <span className="dg-list-name">{c.name}</span>
@@ -674,7 +759,21 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
                         </>
                       )}
                     </div>
-                  </button>
+                    <div className="dg-list-actions" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className="dg-status-select"
+                        value={status}
+                        disabled={statusSaving === c.id}
+                        onChange={(e) => handleStatusChange(c.id, e.target.value)}
+                        style={{ background: STATUS_BG[status] || "#6b7280" }}
+                        title="진행 상태 변경"
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 );
               })
             )}
@@ -692,6 +791,15 @@ export default function DanggeunView({ mode = "live" }: DanggeunViewProps) {
                 <div>
                   <div className="dg-conv-name">
                     {selectedCandidate.name}
+                    {onOpenApplicant && (
+                      <button
+                        className="dg-btn-detail"
+                        onClick={() => onOpenApplicant(selectedCandidate.id)}
+                        title="지원자 목록 탭으로 이동해 풀스크린 상세 보기"
+                      >
+                        📋 상세정보
+                      </button>
+                    )}
                     {(() => {
                       const sb = stageBadge(selectedCandidate.agent_stage);
                       return (
@@ -1071,7 +1179,57 @@ const css = `
     border-radius: 10px;
     padding: 12px;
   }
-  .dg-search { flex: 0 0 auto; }
+  .dg-search { flex: 1; min-width: 0; }
+  .dg-filters {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .dg-filter-select {
+    flex: 0 0 auto;
+    width: 130px;
+    padding: 7px 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .dg-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .dg-status-select {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 4px;
+    padding: 3px 18px 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%), linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
+    background-position: calc(100% - 9px) 50%, calc(100% - 5px) 50%;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+  }
+  .dg-status-select:focus { outline: 2px solid rgba(245,197,24,0.6); outline-offset: 1px; }
+  .dg-status-select:disabled { opacity: 0.5; cursor: wait; }
+  .dg-btn-detail {
+    margin-left: 10px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #374151;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .dg-btn-detail:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
   .dg-right {
     flex: 2;
     display: flex;

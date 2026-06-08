@@ -166,7 +166,12 @@ export default function ApplyPageWrapper() {
 
 function ApplyPage() {
   const searchParams = useSearchParams();
-  const defaultSource = normalizeSource(searchParams.get("source"));
+  // URL ?source=가 있으면 그 값을 신뢰(= 그 채널 링크로 들어온 사람)하고,
+  // 폼에서 사용자가 임의로 바꾸지 못하게 라디오를 잠근다.
+  // (배민 링크로 들어와서 '당근'으로 표시하는 케이스 등 오분류 방지)
+  const rawSource = searchParams.get("source");
+  const sourceLocked = !!rawSource && SOURCE_OPTIONS.some((o) => o.value === rawSource);
+  const defaultSource = normalizeSource(rawSource);
   const branchParam = searchParams.get("branch") || "";
 
   const [form, setForm] = useState<FormData>({
@@ -565,15 +570,23 @@ function ApplyPage() {
 
             <div className="field-wrap">
               <label className="field-label">지원 경로 <span className="req">*</span></label>
-              <div className="radio-group source-row">
-                {SOURCE_OPTIONS.map((opt) => (
-                  <button key={opt.value} type="button"
-                    className={`radio-btn ${form.source === opt.value ? "radio-on" : ""}`}
-                    onClick={() => set("source")(opt.value)}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              {sourceLocked ? (
+                <div className="source-locked">
+                  <span className="source-locked-label">
+                    {SOURCE_OPTIONS.find((o) => o.value === form.source)?.label} 채널을 통해 들어오셨습니다.
+                  </span>
+                </div>
+              ) : (
+                <div className="radio-group source-row">
+                  {SOURCE_OPTIONS.map((opt) => (
+                    <button key={opt.value} type="button"
+                      className={`radio-btn ${form.source === opt.value ? "radio-on" : ""}`}
+                      onClick={() => set("source")(opt.value)}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
@@ -710,6 +723,17 @@ const css = `
   }
   .source-row { gap: 6px; }
   .source-row .radio-btn { padding: 11px 6px; font-size: 13px; }
+  .source-locked {
+    padding: 13px 14px;
+    border: 1.5px solid #F5C518;
+    border-radius: 10px;
+    background: #FFFBEB;
+  }
+  .source-locked-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: #92650A;
+  }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;

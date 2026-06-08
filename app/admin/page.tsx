@@ -1679,7 +1679,10 @@ export default function AdminPage() {
                     <div>
                       <span className="dl">현재 근무지점</span>
                       {isEditing("confirmed") ? (
-                        <input className="edit-select" value={(draftVal("current_branch") as string) || ""} onChange={(e) => setDraft("current_branch", e.target.value || null)} />
+                        <select className="edit-select" value={(draftVal("current_branch") as string) || ""} onChange={(e) => setDraft("current_branch", e.target.value || null)}>
+                          <option value="">—</option>
+                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
+                        </select>
                       ) : (a.current_branch || "—")}
                     </div>
                     <div>
@@ -2531,11 +2534,11 @@ export default function AdminPage() {
           ) : tab === "playground" ? (
             <PlaygroundView branches={allBranchNames} />
           ) : tab === "danggeun" ? (
-            <DanggeunView mode="live" />
+            <DanggeunView mode="live" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
           ) : tab === "baemin" ? (
-            <DanggeunView mode="baemin" />
+            <DanggeunView mode="baemin" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
           ) : tab === "danggeun-practice" ? (
-            <DanggeunView mode="practice" />
+            <DanggeunView mode="practice" branches={allBranchNames} onOpenApplicant={(id) => { setTab("applicants"); setSelectedId(id); }} />
           ) : tab === "klod" ? (
             <PromptExamplesView />
           ) : tab === "inbox" ? (
