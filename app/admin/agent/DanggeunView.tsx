@@ -853,19 +853,24 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                   </div>
                   <div className="dg-conv-sub">
                     {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
-                    <select
-                      className="dg-status-select"
-                      value={selectedCandidate.status ?? "스크리닝 중"}
-                      disabled={statusSaving === selectedCandidate.id}
-                      onChange={(e) => handleStatusChange(selectedCandidate.id, e.target.value)}
+                    <span
+                      className="dg-status-wrap"
                       style={{ background: STATUS_BG[selectedCandidate.status ?? ""] || "#6b7280" }}
-                      title="진행 상태 변경"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                      <select
+                        className="dg-status-select"
+                        value={selectedCandidate.status ?? "스크리닝 중"}
+                        disabled={statusSaving === selectedCandidate.id}
+                        onChange={(e) => handleStatusChange(selectedCandidate.id, e.target.value)}
+                        title="진행 상태 변경"
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                      <span className="dg-status-arrow" aria-hidden="true">▾</span>
+                    </span>
                   </div>
                 </div>
                 <div className="dg-conv-actions">
@@ -1630,24 +1635,39 @@ const css = `
     gap: 6px;
     margin-top: 4px;
   }
+  .dg-status-wrap {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+    padding: 0 6px 0 0;
+    position: relative;
+    line-height: 1;
+  }
   .dg-status-select {
     appearance: none;
     -webkit-appearance: none;
+    -moz-appearance: none;
     border: none;
-    border-radius: 4px;
-    padding: 3px 22px 3px 8px;
+    background: transparent;
+    padding: 3px 16px 3px 8px;
     font-size: 11px;
     font-weight: 700;
     color: #fff;
     cursor: pointer;
     font-family: inherit;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path fill='white' d='M1 3l4 4 4-4z'/></svg>");
-    background-repeat: no-repeat;
-    background-position: right 6px center;
-    background-size: 10px 10px;
+    line-height: 1.4;
   }
+  .dg-status-select::-ms-expand { display: none; }
   .dg-status-select:focus { outline: 2px solid rgba(245,197,24,0.6); outline-offset: 1px; }
   .dg-status-select:disabled { opacity: 0.5; cursor: wait; }
+  .dg-status-arrow {
+    pointer-events: none;
+    color: #fff;
+    font-size: 10px;
+    margin-left: -12px;
+    margin-right: 2px;
+    line-height: 1;
+  }
   .dg-btn-detail {
     margin-left: 10px;
     padding: 3px 10px;
