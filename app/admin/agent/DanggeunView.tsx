@@ -689,6 +689,8 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   const filteredCandidates = useMemo(() => {
     const q = search.trim();
     const filtered = candidates.filter((c) => {
+      // 부적합은 좌측 목록에서 숨김 (지원자 목록 탭에서만 확인)
+      if (c.status === "부적합") return false;
       if (branchFilter !== "전체") {
         if (branchFilter === "미배정") {
           if (c.branch) return false;
@@ -800,6 +802,15 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                   >
                     <div className="dg-list-row">
                       <span className="dg-list-name">{c.name}</span>
+                      {(c.status === "확정인력" || c.status === "대기자") && (
+                        <span
+                          className="dg-status-pill"
+                          style={{ background: STATUS_BG[c.status] }}
+                          title={c.status}
+                        >
+                          {c.status}
+                        </span>
+                      )}
                       <span className="dg-stage" style={{ background: sb.bg, color: sb.fg }}>
                         {sb.label}
                       </span>
@@ -1817,6 +1828,15 @@ const css = `
     border-radius: 99px;
     font-weight: 700;
     display: inline-block;
+  }
+  .dg-status-pill {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 700;
+    color: #fff;
+    display: inline-block;
+    white-space: nowrap;
   }
   .dg-empty { padding: 16px; text-align: center; color: #9ca3af; font-size: 12px; }
 
