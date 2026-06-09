@@ -688,7 +688,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   // ── 파생 ───────────────────────────────────────────────
   const filteredCandidates = useMemo(() => {
     const q = search.trim();
-    return candidates.filter((c) => {
+    const filtered = candidates.filter((c) => {
       if (branchFilter !== "전체") {
         if (branchFilter === "미배정") {
           if (c.branch) return false;
@@ -699,6 +699,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       if (q && !(c.name.includes(q) || c.phone.includes(q.replace(/-/g, ""))))
         return false;
       return true;
+    });
+    // 마지막 문자 시각 기준 내림차순. 메시지가 아직 없는 후보(last_message_at=null)는
+    // created_at으로 폴백 — 새로 등록만 됐고 대화 시작 안 한 후보가 맨 위에 박혀버리는 것 방지.
+    return filtered.slice().sort((a, b) => {
+      const ta = new Date(a.last_message_at ?? a.created_at).getTime();
+      const tb = new Date(b.last_message_at ?? b.created_at).getTime();
+      return tb - ta;
     });
   }, [candidates, search, branchFilter]);
 
