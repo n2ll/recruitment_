@@ -10,6 +10,7 @@ import SiteManagersView from "./site-managers/SiteManagersView";
 import { sourceLabel } from "@/lib/applicant-source";
 import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
 import PendingInboxView from "./inbox/PendingInboxView";
+import ApplicantMiniDetail from "./ApplicantMiniDetail";
 
 interface Applicant {
   id: number;
@@ -350,6 +351,8 @@ export default function AdminPage() {
   const [branchDetail, setBranchDetail] = useState<string | null>(null);
   // PPC 상세에서 시간대 필터 (복수 선택 가능. 비어 있으면 전체)
   const [ppcSlotFilter, setPpcSlotFilter] = useState<Set<SlotKey>>(new Set());
+  // PPC 상세에서 '✏️ 편집' 버튼으로 여는 미니 모달 — 지원자 목록과 동일한 섹션 편집 UX.
+  const [ppcDetailId, setPpcDetailId] = useState<number | null>(null);
 
   // 상세 패널 임시 편집 상태 (명시적 저장)
   const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
@@ -1123,33 +1126,18 @@ export default function AdminPage() {
             <span className="nav-label">지원자 목록</span>
             {stats.screeningInProg > 0 && <span className="badge">{stats.screeningInProg}</span>}
           </button>
-          <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
-            onClick={() => setTab("contact")} title="배송원 컨택">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            <span className="nav-label">배송원 컨택</span>
-            {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
-          </button>
-          <button className={`nav-btn ${tab === "inbox" ? "nav-active" : ""}`}
-            onClick={() => setTab("inbox")} title="미분류 인박스">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 10v4a1 1 0 001 1h12a1 1 0 001-1v-4M2 10l3-6h8l3 6M2 10h4l1 2h4l1-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-            <span className="nav-label">미분류 인박스</span>
-          </button>
-
-          <div className="nav-group-label">매트릭스</div>
           <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
             onClick={() => setTab("confirmed-slots")} title="확정 슬롯">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
             <span className="nav-label">확정 슬롯</span>
           </button>
-
-          <div className="nav-group-label">관리</div>
           <button className={`nav-btn ${tab === "branches" ? "nav-active" : ""}`}
             onClick={() => setTab("branches")} title="지점 관리">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
             <span className="nav-label">지점 관리</span>
           </button>
 
-          {/* 기타 — collapsible, 디폴트 접힘. 1차 목표(당근마켓구인) 외 메뉴들. */}
+          {/* 기타 — collapsible, 디폴트 접힘. 자주 안 쓰는 메뉴들. */}
           <button
             className="nav-group-toggle"
             onClick={() => setShowOther((v) => !v)}
@@ -1161,6 +1149,22 @@ export default function AdminPage() {
           </button>
           {showOther && (
             <>
+              <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
+                onClick={() => setTab("contact")} title="배송원 컨택">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <span className="nav-label">배송원 컨택</span>
+                {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
+              </button>
+              <button className={`nav-btn ${tab === "inbox" ? "nav-active" : ""}`}
+                onClick={() => setTab("inbox")} title="미분류 인박스">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 10v4a1 1 0 001 1h12a1 1 0 001-1v-4M2 10l3-6h8l3 6M2 10h4l1 2h4l1-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                <span className="nav-label">미분류 인박스</span>
+              </button>
+              <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
+                onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)">
+                <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
+                <span className="nav-label">당근마켓구인 (연습용)</span>
+              </button>
               <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
                 onClick={() => setTab("agent")} title="구인 에이전트">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1188,14 +1192,6 @@ export default function AdminPage() {
               </button>
             </>
           )}
-
-          {/* 연습용 — 사이드바 맨 아래 별도 위치 */}
-          <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
-            onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)"
-            style={{ marginTop: 12 }}>
-            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
-            <span className="nav-label">당근마켓구인 (연습용)</span>
-          </button>
 
           <div className="sidebar-footer">
             <button className="nav-btn" onClick={() => fetchData()} title="새로고침">
@@ -1963,7 +1959,18 @@ export default function AdminPage() {
 
                 const PpcRow = (a: Applicant) => (
                   <tr key={a.id}>
-                    <td className="td-bold">{a.name}</td>
+                    <td className="td-bold">
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {a.name}
+                        <button
+                          className="ppc-edit-btn"
+                          title="지원자 상세 편집"
+                          onClick={() => setPpcDetailId(a.id)}
+                        >
+                          ✏️
+                        </button>
+                      </span>
+                    </td>
                     <td>{calcAge(a.birth_date) ?? "—"}</td>
                     <td>{a.phone}</td>
                     <td>{a.bname || a.sigungu || "—"}</td>
@@ -2745,6 +2752,26 @@ export default function AdminPage() {
           onSaved={() => { fetchData(); }}
         />
       )}
+
+      {/* PPC 표에서 ✏️ 클릭 시 — 공용 미니 상세 모달 */}
+      {ppcDetailId != null && (() => {
+        const a = data.find((x) => x.id === ppcDetailId);
+        if (!a) return null;
+        return (
+          <ApplicantMiniDetail
+            applicant={a}
+            branches={allBranchNames}
+            onClose={() => setPpcDetailId(null)}
+            onPatched={(patch) => {
+              // 서버 PATCH 응답의 nullable 필드는 Applicant 타입(non-null string)과 어긋날 수 있으나
+              // 런타임상 안전 — 매니저가 빈 값으로 비운 컬럼은 화면에서 "—"로 표시되면 충분.
+              setData((prev) =>
+                prev.map((x) => x.id === a.id ? ({ ...x, ...patch } as Applicant) : x)
+              );
+            }}
+          />
+        );
+      })()}
     </>
   );
 }
@@ -3149,6 +3176,18 @@ const css = `
   .ppc-table th { font-size: 11px; font-weight: 600; }
   .ppc-table td { vertical-align: middle; padding: 6px 8px; }
   .ppc-check { width: 16px; height: 16px; cursor: pointer; }
+  .ppc-edit-btn {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+  }
+  .ppc-edit-btn:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
   .slot-chips { display: flex; flex-wrap: wrap; gap: 3px; }
   .slot-chip {
     display: inline-block; padding: 2px 7px; border-radius: 10px;
