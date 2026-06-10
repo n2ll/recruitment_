@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   // 2) applicant 매칭 (phone 일치, 가장 최근 1명)
   const { data: applicants } = await supabase
     .from("applicants")
-    .select("id, current_job_id, name")
+    .select("id, current_job_id, name, status")
     .eq("phone", phone)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -360,6 +360,17 @@ export async function POST(req: NextRequest) {
       message_id: inserted.id,
       agent_invoked: false,
       reason: "candidate paused — manager handles",
+    });
+  }
+
+  // 매니저가 '부적합'으로 처리한 지원자에게는 AI가 일체 응답하지 않는다.
+  // (예: 정책/법적 항의로 이미 부적합 처리된 후에 추가 문자가 들어오는 경우)
+  if (applicant?.status === "부적합") {
+    return NextResponse.json({
+      ok: true,
+      message_id: inserted.id,
+      agent_invoked: false,
+      reason: "applicant marked 부적합 — agent silenced",
     });
   }
 

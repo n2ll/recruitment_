@@ -182,9 +182,13 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
     result.transition.kind === "advance" &&
     result.transition.to !== "active" &&
     !!result.reply_text;
+  // pause 전이 = 매니저 인계 판단이 선 상태. AI가 임의로 사과/응대 메시지를 더 보내지 않고
+  // 슬랙 알림만 보낸 뒤 응답 중단한다. (이전엔 reply_text가 있으면 그대로 발송되어
+  // "죄송합니다…" 같은 사족이 매니저 인계 전에 한 통 더 나가던 문제 해결)
+  const skipReplyDueToPause = result.transition.kind === "pause";
   let replySent = false;
   let outboundId: string | null = null;
-  if (result.reply_text && !skipReplyDueToAdvance && !blockReplyForStage) {
+  if (result.reply_text && !skipReplyDueToAdvance && !skipReplyDueToPause && !blockReplyForStage) {
     let sendOk = simulate;
     let sendMessageId: string | null = null;
     if (!simulate) {
