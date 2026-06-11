@@ -363,14 +363,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 매니저가 '부적합'으로 처리한 지원자에게는 AI가 일체 응답하지 않는다.
-  // (예: 정책/법적 항의로 이미 부적합 처리된 후에 추가 문자가 들어오는 경우)
-  if (applicant?.status === "부적합") {
+  // 매니저가 '부적합' 또는 '이탈'로 처리한 지원자에게는 AI가 일체 응답하지 않는다.
+  // - 부적합: 정책/법적 항의로 탈락 처리된 케이스
+  // - 이탈: 확정·근무 후 그만둔 케이스 (퇴사자에게 AI가 안내문자 보내면 안 됨)
+  if (applicant?.status === "부적합" || applicant?.status === "이탈") {
     return NextResponse.json({
       ok: true,
       message_id: inserted.id,
       agent_invoked: false,
-      reason: "applicant marked 부적합 — agent silenced",
+      reason: `applicant marked ${applicant.status} — agent silenced`,
     });
   }
 

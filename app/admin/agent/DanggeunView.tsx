@@ -653,8 +653,9 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   const filteredCandidates = useMemo(() => {
     const q = search.trim();
     const filtered = candidates.filter((c) => {
-      // 부적합은 좌측 목록에서 숨김 (지원자 목록 탭에서만 확인)
-      if (c.status === "부적합") return false;
+      // 부적합/이탈은 좌측 목록에서 숨김 — 진행 가능한 후보만 남긴다.
+      // (확인은 지원자 목록 탭에서만)
+      if (c.status === "부적합" || c.status === "이탈") return false;
       if (branchFilter !== "전체") {
         if (branchFilter === "미배정") {
           if (c.branch) return false;
