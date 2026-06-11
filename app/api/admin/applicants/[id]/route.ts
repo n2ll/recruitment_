@@ -23,9 +23,11 @@ const VALID_STATUS = new Set([
   "스크리닝 전",
   "스크리닝 중",
   "스크리닝 완료",
+  "기타",
   "확정인력",
   "대기자",
   "부적합",
+  "이탈",
 ]);
 
 const VALID_SLOT = new Set(["평일오전", "평일오후", "주말오전", "주말오후"]);
@@ -74,8 +76,9 @@ export async function PATCH(
     );
   }
 
-  // 상태 부적합으로 전환 시 current_branch/churned_at 자동 처리 (예전 '이탈'과 동일 의미)
-  if (updates.status === "부적합") {
+  // 부적합/이탈로 전환 시 current_branch 비우고 churned_at 자동 기록.
+  // (부적합 = 자격 미달로 탈락, 이탈 = 근무 중이었다가 그만둠. 둘 다 활성 풀에서 빠진다)
+  if (updates.status === "부적합" || updates.status === "이탈") {
     updates.current_branch = null;
     updates.churned_at = new Date().toISOString();
   }

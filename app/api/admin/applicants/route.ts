@@ -20,7 +20,7 @@ const CREATE_FIELDS = new Set([
   "churn_reason", "marketing_consent", "kakao_channel_friend",
 ]);
 
-const VALID_STATUS_SET = new Set(["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자", "부적합"]);
+const VALID_STATUS_SET = new Set(["스크리닝 전", "스크리닝 중", "스크리닝 완료", "기타", "확정인력", "대기자", "부적합", "이탈"]);
 const VALID_SLOT_SET = new Set(["평일오전", "평일오후", "주말오전", "주말오후"]);
 
 function validConfirmedSlot(v: unknown): boolean {

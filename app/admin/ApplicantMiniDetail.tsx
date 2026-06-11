@@ -18,18 +18,22 @@ const STATUS_OPTIONS = [
   "스크리닝 전",
   "스크리닝 중",
   "스크리닝 완료",
+  "기타",
   "확정인력",
   "대기자",
   "부적합",
+  "이탈",
 ];
 
 const STATUS_BG: Record<string, string> = {
   "스크리닝 전":   "#9CA3AF",
   "스크리닝 중":   "#6b7280",
   "스크리닝 완료": "#0EA5E9",
+  "기타":          "#8B5CF6",
   "확정인력":      "#10b981",
   "대기자":        "#f59e0b",
   "부적합":        "#ef4444",
+  "이탈":          "#7f1d1d",
 };
 
 // 호출자(당근의 Candidate, admin의 Applicant)가 다 만족할 수 있도록 nullable 위주의 permissive 타입.

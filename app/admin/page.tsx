@@ -113,13 +113,15 @@ const STATUS_COLORS: Record<string, string> = {
   "스크리닝 전":   "#9CA3AF",  // 회색 (대기/시작 전)
   "스크리닝 중":   "#6b7280",  // 진한 회색
   "스크리닝 완료": "#0EA5E9",  // 하늘색
+  "기타":          "#8B5CF6",  // 보라 (특수 케이스 보관용)
   "확정인력":      "#10b981",  // 초록 (매니저 확정)
   "대기자":        "#f59e0b",  // 주황 (매니저 보류)
   "부적합":        "#ef4444",  // 빨강
+  "이탈":          "#7f1d1d",  // 진한 적갈색 (확정 → 이탈)
 };
 
 const ALL_STATUSES = [
-  "스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자", "부적합",
+  "스크리닝 전", "스크리닝 중", "스크리닝 완료", "기타", "확정인력", "대기자", "부적합", "이탈",
 ];
 
 interface Branch {
@@ -1897,10 +1899,12 @@ export default function AdminPage() {
                               matchesSlot(a.work_hours, s) &&
                               (a.confirmed_branch ?? a.branch1) === b
                           ).length;
+                          // 시각적 신호: 정원 0(미운영)은 중립 회색, 0/N=빨강, 1~N미만=노랑, N이상=초록.
                           const cellClass =
-                            capacity > 0 && confirmed >= capacity ? "cell-full"
-                            : confirmed >= 1 ? "cell-half"
-                            : "cell-zero";
+                            capacity === 0 ? "cell-disabled"
+                            : confirmed >= capacity ? "cell-full"
+                            : confirmed === 0 ? "cell-empty"
+                            : "cell-partial";
                           return (
                             <td key={s} className={`matrix-cell ${cellClass}`}>
                               <div className="conf-main">{confirmed}<span className="conf-cap">/{capacity}</span></div>
@@ -3100,6 +3104,11 @@ const css = `
   .cell-full { color: #064e3b; background: #d1fae5; }
   .cell-half { color: #1e3a8a; background: #dbeafe; }
   .cell-short { color: #991b1b; background: #fee2e2; }
+  /* 확정슬롯 매트릭스 — 정원 대비 충원 상태 시각화 */
+  .cell-empty    { color: #991b1b; background: #fee2e2; }  /* 0/N — 빨강 */
+  .cell-partial  { color: #854d0e; background: #fef9c3; }  /* 1~N미만 — 노랑 */
+  .cell-full     { color: #064e3b; background: #d1fae5; }  /* N이상 — 초록 (재정의) */
+  .cell-disabled { color: #d1d5db; background: #fafafa; }  /* 정원=0(미운영) — 중립 회색 */
   .cell-active { outline: 2px solid #F5C518; outline-offset: -2px; }
   .conf-main { font-size: 14px; font-weight: 700; }
   .conf-cap { font-size: 11px; font-weight: 500; opacity: 0.55; margin-left: 1px; }
