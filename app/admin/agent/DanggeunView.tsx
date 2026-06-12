@@ -667,9 +667,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
         return false;
       return true;
     });
-    // 마지막 문자 시각 기준 내림차순. 메시지가 아직 없는 후보(last_message_at=null)는
-    // created_at으로 폴백 — 새로 등록만 됐고 대화 시작 안 한 후보가 맨 위에 박혀버리는 것 방지.
+    // 우선순위: ① 메시지 주고받은 적 있는 후보를 위에 — last_message_at DESC.
+    //          ② 아직 대화 없는 후보(last_message_at=null)는 모두 아래로, 그 안에서는 created_at DESC.
     return filtered.slice().sort((a, b) => {
+      const aHas = !!a.last_message_at;
+      const bHas = !!b.last_message_at;
+      if (aHas && !bHas) return -1;
+      if (!aHas && bHas) return 1;
       const ta = new Date(a.last_message_at ?? a.created_at).getTime();
       const tb = new Date(b.last_message_at ?? b.created_at).getTime();
       return tb - ta;
