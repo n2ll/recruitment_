@@ -91,18 +91,18 @@ export async function sendSlackPausedAlert(data: {
 export async function sendSlackOnboardingHandoff(data: {
   applicant_name: string | null;
   applicant_phone: string;
-  branch: string | null;
+  branch: string | null;          // 희망 근무지점 (applicant.branch1)
 }) {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 
   const name = data.applicant_name || "(이름 없음)";
-  const branchTag = data.branch ? ` · ${data.branch}` : "";
 
   const message = {
     text:
-      `📞 *매니저 전화 인계 필요 — 온보딩 미회신*${branchTag}\n` +
+      `📞 *매니저 전화 인계 필요 — 온보딩 미회신*\n` +
       `> *지원자:* ${name} (${data.applicant_phone})\n` +
+      `> *희망 근무지점:* ${data.branch || "-"}\n` +
       `리마인더 발송 후 3시간 내 회신이 없습니다. 직접 전화로 확인 부탁드립니다.`,
   };
 
