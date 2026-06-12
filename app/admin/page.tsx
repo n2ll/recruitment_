@@ -36,6 +36,7 @@ interface Applicant {
   filter_pass: string | null;
   note: string | null;        // 시스템 태그 ("중복지원" 등) — UI 읽기 전용
   memo: string | null;        // 매니저 자유 메모 — UI에서 편집
+  sort_order: number | null;  // PPC 표 안에서 매니저가 ↑↓로 조정하는 순서
   last_message_at: string | null;
   unread_count: number;
   start_date: string | null;
@@ -1939,8 +1940,11 @@ export default function AdminPage() {
                   if (ppcSlotFilter.size === 0) return list;
                   return list.filter((a) => SLOTS.some((s) => ppcSlotFilter.has(s) && matchesSlot(a.work_hours, s)));
                 };
-                const confirmed = applyFilter(inBranch.filter((a) => a.status === "확정인력"));
-                const waiting = applyFilter(inBranch.filter((a) => a.status === "대기자"));
+                // 매니저가 ↑↓로 조정한 sort_order 기준 정렬. sort_order가 null인 row는 id로 폴백.
+                const bySort = (a: Applicant, b: Applicant) =>
+                  (a.sort_order ?? a.id) - (b.sort_order ?? b.id);
+                const confirmed = applyFilter(inBranch.filter((a) => a.status === "확정인력")).sort(bySort);
+                const waiting = applyFilter(inBranch.filter((a) => a.status === "대기자")).sort(bySort);
                 const totalConfirmed = inBranch.filter((a) => a.status === "확정인력").length;
                 const totalWaiting = inBranch.filter((a) => a.status === "대기자").length;
                 const filterOn = ppcSlotFilter.size > 0;
@@ -1965,10 +1969,48 @@ export default function AdminPage() {
                   );
                 };
 
-                const PpcRow = (a: Applicant) => (
+                // 인접 row와 sort_order 교환 — 같은 그룹(확정인력 또는 대기자) 안에서만 사용.
+                const swapOrder = async (list: Applicant[], idx: number, dir: -1 | 1) => {
+                  const j = idx + dir;
+                  if (j < 0 || j >= list.length) return;
+                  const a = list[idx];
+                  const b = list[j];
+                  const av = a.sort_order ?? a.id;
+                  const bv = b.sort_order ?? b.id;
+                  // 동일 값(둘 다 id로 폴백된 경우)이면 살짝 다르게 만든다 — av를 bv보다 작게/크게
+                  const [newA, newB] = av === bv
+                    ? (dir === -1 ? [bv - 1, bv] : [bv, bv + 1])
+                    : [bv, av];
+                  // 낙관적 업데이트
+                  setData((prev) => prev.map((x) =>
+                    x.id === a.id ? { ...x, sort_order: newA }
+                    : x.id === b.id ? { ...x, sort_order: newB }
+                    : x
+                  ));
+                  await Promise.all([
+                    patchApplicant(a.id, { sort_order: newA }),
+                    patchApplicant(b.id, { sort_order: newB }),
+                  ]);
+                };
+
+                const PpcRow = (a: Applicant, idx: number, list: Applicant[]) => (
                   <tr key={a.id}>
                     <td className="td-bold">
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span className="ppc-order-buttons">
+                          <button
+                            className="ppc-order-btn"
+                            title="위로"
+                            disabled={idx === 0}
+                            onClick={() => swapOrder(list, idx, -1)}
+                          >▲</button>
+                          <button
+                            className="ppc-order-btn"
+                            title="아래로"
+                            disabled={idx === list.length - 1}
+                            onClick={() => swapOrder(list, idx, 1)}
+                          >▼</button>
+                        </span>
                         {a.name}
                         <button
                           className="ppc-edit-btn"
@@ -2112,7 +2154,7 @@ export default function AdminPage() {
                       <div className="table-wrap">
                         <table className="table ppc-table">
                           <thead>{PpcHeader}</thead>
-                          <tbody>{confirmed.map(PpcRow)}</tbody>
+                          <tbody>{confirmed.map((a, i) => PpcRow(a, i, confirmed))}</tbody>
                         </table>
                       </div>
                     )}
@@ -2127,7 +2169,7 @@ export default function AdminPage() {
                       <div className="table-wrap">
                         <table className="table ppc-table">
                           <thead>{PpcHeader}</thead>
-                          <tbody>{waiting.map(PpcRow)}</tbody>
+                          <tbody>{waiting.map((a, i) => PpcRow(a, i, waiting))}</tbody>
                         </table>
                       </div>
                     )}
@@ -3201,6 +3243,34 @@ const css = `
     line-height: 1;
   }
   .ppc-edit-btn:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
+  .ppc-order-buttons {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-right: 2px;
+  }
+  .ppc-order-btn {
+    background: transparent;
+    border: 1px solid #e5e7eb;
+    color: #9ca3af;
+    width: 18px;
+    height: 14px;
+    border-radius: 3px;
+    font-size: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .ppc-order-btn:hover:not(:disabled) {
+    background: #FFFBEB;
+    border-color: #F5C518;
+    color: #92650A;
+  }
+  .ppc-order-btn:disabled { opacity: 0.25; cursor: not-allowed; }
   .slot-chips { display: flex; flex-wrap: wrap; gap: 3px; }
   .slot-chip {
     display: inline-block; padding: 2px 7px; border-radius: 10px;
