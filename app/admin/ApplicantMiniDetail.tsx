@@ -61,6 +61,7 @@ export interface MiniApplicant {
   guide_sent?: boolean | null;
   onboarding_call_status?: string | null;
   confirmed_branch?: string | null;
+  confirmed_slot?: string | null;
   current_branch?: string | null;
   start_date?: string | null;
   churned_at?: string | null;
@@ -76,7 +77,7 @@ const SECTION_FIELDS: Record<string, (keyof MiniApplicant)[]> = {
   vehicle: ["own_vehicle", "license_type", "vehicle_type", "self_ownership"],
   hope: ["branch1", "branch2", "work_hours", "available_date"],
   onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
-  confirmed: ["confirmed_branch", "current_branch", "start_date", "churn_reason"],
+  confirmed: ["confirmed_branch", "confirmed_slot", "current_branch", "start_date", "churn_reason"],
   memo: ["memo"],
 };
 
@@ -432,7 +433,7 @@ export default function ApplicantMiniDetail({
               ) : (a.confirmed_branch || "—")}
             </div>
             <div className="amd-wide">
-              <span className="amd-dl">슬롯</span>
+              <span className="amd-dl">희망슬롯 (지원자 작성, 읽기 전용)</span>
               <div className="amd-chip-row">
                 {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
                   <span key={s} className="amd-chip">{s}</span>
@@ -441,7 +442,50 @@ export default function ApplicantMiniDetail({
               </div>
               <div className="amd-hint">편집은 위 [📍 희망 지점·시간] 섹션에서 진행</div>
             </div>
-            <div>
+            <div className="amd-wide">
+              <span className="amd-dl">확정슬롯 (매니저 확정 — 미입력 시 희망슬롯 그대로)</span>
+              {editing("confirmed") ? (() => {
+                const draftRaw = (draftVal("confirmed_slot") as string | null);
+                const initial = (draftRaw != null && draftRaw !== "")
+                  ? draftRaw
+                  : SLOTS.filter((s) => matchesSlot(a.work_hours, s)).join(",");
+                const set = new Set(initial.split(",").map((t) => t.trim()).filter(Boolean));
+                return (
+                  <div className="amd-slot-row">
+                    {SLOTS.map((s) => {
+                      const on = set.has(s);
+                      return (
+                        <button
+                          key={s} type="button"
+                          className={`amd-slot-btn ${on ? "amd-slot-on" : ""}`}
+                          onClick={() => {
+                            const next = new Set(set);
+                            if (on) next.delete(s); else next.add(s);
+                            const joined = SLOTS.filter((x) => next.has(x)).join(",");
+                            setD("confirmed_slot", joined || null);
+                          }}
+                        >{s}</button>
+                      );
+                    })}
+                  </div>
+                );
+              })() : (() => {
+                const effective = a.confirmed_slot
+                  ? a.confirmed_slot.split(",").map((t) => t.trim()).filter(Boolean)
+                  : SLOTS.filter((s) => matchesSlot(a.work_hours, s));
+                const usingFallback = !a.confirmed_slot;
+                if (!effective.length) return <span className="amd-muted">—</span>;
+                return (
+                  <>
+                    <div className="amd-chip-row">
+                      {effective.map((s) => <span key={s} className="amd-chip">{s}</span>)}
+                    </div>
+                    {usingFallback && <div className="amd-hint">※ 희망슬롯 그대로 사용 중 (편집 시 분리됨)</div>}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="amd-wide">
               <span className="amd-dl">희망근무일자</span>
               {a.available_date || <span className="amd-muted">—</span>}
             </div>

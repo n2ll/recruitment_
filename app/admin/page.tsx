@@ -193,6 +193,13 @@ function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boole
   });
 }
 
+// 확정 슬롯 매트릭스·PPC 표용 — 매니저가 확정한 slot이 있으면 그것, 없으면 희망(work_hours)로 폴백.
+// (희망 슬롯 탭에서는 항상 work_hours를 그대로 쓴다)
+function effectiveSlot(a: { confirmed_slot?: string | null; work_hours?: string | null }): string | null {
+  if (a.confirmed_slot && a.confirmed_slot.trim()) return a.confirmed_slot;
+  return a.work_hours ?? null;
+}
+
 const ACTIVE_STATUSES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자"];
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
@@ -1373,7 +1380,7 @@ export default function AdminPage() {
                   vehicle: ["own_vehicle", "license_type", "vehicle_type", "self_ownership"],
                   hope: ["branch1", "branch2", "work_hours", "available_date"],
                   onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
-                  confirmed: ["confirmed_branch", "current_branch", "start_date", "churn_reason"],
+                  confirmed: ["confirmed_branch", "confirmed_slot", "current_branch", "start_date", "churn_reason"],
                   memo: ["memo"],
                 };
 
@@ -1662,7 +1669,7 @@ export default function AdminPage() {
                       ) : (a.confirmed_branch || "—")}
                     </div>
                     <div className="detail-wide">
-                      <span className="dl">슬롯</span>
+                      <span className="dl">희망슬롯 (지원자 작성, 읽기 전용)</span>
                       <div className="slot-chips">
                         {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
                           <span key={s} className={`slot-chip ${(
@@ -1676,6 +1683,60 @@ export default function AdminPage() {
                       <div className="ppc-filter-label" style={{ marginTop: 4 }}>
                         편집은 위 [📍 희망 지점·시간] 섹션에서 진행
                       </div>
+                    </div>
+                    <div className="detail-wide">
+                      <span className="dl">확정슬롯 (매니저 확정 — 미입력 시 희망슬롯 그대로)</span>
+                      {isEditing("confirmed") ? (() => {
+                        // 편집 시작 시 confirmed_slot이 비어있으면 work_hours에서 도출한 canonical 값을 prefill.
+                        const draftRaw = (draftVal("confirmed_slot") as string | null);
+                        const initial = (draftRaw != null && draftRaw !== "")
+                          ? draftRaw
+                          : SLOTS.filter((s) => matchesSlot(a.work_hours, s)).join(",");
+                        const set = new Set(initial.split(",").map((t) => t.trim()).filter(Boolean));
+                        return (
+                          <div className="slot-toggle-row">
+                            {SLOTS.map((s) => {
+                              const on = set.has(s);
+                              return (
+                                <button
+                                  key={s} type="button"
+                                  className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
+                                  onClick={() => {
+                                    const next = new Set(set);
+                                    if (on) next.delete(s); else next.add(s);
+                                    const joined = SLOTS.filter((x) => next.has(x)).join(",");
+                                    setDraft("confirmed_slot", joined || null);
+                                  }}
+                                >{s}</button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })() : (() => {
+                        const effective = a.confirmed_slot
+                          ? a.confirmed_slot.split(",").map((t) => t.trim()).filter(Boolean)
+                          : SLOTS.filter((s) => matchesSlot(a.work_hours, s));
+                        const usingFallback = !a.confirmed_slot;
+                        if (!effective.length) return <span className="td-muted">—</span>;
+                        return (
+                          <>
+                            <div className="slot-chips">
+                              {effective.map((s) => (
+                                <span key={s} className={`slot-chip ${(
+                                  s === "평일오전" ? "chip-wd-am" :
+                                  s === "평일오후" ? "chip-wd-pm" :
+                                  s === "주말오전" ? "chip-we-am" : "chip-we-pm"
+                                )}`}>{s}</span>
+                              ))}
+                            </div>
+                            {usingFallback && (
+                              <div className="ppc-filter-label" style={{ marginTop: 4 }}>
+                                ※ 희망슬롯 그대로 사용 중 (편집 시 분리됨)
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     <div>
                       <span className="dl">희망근무일자</span>
@@ -1890,18 +1951,18 @@ export default function AdminPage() {
                         <td className="td-bold branch-name-cell">{b}</td>
                         {SLOTS.map((s) => {
                           const capacity = getSlotCapacity(branch, s);
-                          // 확정인력/대기자의 슬롯 = 희망 시간대(work_hours) 기준으로 통일.
+                          // 확정인력/대기자의 슬롯 = effectiveSlot (confirmed_slot 있으면 그것, 없으면 work_hours).
                           // 매니저가 confirmed_branch를 안 채웠을 때는 branch1로 fallback.
                           const confirmed = data.filter(
                             (a) =>
                               a.status === "확정인력" &&
-                              matchesSlot(a.work_hours, s) &&
+                              matchesSlot(effectiveSlot(a), s) &&
                               (a.confirmed_branch ?? a.branch1) === b
                           ).length;
                           const waiting = data.filter(
                             (a) =>
                               a.status === "대기자" &&
-                              matchesSlot(a.work_hours, s) &&
+                              matchesSlot(effectiveSlot(a), s) &&
                               (a.confirmed_branch ?? a.branch1) === b
                           ).length;
                           // 시각적 신호: 정원 0(미운영)은 중립 회색, 0/N=빨강, 1~N미만=노랑, N이상=초록.
@@ -1935,10 +1996,10 @@ export default function AdminPage() {
                 // confirmed_branch가 없으면 branch1(지원 시 1지망)로 fallback. 매니저가
                 // 지원자 목록에서 status만 확정/대기로 바꾸고 지점을 안 채워도 PPC에서 보이게.
                 const inBranch = data.filter((a) => (a.confirmed_branch ?? a.branch1) === branchDetail);
-                // 슬롯 필터 — 희망 시간대(work_hours) 기준 (확정/대기 슬롯과 통일).
+                // 슬롯 필터 — effectiveSlot 기준 (confirmed_slot이 있으면 그것, 없으면 work_hours).
                 const applyFilter = (list: Applicant[]) => {
                   if (ppcSlotFilter.size === 0) return list;
-                  return list.filter((a) => SLOTS.some((s) => ppcSlotFilter.has(s) && matchesSlot(a.work_hours, s)));
+                  return list.filter((a) => SLOTS.some((s) => ppcSlotFilter.has(s) && matchesSlot(effectiveSlot(a), s)));
                 };
                 // 매니저가 ↑↓로 조정한 sort_order 기준 정렬. sort_order가 null인 row는 id로 폴백.
                 const bySort = (a: Applicant, b: Applicant) =>
@@ -2024,7 +2085,7 @@ export default function AdminPage() {
                     <td>{calcAge(a.birth_date) ?? "—"}</td>
                     <td>{a.phone}</td>
                     <td>{a.bname || a.sigungu || "—"}</td>
-                    <td><SlotChips workHours={a.work_hours} /></td>
+                    <td><SlotChips workHours={effectiveSlot(a)} /></td>
                     <td>
                       <input
                         type="text"
