@@ -26,7 +26,7 @@ export async function sendSlackOnboardingReady(data: {
 
   const message = {
     text:
-      `:tada: *온보딩 준비 완료 — 매니저 확인 요망*\n` +
+      `🎉 *온보딩 준비 완료 — 매니저 확인 요망*\n` +
       `> *이름:* ${name} (${data.applicant_phone})\n` +
       `> *근무지점:* ${data.branch || "-"}\n` +
       `> *근무시간대:* ${data.work_hours || "-"}\n` +
@@ -51,7 +51,7 @@ export async function sendSlackOnboardingReady(data: {
 export async function sendSlackPausedAlert(data: {
   applicant_name: string | null;
   applicant_phone: string;
-  branch: string | null;
+  branch: string | null;          // 희망 근무지점 (applicant.branch1)
   reason: string;
   inbound_text?: string;
 }) {
@@ -61,15 +61,15 @@ export async function sendSlackPausedAlert(data: {
   if (!webhookUrl) return;
 
   const name = data.applicant_name || "(이름 없음)";
-  const branchTag = data.branch ? ` · ${data.branch}` : "";
   const inboundLine = data.inbound_text
     ? `\n> *받은 메시지:* ${data.inbound_text}`
     : "";
 
   const message = {
     text:
-      `:pause_button: *매니저 인계 필요*${branchTag}\n` +
+      `⏸️ *매니저 인계 필요*\n` +
       `> *지원자:* ${name} (${data.applicant_phone})\n` +
+      `> *희망 근무지점:* ${data.branch || "-"}\n` +
       `> *사유:* ${data.reason}${inboundLine}\n` +
       `\n관리자 페이지에서 직접 응대해주세요.`,
   };
@@ -101,7 +101,7 @@ export async function sendSlackOnboardingHandoff(data: {
 
   const message = {
     text:
-      `:telephone_receiver: *매니저 전화 인계 필요 — 온보딩 미회신*${branchTag}\n` +
+      `📞 *매니저 전화 인계 필요 — 온보딩 미회신*${branchTag}\n` +
       `> *지원자:* ${name} (${data.applicant_phone})\n` +
       `리마인더 발송 후 3시간 내 회신이 없습니다. 직접 전화로 확인 부탁드립니다.`,
   };
@@ -136,7 +136,7 @@ export async function sendSlackAgentAlert(data: {
 
   const message = {
     text:
-      `:warning: *AI 응대 불가 — 매니저 답변 필요*\n` +
+      `⚠️ *AI 응대 불가 — 매니저 답변 필요*\n` +
       `> *지원자:* ${name} (${data.applicant_phone})${branch}\n` +
       `> *받은 메시지:* ${data.inbound_text}\n` +
       `> *모자란 정보:* ${data.missing_info}\n` +

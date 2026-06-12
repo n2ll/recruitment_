@@ -100,10 +100,12 @@ export async function applyTransition(input: ApplyTransitionInput): Promise<Appl
       // 매니저 인계 슬랙 알림 — 연습 모드(simulate)면 skip
       if (!simulate) {
         try {
+          // 시스템 더미 공고(__danggeun_system__ 등)는 job.branch가 비어 있으므로
+          // 지원자의 희망 1지망(applicant_branch)을 우선 사용.
           await sendSlackPausedAlert({
             applicant_name,
             applicant_phone,
-            branch: job?.branch ?? null,
+            branch: input.applicant_branch ?? job?.branch ?? null,
             reason: transition.reason,
           });
         } catch (e) {
