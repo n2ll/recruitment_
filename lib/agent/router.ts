@@ -100,6 +100,24 @@ export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAge
   // onboarding도 AI가 응답한다 — 배민 아이디 수집 후 "감사합니다 곧 연락드리겠습니다" 마무리.
   const blockReplyForStage = false;
 
+  // applicants.status가 jc.agent_stage보다 뒤처져 있으면 자동 동기화.
+  // (예: jc=onboarding/active 인데 applicants.status='스크리닝 중'에 머문 케이스 복구)
+  // 매니저가 직접 둔 상태(확정인력/대기자/부적합/이탈/기타)는 절대 건드리지 않는다.
+  const expectedStatus =
+    stageName === "onboarding" || stageName === "active" ? "스크리닝 완료"
+    : stageName === "screening" ? "스크리닝 중"
+    : null;
+  if (expectedStatus) {
+    const applicantId = (jc.applicants as { id?: number } | null)?.id;
+    if (applicantId) {
+      await supabase
+        .from("applicants")
+        .update({ status: expectedStatus })
+        .eq("id", applicantId)
+        .in("status", ["스크리닝 전", "스크리닝 중", "스크리닝 완료"]);
+    }
+  }
+
   // 답장 텀(sleep) 동안 같은 후보가 추가 메시지를 보냈으면, 더 늦은 핸들러가
   // 모든 메시지를 한꺼번에 history로 보고 한 번에 답한다. 내(현재) 핸들러는 양보하고 종료.
   // (사용자 메시지가 무시되지 않으면서도 답장이 중복 발송되는 것을 막는다)

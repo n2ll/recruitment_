@@ -1661,7 +1661,7 @@ export default function AdminPage() {
                       ) : (a.confirmed_branch || "—")}
                     </div>
                     <div className="detail-wide">
-                      <span className="dl">슬롯 (희망시간대 그대로 사용)</span>
+                      <span className="dl">슬롯</span>
                       <div className="slot-chips">
                         {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
                           <span key={s} className={`slot-chip ${(
@@ -1675,6 +1675,10 @@ export default function AdminPage() {
                       <div className="ppc-filter-label" style={{ marginTop: 4 }}>
                         편집은 위 [📍 희망 지점·시간] 섹션에서 진행
                       </div>
+                    </div>
+                    <div>
+                      <span className="dl">희망근무일자</span>
+                      {a.available_date || "—"}
                     </div>
                     <div>
                       <span className="dl">현재 근무지점</span>

@@ -98,10 +98,13 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
 
   const submit = async () => {
     setErr(null);
+    // 이름만 필수 — 나머지는 추후 매니저가 미니 상세에서 채울 수 있게 비워 등록 허용.
     if (!form.name?.trim()) { setErr("이름은 필수입니다."); return; }
     const phoneNorm = (form.phone ?? "").replace(/[^\d]/g, "");
-    if (!/^\d{10,11}$/.test(phoneNorm)) { setErr("전화번호 형식이 올바르지 않습니다."); return; }
-    if (!form.branch1) { setErr("1지망 지점은 필수입니다."); return; }
+    // phone이 입력됐다면 형식 검증
+    if (phoneNorm && !/^\d{10,11}$/.test(phoneNorm)) {
+      setErr("전화번호 형식이 올바르지 않습니다."); return;
+    }
 
     setSaving(true);
     try {
@@ -151,10 +154,10 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
           <section className="afm-section">
             <h4>기본 정보</h4>
             <div className="afm-grid">
-              <Field label="이름 *">
+              <Field label="이름 * (유일한 필수)">
                 <input className="afm-inp" value={form.name ?? ""} onChange={(e) => set("name", e.target.value)} />
               </Field>
-              <Field label="전화번호 *">
+              <Field label="전화번호">
                 <input className="afm-inp" placeholder="01012345678" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
               </Field>
               <Field label="생년월일 (YYMMDD)">
@@ -202,7 +205,7 @@ export default function ApplicantFormModal({ mode, initial, branches, allBranche
           <section className="afm-section">
             <h4>희망</h4>
             <div className="afm-grid">
-              <Field label="1지망 지점 *">
+              <Field label="1지망 지점">
                 <select className="afm-inp" value={form.branch1 ?? ""} onChange={(e) => { set("branch1", e.target.value); if (!form.branch) set("branch", e.target.value); }}>
                   <option value="">—</option>
                   {branches.map((b) => <option key={b} value={b}>{b}</option>)}

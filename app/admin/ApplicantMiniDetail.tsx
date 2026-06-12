@@ -432,7 +432,7 @@ export default function ApplicantMiniDetail({
               ) : (a.confirmed_branch || "—")}
             </div>
             <div className="amd-wide">
-              <span className="amd-dl">슬롯 (희망시간대 그대로 사용)</span>
+              <span className="amd-dl">슬롯</span>
               <div className="amd-chip-row">
                 {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
                   <span key={s} className="amd-chip">{s}</span>
@@ -440,6 +440,10 @@ export default function ApplicantMiniDetail({
                 {!SLOTS.some((s) => matchesSlot(a.work_hours, s)) && <span className="amd-muted">—</span>}
               </div>
               <div className="amd-hint">편집은 위 [📍 희망 지점·시간] 섹션에서 진행</div>
+            </div>
+            <div>
+              <span className="amd-dl">희망근무일자</span>
+              {a.available_date || <span className="amd-muted">—</span>}
             </div>
             <div>
               <span className="amd-dl">현재 근무지점</span>

@@ -84,10 +84,11 @@ export async function POST(req: NextRequest) {
     const branch1 = String(body.branch1 ?? "").trim();
 
     if (!name) return NextResponse.json({ error: "이름은 필수입니다." }, { status: 400 });
-    if (!/^\d{10,11}$/.test(phone)) {
+    // 매니저 수기 등록은 이름만 필수. phone/branch1는 빈 값 허용 — 추후 미니 상세에서 매니저가 직접 채움.
+    // 단, phone이 입력됐으면 형식 검증.
+    if (phone && !/^\d{10,11}$/.test(phone)) {
       return NextResponse.json({ error: "전화번호 형식이 올바르지 않습니다." }, { status: 400 });
     }
-    if (!branch1) return NextResponse.json({ error: "1지망 지점은 필수입니다." }, { status: 400 });
 
     const row: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(body)) {
@@ -101,11 +102,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid confirmed_slot" }, { status: 400 });
     }
 
-    // 기본값 보강
+    // 기본값 보강 — 빈 값은 null로 정규화 (이름만 필수)
     row.name = name;
-    row.phone = phone;
-    row.branch1 = branch1;
-    row.branch = row.branch ?? branch1;
+    row.phone = phone || null;
+    row.branch1 = branch1 || null;
+    row.branch = row.branch ?? (branch1 || null);
     row.source = row.source ?? "manual";
     // 기본 상태: 당근·배민(자동 AI 응대) → '스크리닝 중', 그 외 → '스크리닝 전'
     if (!row.status) {
