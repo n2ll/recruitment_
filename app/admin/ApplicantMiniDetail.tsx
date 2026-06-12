@@ -440,7 +440,6 @@ export default function ApplicantMiniDetail({
                 ))}
                 {!SLOTS.some((s) => matchesSlot(a.work_hours, s)) && <span className="amd-muted">—</span>}
               </div>
-              <div className="amd-hint">편집은 위 [📍 희망 지점·시간] 섹션에서 진행</div>
             </div>
             <div className="amd-wide">
               <span className="amd-dl">확정슬롯 (매니저 확정 — 미입력 시 희망슬롯 그대로)</span>

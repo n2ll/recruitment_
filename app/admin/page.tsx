@@ -1680,9 +1680,6 @@ export default function AdminPage() {
                         ))}
                         {!SLOTS.some((s) => matchesSlot(a.work_hours, s)) && <span className="td-muted">—</span>}
                       </div>
-                      <div className="ppc-filter-label" style={{ marginTop: 4 }}>
-                        편집은 위 [📍 희망 지점·시간] 섹션에서 진행
-                      </div>
                     </div>
                     <div className="detail-wide">
                       <span className="dl">확정슬롯 (매니저 확정 — 미입력 시 희망슬롯 그대로)</span>
