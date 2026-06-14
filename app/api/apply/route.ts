@@ -69,23 +69,39 @@ export async function POST(req: NextRequest) {
     const supabase = createServiceClient();
 
     // ── 기존 applicant 조회 (전화번호 기준) ──────────────────
-    // 배민 흐름: SMS 인입 → triage가 baemin applicant를 미리 만들어둠 (status='스크리닝 전').
-    // 그 후 지원자가 이 폼을 작성하면 INSERT 대신 기존 row를 UPDATE해 데이터 일관성 유지.
-    // 그 외에는 옛 동작 그대로 (중복지원 표시 + 새 row INSERT).
+    // 두 가지 케이스를 한 흐름으로 처리:
+    //  (a) 배민 임시 row(triage가 미리 만든 row, status='스크리닝 전') → 폼 데이터로 UPDATE
+    //  (b) 동일 전화로 이미 active(스크리닝 전/중/완료, 확정인력, 대기자) 상태인 row가 있는데
+    //      지원자가 폼을 또 작성한 케이스 → 새 row INSERT 안 하고 기존 row UPDATE.
+    //      (이전엔 source='baemin' 임시 row일 때만 UPDATE라 같은 사람이 두 row로 갈라지는 버그)
+    // 부적합/이탈 상태인 옛 row는 active가 아니라 재지원으로 보고 새 row INSERT 한다.
     const { data: existing } = await supabase
       .from("applicants")
-      .select("id, source, status")
+      .select("id, source, status, note")
       .eq("phone", phone)
       .order("created_at", { ascending: false })
       .limit(1);
 
     const existingRow = existing?.[0] ?? null;
     const isDuplicate = !!existingRow;
-    // 폼 작성 전 단계의 baemin 임시 row면 UPDATE 대상
+    const ACTIVE_STATES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자"];
     const updateMode =
       !!existingRow &&
-      existingRow.source === "baemin" &&
-      (existingRow.status === "스크리닝 전" || existingRow.status === null);
+      (
+        // 배민 임시 row (status null 포함)
+        (existingRow.source === "baemin" &&
+          (existingRow.status === "스크리닝 전" || existingRow.status === null))
+        // 또는 일반 active 재제출
+        || ACTIVE_STATES.includes(existingRow.status as string)
+      );
+    // updateMode 분기 안에서 자동 흐름(시작 SMS + job_candidates 신규 생성)을 건너뛸지 결정.
+    // 배민 임시 row(status='스크리닝 전')는 자동 흐름이 아직 안 돈 첫 진입이므로 트리거해야 함.
+    // 그 외 active 재제출(스크리닝 중/완료, 확정인력, 대기자)은 이미 흐름이 돌고 있으니 트리거 X.
+    const skipAutoEngagement =
+      updateMode &&
+      existingRow !== null &&
+      existingRow.status !== "스크리닝 전" &&
+      existingRow.status !== null;
 
     // ── 자동 필터 3조건 ──────────────────────────────────────
     const VALID_LICENSES = ["1종 보통", "2종 보통", "1종 대형"];
@@ -122,7 +138,10 @@ export async function POST(req: NextRequest) {
       branch: branch1,
       status: autoStatus,
       filter_pass: filterPass ? "Y" : "N",
-      note: updateMode ? null : (isDuplicate ? "중복지원" : null),
+      // active 재제출 케이스에선 note에 '중복지원 (재제출)' 마킹, 다른 케이스는 그대로.
+      note: skipAutoEngagement
+        ? "중복지원 (재제출)"
+        : (updateMode ? null : (isDuplicate ? "중복지원" : null)),
       marketing_consent: consent,
       marketing_consent_at: consent ? new Date().toISOString() : null,
       lat: geo?.lat ?? null,
@@ -165,7 +184,8 @@ export async function POST(req: NextRequest) {
     // ── 자동 발송 ──────
     // source='danggeun'이면 매니저가 저장한 시작 멘트를, 그 외엔 기본 접수 안내를 보낸다.
     // 둘 다 prompt_examples 테이블의 'system_message' 카테고리에서 매니저가 편집 가능.
-    try {
+    // 단, 이미 active한 후보의 재제출(skipAutoEngagement)이면 시작 멘트 재발송 + JC 신규 생성을 건너뛴다.
+    if (!skipAutoEngagement) try {
       const receivedAt = new Date().toLocaleString("ko-KR", {
         timeZone: "Asia/Seoul",
         year: "numeric", month: "2-digit", day: "2-digit",
@@ -264,7 +284,8 @@ export async function POST(req: NextRequest) {
 
     // source='danggeun' 또는 'baemin'으로 들어온 폼 지원자는 자동 AI 응대 흐름에 올린다.
     // (배민은 SMS 인입 → 폼 발송 → 폼 제출 시점에 비로소 job_candidates 생성)
-    if (inserted.source === "danggeun" || inserted.source === "baemin") {
+    // 재제출(skipAutoEngagement) 케이스는 기존 job_candidates가 이미 돌고 있으니 신규 생성 안 함.
+    if (!skipAutoEngagement && (inserted.source === "danggeun" || inserted.source === "baemin")) {
       try {
         const isBaeminFlow = inserted.source === "baemin";
         const sysJobId = isBaeminFlow
