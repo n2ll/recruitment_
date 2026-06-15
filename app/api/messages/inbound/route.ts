@@ -21,7 +21,6 @@ import { createServiceClient } from "@/lib/supabase";
 import { runAgentForCandidate } from "@/lib/agent/router";
 import { triageInbound, isHardSpam } from "@/lib/agent/baemin-triage";
 import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
-import { isAgentDisabled } from "@/lib/agent/kill-switch";
 
 export const dynamic = "force-dynamic";
 // 답장 텀(최대 45s 슬립) + AI(~5~10s) + 발송 — 60s 안에 마치도록 maxDuration 60.
@@ -177,20 +176,17 @@ export async function POST(req: NextRequest) {
 
       let jobIdForBaemin: number | null = null;
       let candidateIdForBaemin: number | null = null;
-      const killOn = await isAgentDisabled(supabase);
       try {
         jobIdForBaemin = await ensureBaeminSystemJob(supabase);
         const isWeekend = String(newApplicant.work_hours ?? "").includes("주말");
-        const now = new Date().toISOString();
-        // kill switch ON이면 stage='paused'로 시작 + meta.paused_from_stage_global='screening'.
-        // resume-all-agents.mjs가 이걸 보고 자동 원복하므로 별도 처리 불필요.
+        // agent_stage는 항상 'screening' 시작 — UI에 단계가 정상적으로 보이도록.
+        // AI 응답 차단은 router 안의 kill switch 가드가 담당.
         const { data: jcIns } = await supabase
           .from("job_candidates")
           .insert({
             job_id: jobIdForBaemin,
             applicant_id: newApplicant.id,
-            agent_stage: killOn ? "paused" : "screening",
-            paused_reason: killOn ? "전체 일시중지 (운영 이슈)" : null,
+            agent_stage: "screening",
             agent_state: {
               screening: {
                 프로모션_종료가능성_안내: true,
@@ -198,10 +194,7 @@ export async function POST(req: NextRequest) {
                 업무시간_체계_이해: true,
                 ...(isWeekend ? {} : { 공휴일_업무여부_확인: true }),
               },
-              meta: {
-                screening_entered_at: now,
-                ...(killOn ? { paused_from_stage_global: "screening", paused_at_global: now } : {}),
-              },
+              meta: { screening_entered_at: new Date().toISOString() },
             },
           })
           .select("id")
