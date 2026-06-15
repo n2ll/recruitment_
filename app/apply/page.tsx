@@ -166,12 +166,9 @@ export default function ApplyPageWrapper() {
 
 function ApplyPage() {
   const searchParams = useSearchParams();
-  // URL ?source=가 있으면 그 값을 신뢰(= 그 채널 링크로 들어온 사람)하고,
-  // 폼에서 사용자가 임의로 바꾸지 못하게 라디오를 잠근다.
-  // (배민 링크로 들어와서 '당근'으로 표시하는 케이스 등 오분류 방지)
-  const rawSource = searchParams.get("source");
-  const sourceLocked = !!rawSource && SOURCE_OPTIONS.some((o) => o.value === rawSource);
-  const defaultSource = normalizeSource(rawSource);
+  // source는 URL ?source=로만 결정. 폼 UI 없음 → 사용자 입력 실수로 채널이 어긋나는
+  // 케이스 차단. URL이 비어있거나 알 수 없는 값이면 normalizeSource가 'danggeun' 디폴트.
+  const defaultSource = normalizeSource(searchParams.get("source"));
   const branchParam = searchParams.get("branch") || "";
 
   const [form, setForm] = useState<FormData>({
@@ -568,26 +565,8 @@ function ApplyPage() {
               {errors.selfOwnership && <p className="error-msg">{errors.selfOwnership}</p>}
             </div>
 
-            <div className="field-wrap">
-              <label className="field-label">지원 경로 <span className="req">*</span></label>
-              {sourceLocked ? (
-                <div className="source-locked">
-                  <span className="source-locked-label">
-                    {SOURCE_OPTIONS.find((o) => o.value === form.source)?.label} 채널을 통해 들어오셨습니다.
-                  </span>
-                </div>
-              ) : (
-                <div className="radio-group source-row">
-                  {SOURCE_OPTIONS.map((opt) => (
-                    <button key={opt.value} type="button"
-                      className={`radio-btn ${form.source === opt.value ? "radio-on" : ""}`}
-                      onClick={() => set("source")(opt.value)}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* 지원 경로는 폼 UI 노출 X — URL param(?source=...)으로만 결정. */}
+            {/* URL 명시되지 않으면 디폴트 'danggeun'. 사용자 입력 실수로 채널이 어긋나는 케이스 차단. */}
           </section>
 
           {/* 마케팅 수신 동의 (선택) */}
