@@ -5,6 +5,7 @@ import { geocodeAddress } from "@/lib/kakao-geocode";
 import { ensureDanggeunSystemJob } from "@/lib/agent/danggeun-job";
 import { ensureBaeminSystemJob } from "@/lib/agent/baemin-job";
 import { getSystemMessage, fillTemplate } from "@/lib/agent/system-messages";
+import { isAgentDisabled } from "@/lib/agent/kill-switch";
 
 // 희망 근무 시간대 축약 — "평일(월~금) 오전 타임..., 주말..." → "평일오전, 주말오후"
 function shortWorkHours(wh: string | null | undefined): string {
@@ -293,10 +294,13 @@ export async function POST(req: NextRequest) {
           : await ensureDanggeunSystemJob(supabase);
         // 희망시간대에 '주말'이 없으면 평일 슬롯 → 공휴일 업무 확인 자동 통과
         const isWeekendSlot = String(inserted.work_hours ?? "").includes("주말");
+        const killOn = await isAgentDisabled(supabase);
+        const now = new Date().toISOString();
         const { error: jcErr } = await supabase.from("job_candidates").insert({
           job_id: sysJobId,
           applicant_id: inserted.id,
-          agent_stage: "screening",
+          agent_stage: killOn ? "paused" : "screening",
+          paused_reason: killOn ? "전체 일시중지 (운영 이슈)" : null,
           agent_state: {
             screening: {
               프로모션_종료가능성_안내: true,
@@ -304,7 +308,10 @@ export async function POST(req: NextRequest) {
               업무시간_체계_이해: true,
               ...(isWeekendSlot ? {} : { 공휴일_업무여부_확인: true }),
             },
-            meta: { screening_entered_at: new Date().toISOString() },
+            meta: {
+              screening_entered_at: now,
+              ...(killOn ? { paused_from_stage_global: "screening", paused_at_global: now } : {}),
+            },
           },
         });
         if (jcErr) {

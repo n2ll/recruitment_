@@ -18,6 +18,7 @@ import { onboardingStage } from "./stages/onboarding";
 import { screeningStage } from "./stages/screening";
 import { activeStage } from "./stages/active";
 import { recordUsage, toMessageTokens, type UsagePurpose } from "./usage";
+import { isAgentDisabled } from "./kill-switch";
 import type {
   AgentState,
   ApplicantContext,
@@ -62,6 +63,11 @@ export interface RunAgentResult {
 
 export async function runAgentForCandidate(input: RunAgentInput): Promise<RunAgentResult> {
   const { supabase, candidate_id, inbound_message_id, inbound_text, simulate = false, received_at } = input;
+
+  // 전역 일시중지 스위치 — 켜져 있으면 어떤 단계든 상관없이 즉시 종료.
+  if (!simulate && (await isAgentDisabled(supabase))) {
+    return { ok: true, skipped: "agent kill-switch ON — global pause" };
+  }
 
   // 답장 텀 — 인입 시각으로부터 REPLY_DELAY_MS 후를 목표로 대기.
   // 이미 지났으면 즉시 진행. simulate(연습 빙의)는 매니저 테스트라 텀 없이 즉시.
