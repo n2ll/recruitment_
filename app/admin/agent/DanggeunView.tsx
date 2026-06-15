@@ -53,7 +53,6 @@ interface ModeConfig {
   sendButtonLabel: string;
   practice: boolean;
   channelLabel: string;          // 빈 목록 안내 등에서 사용 ("당근" / "배민" / "연습")
-  showRecommend: boolean;        // ⭐ 추천 받기 버튼 노출 여부
   needsStartMessage: boolean;    // 시작 멘트 발송 채널인지 (배민은 X — 지원자가 먼저 보냄)
 }
 
@@ -69,7 +68,6 @@ const MODE_CONFIG: Record<"live" | "practice" | "baemin", ModeConfig> = {
     sendButtonLabel: "보내기",
     practice: false,
     channelLabel: "당근",
-    showRecommend: true,
     needsStartMessage: true,
   },
   practice: {
@@ -81,7 +79,6 @@ const MODE_CONFIG: Record<"live" | "practice" | "baemin", ModeConfig> = {
     sendButtonLabel: "지원자로 보내기",
     practice: true,
     channelLabel: "연습용",
-    showRecommend: false,
     needsStartMessage: true,
   },
   baemin: {
@@ -93,7 +90,6 @@ const MODE_CONFIG: Record<"live" | "practice" | "baemin", ModeConfig> = {
     sendButtonLabel: "보내기",
     practice: false,
     channelLabel: "배민",
-    showRecommend: false,
     needsStartMessage: false,
   },
 };
@@ -154,25 +150,6 @@ type AgentState = {
   screening?: Record<string, boolean>;
   onboarding?: Record<string, boolean>;
 };
-
-interface FactsItem {
-  id: number;
-  category: string;
-  title: string;
-  body: string;
-  sort_order: number;
-}
-
-interface RecCandidate {
-  id: number;
-  source: "applicant" | "legacy";
-  name: string;
-  phone: string;
-  score: { total: number; distance: number; vehicle: number; recency: number; distanceKm: number };
-  sigungu?: string | null;
-  location?: string | null;
-}
-
 
 const STAGE_LABEL: Record<string, string> = {
   exploration: "탐색",
@@ -305,17 +282,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   const [startMsg, setStartMsg] = useState("");
   const [startMsgLoaded, setStartMsgLoaded] = useState(false);
 
-  // ── 새 후보 폼 ──────────────────────────────────────────
-  // ── facts (AI 참고자료 — 공고 정보, 추천 모달에서 사용) ──
-  const [factsList, setFactsList] = useState<FactsItem[]>([]);
-
-  // ── 추천 모달 (live 모드만) ───────────────────────────
-  const [showRecommendModal, setShowRecommendModal] = useState(false);
-  const [recommendMemo, setRecommendMemo] = useState("");
-  const [recommendLoading, setRecommendLoading] = useState(false);
-  const [recommendResult, setRecommendResult] = useState<RecCandidate[]>([]);
-  const [recommendSending, setRecommendSending] = useState<number | null>(null);
-
   // ── 후보 목록 ──────────────────────────────────────────
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -372,16 +338,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates]);
-
-  // facts 목록 로드 (새 등록 시 공고 지정 select용)
-  useEffect(() => {
-    fetch("/api/admin/prompt-examples?category=facts", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (Array.isArray(j.data)) setFactsList(j.data as FactsItem[]);
-      })
-      .catch((e) => console.error("[danggeun facts load]", e));
-  }, []);
 
   // ── 대화창 로드 ────────────────────────────────────────
   // silent=true: 로딩 스피너 안 띄우고 조용히 데이터만 갱신 (발송 직후 reasoning/배지 매핑용)
@@ -499,74 +455,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       alert(e instanceof Error ? e.message : "초기화 실패");
     } finally {
       setResetting(false);
-    }
-  };
-
-  const handleRecommend = async () => {
-    if (!recommendMemo.trim()) {
-      alert("공고 메모를 입력해주세요. (예: 강북미아 평일오전 자차)");
-      return;
-    }
-    setRecommendLoading(true);
-    setRecommendResult([]);
-    try {
-      const res = await fetch("/api/admin/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          posting: recommendMemo,
-          sourceFilter: "danggeun",
-          topN: 30,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error || "추천 실패");
-        return;
-      }
-      setRecommendResult(json.candidates || []);
-      if ((json.candidates || []).length === 0) {
-        alert("당근 후보 풀에 적합한 사람이 없습니다.");
-      }
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "추천 실패");
-    } finally {
-      setRecommendLoading(false);
-    }
-  };
-
-  // 추천 후보 클릭 → 그 사람에게 시작 멘트 발송 (이미 등록된 applicant이므로 send만)
-  const handleRecommendSend = async (c: RecCandidate) => {
-    if (!startMsg.trim()) {
-      alert("시작 멘트를 먼저 저장해주세요.");
-      return;
-    }
-    if (!confirm(`${c.name}(${formatPhone(c.phone)})에게 시작 멘트를 발송합니다. 진행할까요?`)) {
-      return;
-    }
-    setRecommendSending(c.id);
-    try {
-      const res = await fetch("/api/admin/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicant_id: c.id,
-          phone: c.phone,
-          body: startMsg,
-          sent_by: "danggeun-recommend",
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        alert(j.error || "발송 실패");
-        return;
-      }
-      alert(`${c.name}님에게 시작 멘트가 발송되었습니다.`);
-      await fetchCandidates({ silent: true });
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "발송 실패");
-    } finally {
-      setRecommendSending(null);
     }
   };
 
@@ -705,14 +593,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
               ⚠ 시작 멘트 미설정 — 클로드 조련하기에서 설정
             </span>
           )}
-          {cfg.showRecommend && (
-            <button
-              className="dg-btn dg-btn-ghost-bordered"
-              onClick={() => setShowRecommendModal(true)}
-            >
-              ⭐ 추천 받기
-            </button>
-          )}
           {cfg.practice && (
             <button
               className="dg-btn dg-btn-ghost-bordered"
@@ -722,9 +602,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
               {resetting ? "초기화 중..." : "🗑 연습 데이터 초기화"}
             </button>
           )}
-          <button className="dg-btn-ghost" onClick={() => fetchCandidates()} disabled={listLoading}>
-            {listLoading ? "..." : "새로고침"}
-          </button>
         </div>
       </div>
 
@@ -894,12 +771,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                       ⏸ AI 일시정지
                     </button>
                   )}
-                  <button
-                    className="dg-btn-ghost"
-                    onClick={() => selectedId != null && fetchMessages(selectedId)}
-                  >
-                    새로고침
-                  </button>
                 </div>
               </header>
 
@@ -1106,96 +977,6 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
         />
       )}
 
-      {/* 모달: 추천 받기 (live 모드만) */}
-      {showRecommendModal && (
-        <div className="dg-modal-bg" onClick={() => setShowRecommendModal(false)}>
-          <div className="dg-modal dg-modal-wide" onClick={(e) => e.stopPropagation()}>
-            <div className="dg-modal-head">
-              <h3 className="dg-modal-title">⭐ 당근 후보 추천 받기</h3>
-              <button className="dg-btn-ghost" onClick={() => setShowRecommendModal(false)}>×</button>
-            </div>
-            <p className="dg-modal-desc">
-              AI 참고자료에서 공고를 선택하거나 직접 메모를 입력하세요.
-              source='danggeun' 후보 풀에서 점수순(거리/차량/최신성)으로 추천합니다.
-              한 명을 클릭하면 저장된 시작 멘트가 그 사람에게 실 발송됩니다.
-            </p>
-            <div className="dg-field">
-              <label className="dg-label">
-                AI 참고자료에서 공고 불러오기 <span style={{ color: "#9CA3AF", fontWeight: 400 }}>(선택 안 해도 됨)</span>
-              </label>
-              <select
-                className="dg-input"
-                value=""
-                onChange={(e) => {
-                  const id = e.target.value ? Number(e.target.value) : null;
-                  if (id == null) return;
-                  const f = factsList.find((x) => x.id === id);
-                  if (f) setRecommendMemo(`[${f.title}]\n${f.body}`);
-                }}
-              >
-                <option value="">— 직접 입력하거나 facts 선택 —</option>
-                {factsList.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.title}
-                  </option>
-                ))}
-              </select>
-              {factsList.length === 0 && (
-                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 0" }}>
-                  AI 참고자료 탭에서 공고 정보를 먼저 추가하면 여기서 빠르게 불러올 수 있습니다.
-                </p>
-              )}
-            </div>
-            <div className="dg-field">
-              <label className="dg-label">공고 메모</label>
-              <textarea
-                className="dg-textarea"
-                rows={6}
-                placeholder="예) 강북미아 평일오전 자차, 시급 1.5~2만 / 픽업 서울 강북구 도봉로 34"
-                value={recommendMemo}
-                onChange={(e) => setRecommendMemo(e.target.value)}
-              />
-            </div>
-            <div className="dg-row-end">
-              <button
-                className="dg-btn dg-btn-primary"
-                onClick={handleRecommend}
-                disabled={recommendLoading}
-              >
-                {recommendLoading ? "추천 중..." : "추천 받기"}
-              </button>
-            </div>
-
-            {recommendResult.length > 0 && (
-              <div className="dg-rec-list">
-                <div className="dg-rec-head">
-                  <span className="dg-rec-head-name">이름</span>
-                  <span className="dg-rec-head-meta">전화 · 지역 · 거리</span>
-                  <span className="dg-rec-head-score">점수</span>
-                  <span />
-                </div>
-                {recommendResult.map((c) => (
-                  <div key={c.id} className="dg-rec-item">
-                    <span className="dg-rec-name">{c.name}</span>
-                    <span className="dg-rec-meta">
-                      {formatPhone(c.phone)} · {c.sigungu ?? c.location ?? "-"} ·{" "}
-                      {c.score.distanceKm != null ? `${c.score.distanceKm.toFixed(1)}km` : "-"}
-                    </span>
-                    <span className="dg-rec-score">{c.score.total.toFixed(1)}</span>
-                    <button
-                      className="dg-btn dg-btn-primary"
-                      onClick={() => handleRecommendSend(c)}
-                      disabled={recommendSending === c.id}
-                    >
-                      {recommendSending === c.id ? "발송 중..." : "시작 멘트 발송"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
