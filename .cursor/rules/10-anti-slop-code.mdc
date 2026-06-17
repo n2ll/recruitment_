@@ -1,0 +1,82 @@
+---
+description: AI 슬롭 방지 — 코드 구조 가드. 거대 컴포넌트에 라인을 더 쌓는 행위를 차단한다.
+globs: app/**/*.{tsx,ts},lib/**/*.{tsx,ts}
+alwaysApply: true
+---
+
+# Anti-Slop Code Guard
+
+> Imported 2026-06-17 from ongManagement 레퍼런스 (Next.js 구조에 맞게 적응).
+
+이 프로젝트의 가장 큰 슬롭은 **거대 컴포넌트**다.
+어드민 대시보드가 이미 수천 줄짜리 단일 파일로 자라 있다. AI가 신규 작업 시 여기에 더 쌓지 않도록 강제한다.
+
+## 1. 거대 파일 명단 (라인 추가 시 분리 계획 필수)
+
+> 측정: 2026-06-17. 정확한 현황은 `wc -l`로 재확인할 것.
+
+| 파일 | 대략 LOC | 비고 |
+|---|---|---|
+| `app/admin/page.tsx` | ~3,900 | 어드민 대시보드 전체. 신규 탭/뷰는 별도 파일로. |
+| `app/admin/agent/DanggeunView.tsx` | ~1,540 | 당근 뷰 |
+| `app/admin/agent/AgentJobsView.tsx` | ~1,040 | 공고/추천 뷰 |
+
+이 파일들에 라인을 **추가**할 때는 PR 본문/대화에 **분리 계획**을 명시한다.
+- 분리 계획 = "어떤 책임을 어떤 새 파일로 뽑을지" + 1단계 목표
+- 분리를 미룰 정당한 사유(긴급 핫픽스, 회귀 위험 등)가 있으면 명시
+
+## 2. 신규 컴포넌트 LOC 한도
+
+- **신규 컴포넌트 파일**: 800줄 이하 권장
+- 800줄을 넘기면 책임 분리를 먼저 검토한다 (§4)
+
+## 3. 레이어 분리 (이 프로젝트 구조)
+
+```
+Types(lib/agent/types.ts) → lib/* 유틸·도메인 헬퍼 → app/api route handlers → app/admin UI
+```
+
+- **외부 서비스 어댑터**는 `lib/`에 둔다 (supabase / claude / solapi / slack / kakao-geocode). UI/route에서 fetch를 직접 짜지 말 것.
+- **AI 응대 로직**은 `lib/agent/`에 둔다. 단계 모듈은 `lib/agent/stages/`에 스텝당 한 파일.
+- **순수 계산**(점수·파싱 등)은 `lib/`의 독립 모듈로 (예: `scoring.ts`). UI 컴포넌트 안에 비즈 계산식을 인라인하지 말 것.
+
+## 4. 큰 뷰 분리 패턴
+
+수천 줄 뷰는 다음으로 분할:
+
+```
+XxxView.tsx          // 화면/탭 라우팅 (얇게)
+XxxTable.tsx 또는 컬럼 정의 분리
+XxxModal.tsx         // 모달/Drawer (이미 ApplicantFormModal / JobCreateModal 선례)
+hooks/useXxx.ts      // 데이터 페칭/뮤테이션
+lib/xxxCalc.ts       // 순수 계산 (테스트 가능)
+```
+
+책임 혼재 시그널 (보이면 분리 검토):
+- 같은 파일에 React state + Supabase 쿼리 + 비즈 계산식이 모두 있음
+- 한 파일에 모달 3개 이상 정의
+- 같은 도메인 폼 필드 5개 이상이 한 컴포넌트에 인라인
+
+## 5. 코드 주석 슬롭
+
+LLM 작업 흔적 주석을 금지한다.
+
+| 슬롭(금지) | 대안 |
+|---|---|
+| `// 개선:` / `// 수정:` / `// 변경:` | (삭제) — git log가 답한다 |
+| `// 함수 정의` / `// 변수 선언` / `// 반환` | (삭제) — 코드가 답한다 |
+| `// 여기에 X를 추가합니다` | (삭제) — 코드 narration 금지 |
+| 이모지 주석 (`// ✅ 개선`, `// 🚀 ...`) | (삭제) |
+
+금지 이모지(주석/식별자/문자열): `🌟 ✅ ❌ 🎯 💡 🚀 ✨ ⚡ 📋 📊 🌈 🎉 🔥 ⭐ 🛠️ 🔧 📝 📌`
+
+허용:
+- `// TODO:` / `// FIXME:` (의도가 명시된 메타)
+- 비자명한 의도/제약/트레이드오프 설명 (예: "manual status는 system이 덮어쓰지 않음 — README §3")
+- 외부 API 스펙 인용 (SOLAPI / Anthropic / Kakao 등)
+
+## 6. 임포트 위생
+
+- `lib/agent/router.ts`가 신규 진입점. 레거시 `lib/agent.ts`는 호환용 — 신규 코드에서 import 금지.
+- UI 컴포넌트 → page/뷰 역방향 import 금지 (순환 의존).
+- API route는 서버에서 `createServiceClient()`, 브라우저는 `getBrowserClient()` — 혼용 금지.
