@@ -6,6 +6,7 @@ import { Users, Sparkles, BadgeCheck, Hourglass } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { CountUp } from "@/components/ui/count-up";
+import { cn } from "@/lib/cn";
 
 const container: Variants = {
   hidden: {},
@@ -77,10 +78,10 @@ function Kpi({
 }
 
 const FUNNEL = [
-  { key: "screeningPre", label: "스크리닝 전", color: "#b8b6ae" },
-  { key: "screeningInProg", label: "스크리닝 중", color: "#7c93a0" },
-  { key: "screeningDone", label: "스크리닝 완료", color: "#453b60" },
-  { key: "confirmed", label: "확정인력", color: "#65451d" },
+  { key: "screeningPre", label: "스크리닝 전", bar: "bg-bone", text: "text-slate-gray" },
+  { key: "screeningInProg", label: "스크리닝 중", bar: "bg-pale-sage", text: "text-ink-black" },
+  { key: "screeningDone", label: "스크리닝 완료", bar: "bg-lavender-mist", text: "text-ink-black" },
+  { key: "confirmed", label: "확정인력", bar: "bg-dusty-rose", text: "text-ink-black" },
 ] as const;
 
 export function DashboardView({ stats, branchStats }: DashboardViewProps) {
@@ -143,15 +144,14 @@ export function DashboardView({ stats, branchStats }: DashboardViewProps) {
             return (
               <div key={f.key} className="flex items-center gap-3">
                 <span className="w-24 shrink-0 text-[13px] text-slate-gray">{f.label}</span>
-                <div className="h-7 flex-1 overflow-hidden rounded-[8px] bg-bone/50">
+                <div className="h-7 flex-1 overflow-hidden rounded-[8px] border border-bone bg-paper-white">
                   <motion.div
-                    className="flex h-full items-center justify-end rounded-[8px] px-2"
-                    style={{ background: f.color }}
+                    className={cn("flex h-full items-center justify-end px-2", f.bar)}
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.max(pct, 6)}%` }}
                     transition={{ duration: 0.6, delay: i * 0.08, ease: "easeOut" }}
                   >
-                    <span className="text-[12px] font-semibold text-paper-white">{value}</span>
+                    <span className={cn("text-[12px] font-semibold", f.text)}>{value}</span>
                   </motion.div>
                 </div>
               </div>
