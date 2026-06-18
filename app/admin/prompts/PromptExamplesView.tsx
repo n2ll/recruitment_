@@ -13,6 +13,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 type Category = "conversation" | "facts" | "system_message";
 
@@ -62,6 +65,8 @@ export default function PromptExamplesView({
   pageDesc = "AI 프롬프트에 자동 주입되는 퓨샷 예시 + 사실 정보입니다. 여기서 수정하면 60초 이내 모든 stage에 반영됩니다.",
   showSeed = true,
 }: PromptExamplesViewProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const isFactsOnly = categories.length === 1 && categories[0] === "facts";
   const isCombined = categories.length > 1;
   const themeColor = isFactsOnly ? "#2563EB" : isCombined ? "#7C3AED" : "#D97706";
@@ -100,9 +105,12 @@ export default function PromptExamplesView({
   );
 
   const handleSeed = async () => {
-    if (!confirm("빠져 있는 기본값만 추가합니다. (이미 있는 항목은 그대로 유지) 진행할까요?")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "빠진 기본값을 채울까요?",
+      description: "빠져 있는 기본값만 추가하고, 이미 있는 항목은 그대로 둬요.",
+      confirmText: "기본값 채우기",
+    });
+    if (!ok) return;
     setSeeding(true);
     try {
       const res = await fetch("/api/admin/prompt-examples", {
@@ -112,13 +120,17 @@ export default function PromptExamplesView({
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "시드 실패");
+        toast({ title: "기본값 채우기에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
-      alert(json.inserted > 0 ? `${json.inserted}건 추가됨.` : (json.message || "추가할 기본값이 없습니다."));
+      if (json.inserted > 0) {
+        toast({ title: `기본값 ${json.inserted}건을 추가했어요`, tone: "success" });
+      } else {
+        toast({ title: json.message || "추가할 기본값이 없어요", tone: "info" });
+      }
       await fetchAll();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "시드 실패");
+      toast({ title: "기본값 채우기에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     } finally {
       setSeeding(false);
     }
@@ -127,7 +139,7 @@ export default function PromptExamplesView({
   const handleSave = async () => {
     if (!editor) return;
     if (!editor.title.trim() || !editor.body.trim()) {
-      alert("제목과 본문을 입력해주세요.");
+      toast({ title: "제목과 본문을 입력해주세요", tone: "info" });
       return;
     }
     setSaving(true);
@@ -150,32 +162,38 @@ export default function PromptExamplesView({
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "저장 실패");
+        toast({ title: "항목 저장에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       setEditor(null);
       await fetchAll();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패");
+      toast({ title: "항목 저장에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("이 예시를 삭제할까요?")) return;
+    const ok = await confirm({
+      title: "이 예시를 삭제할까요?",
+      description: "삭제하면 AI 프롬프트에서도 빠져요.",
+      confirmText: "삭제",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/prompt-examples/${id}`, {
         method: "DELETE",
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.error || "삭제 실패");
+        toast({ title: "예시 삭제에 실패했어요", description: j.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       await fetchAll();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "삭제 실패");
+      toast({ title: "예시 삭제에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     }
   };
 
@@ -201,7 +219,7 @@ export default function PromptExamplesView({
       ]);
       await fetchAll();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "순서 변경 실패");
+      toast({ title: "순서 변경에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     }
   };
 
@@ -268,13 +286,13 @@ export default function PromptExamplesView({
       <p className="pe-cat-desc">{CATEGORY_DESC[tab]}</p>
 
       {loading ? (
-        <div className="pe-empty">로딩 중...</div>
+        <LoadingState label="예시 불러오는 중…" />
       ) : filtered.length === 0 ? (
-        <div className="pe-empty">
-          {items.length === 0
-            ? "아직 예시가 없습니다. 상단의 '기본 예시 가져오기'로 시작하세요."
-            : "이 카테고리에는 예시가 없습니다."}
-        </div>
+        items.length === 0 ? (
+          <EmptyState title="아직 예시가 없어요" hint="상단의 '기본 예시 가져오기'로 시작해보세요." />
+        ) : (
+          <EmptyState title="이 카테고리에는 예시가 없어요" />
+        )
       ) : (
         <div className="pe-list">
           {filtered.map((it, idx) => (
@@ -363,12 +381,22 @@ export default function PromptExamplesView({
 
             <div className="pe-field">
               <label className="pe-label">제목</label>
-              <input
-                className="pe-input"
-                value={editor.title}
-                onChange={(e) => setEditor({ ...editor, title: e.target.value })}
-                placeholder="예: 대화 9 — 첫 응대 인사"
-              />
+              {editor.mode === "edit" && editor.category === "system_message" ? (
+                <>
+                  <div className="pe-readonly">{editor.title}</div>
+                  <p className="pe-hint">
+                    자동 발송 키(제목)는 시스템이 이 값으로 문구를 조회해요. 바꾸면 자동 발송이
+                    끊기므로 수정할 수 없습니다. 본문만 편집하세요.
+                  </p>
+                </>
+              ) : (
+                <input
+                  className="pe-input"
+                  value={editor.title}
+                  onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+                  placeholder="예: 대화 9 — 첫 응대 인사"
+                />
+              )}
             </div>
 
             <div className="pe-field">
@@ -595,6 +623,12 @@ const css = `
     font-size: 13px;
     color: #6b7280;
     background: #f9fafb;
+  }
+  .pe-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #9a6a00;
   }
   .pe-modal-actions {
     display: flex;

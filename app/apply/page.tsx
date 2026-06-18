@@ -178,7 +178,7 @@ function ApplyPage() {
     workHours: [], experience: "",
     availableDate: "", selfOwnership: "",
     source: defaultSource,
-    marketingConsent: true,
+    marketingConsent: false,
   });
 
   const [step, setStep] = useState<"form" | "done">("form");
@@ -320,9 +320,9 @@ function ApplyPage() {
 
         {/* 헤더 */}
         <header className="header">
-          <img src="/logo.png" alt="옹고잉" className="logo-img" />
-          <h1 className="header-title">배송원 지원서</h1>
-          <p className="header-sub">B마트 배달 업무</p>
+          <img src="/logo.png" alt="옹보딩" className="logo-img" />
+          <h1 className="header-title">배송 파트너 지원서</h1>
+          <p className="header-sub">옹보딩 채용</p>
         </header>
 
         <main className="form-body">

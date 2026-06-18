@@ -11,6 +11,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 interface SiteManagerRow {
   id: number;
@@ -36,6 +39,8 @@ const EMPTY_NEW = {
 };
 
 export default function SiteManagersView({ branches }: Props) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<SiteManagerRow[]>([]);
   const [localRows, setLocalRows] = useState<SiteManagerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +57,10 @@ export default function SiteManagersView({ branches }: Props) {
         setRows(json.data);
         setLocalRows(json.data);
       } else {
-        alert(json.error || "매니저 목록 로드 실패");
+        toast({ title: "매니저 목록을 불러오지 못했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
       }
     } catch (e) {
-      alert("매니저 목록 로드 실패");
+      toast({ title: "매니저 목록을 불러오지 못했어요", description: "잠시 후 다시 시도해주세요", tone: "error" });
       console.error(e);
     } finally {
       setLoading(false);
@@ -89,7 +94,7 @@ export default function SiteManagersView({ branches }: Props) {
     const row = localRows.find((r) => r.id === id);
     if (!row) return;
     if (!row.name.trim() || !row.phone.trim()) {
-      alert("이름과 전화번호는 필수입니다.");
+      toast({ title: "이름과 전화번호를 입력해주세요", tone: "info" });
       return;
     }
     setSaving(id);
@@ -106,14 +111,14 @@ export default function SiteManagersView({ branches }: Props) {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "저장 실패");
+        toast({ title: "매니저 정보 저장에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       // server 응답으로 sync
       setRows((prev) => prev.map((r) => (r.id === id ? (json.data as SiteManagerRow) : r)));
       setLocalRows((prev) => prev.map((r) => (r.id === id ? (json.data as SiteManagerRow) : r)));
     } catch (e) {
-      alert("저장 실패");
+      toast({ title: "매니저 정보 저장에 실패했어요", description: "잠시 후 다시 시도해주세요", tone: "error" });
       console.error(e);
     } finally {
       setSaving(null);
@@ -121,25 +126,31 @@ export default function SiteManagersView({ branches }: Props) {
   };
 
   const deleteRow = async (id: number, name: string) => {
-    if (!confirm(`'${name}' 매니저를 삭제할까요?`)) return;
+    const ok = await confirm({
+      title: `'${name}' 매니저를 삭제할까요?`,
+      description: "삭제하면 이 매니저 정보가 사라져요.",
+      confirmText: "삭제",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/site-managers/${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "삭제 실패");
+        toast({ title: "매니저 삭제에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       setRows((prev) => prev.filter((r) => r.id !== id));
       setLocalRows((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {
-      alert("삭제 실패");
+      toast({ title: "매니저 삭제에 실패했어요", description: "잠시 후 다시 시도해주세요", tone: "error" });
       console.error(e);
     }
   };
 
   const addRow = async () => {
     if (!newRow.name.trim() || !newRow.phone.trim()) {
-      alert("이름과 전화번호는 필수입니다.");
+      toast({ title: "이름과 전화번호를 입력해주세요", tone: "info" });
       return;
     }
     setAdding(true);
@@ -156,7 +167,7 @@ export default function SiteManagersView({ branches }: Props) {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "추가 실패");
+        toast({ title: "매니저 추가에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       const created = json.data as SiteManagerRow;
@@ -164,7 +175,7 @@ export default function SiteManagersView({ branches }: Props) {
       setLocalRows((prev) => [...prev, created]);
       setNewRow(EMPTY_NEW);
     } catch (e) {
-      alert("추가 실패");
+      toast({ title: "매니저 추가에 실패했어요", description: "잠시 후 다시 시도해주세요", tone: "error" });
       console.error(e);
     } finally {
       setAdding(false);
@@ -213,9 +224,9 @@ export default function SiteManagersView({ branches }: Props) {
       </div>
 
       {loading ? (
-        <div className="loading">로딩 중...</div>
+        <LoadingState label="매니저 목록 불러오는 중…" />
       ) : localRows.length === 0 ? (
-        <div className="sm-empty">등록된 매니저가 없습니다. 위 입력란에서 추가해주세요.</div>
+        <EmptyState title="등록된 매니저가 없어요" hint="위 입력란에서 첫 매니저를 추가해보세요." />
       ) : (
         <div className="table-wrap">
           <table className="table sm-table">

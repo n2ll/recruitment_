@@ -12,6 +12,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { usePrompt } from "@/components/ui/prompt";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 import JobCreateModal from "./JobCreateModal";
 import { sentByLabel } from "./sent-by-label";
 import {
@@ -43,6 +47,8 @@ interface ChatMessage {
 }
 
 export default function AgentJobsView({ branches }: AgentJobsViewProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   // ── 공고 목록 ───────────────────────────────────────────
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -202,7 +208,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       if (!res.ok) throw new Error(json.error || "변경 실패");
       await loadCandidates(selectedJobId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "오류");
+      toast({ title: "후보 상태 변경에 실패했어요", description: e instanceof Error ? e.message : undefined, tone: "error" });
     } finally {
       setPanelActionBusy(false);
     }
@@ -227,7 +233,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       setPanelMsgInput("");
       await loadPanelMessages(panelCandidate.applicant_id, selectedJobId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "오류");
+      toast({ title: "메시지 발송에 실패했어요", description: e instanceof Error ? e.message : undefined, tone: "error" });
     } finally {
       setPanelMsgSending(false);
     }
@@ -235,7 +241,13 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
   const closeJob = async () => {
     if (!selectedJob) return;
-    if (!confirm(`"${selectedJob.title}" 공고를 마감 처리할까요?`)) return;
+    const ok = await confirm({
+      title: `'${selectedJob.title}' 공고를 마감할까요?`,
+      description: "마감하면 이 공고로는 더 이상 후보에게 발송되지 않아요.",
+      confirmText: "마감",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/jobs/${selectedJob.id}`, {
         method: "PATCH",
@@ -246,7 +258,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       if (!res.ok) throw new Error(json.error || "마감 실패");
       await loadJobs();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "오류");
+      toast({ title: "공고 마감에 실패했어요", description: e instanceof Error ? e.message : undefined, tone: "error" });
     }
   };
 
@@ -300,7 +312,10 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       <div className="ajv-body">
       <section className="ajv-main">
         {!selectedJob ? (
-          <div className="ajv-empty">왼쪽에서 공고를 선택하거나 [+ 새 공고]를 만들어주세요.</div>
+          <EmptyState
+            title="공고를 선택해주세요"
+            hint="왼쪽 목록에서 공고를 고르거나 [+ 새 공고]로 새로 만들어보세요."
+          />
         ) : (
           <>
             {/* 공고 헤더 */}
@@ -525,15 +540,17 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         }
         .ajv-create-btn {
           padding: 8px 14px;
-          background: #1a1a1a;
-          color: #fff;
+          background: #e4b976;
+          color: #3D2B00;
           border: none;
           border-radius: 8px;
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
           flex-shrink: 0;
+          transition: background 0.15s;
         }
+        .ajv-create-btn:hover { background: #d2a55f; }
         .ajv-top-toggle {
           display: flex;
           background: #f3f4f6;
@@ -745,8 +762,9 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           cursor: pointer;
           border: 1.5px solid;
         }
-        .ajv-btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-        .ajv-btn-primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
+        .ajv-btn-primary { background: #e4b976; color: #3D2B00; border-color: #e4b976; }
+        .ajv-btn-primary:hover { background: #d2a55f; border-color: #d2a55f; }
+        .ajv-btn-primary:disabled { background: #ECECEC; color: #B0B0B0; border-color: #ECECEC; cursor: not-allowed; }
         .ajv-btn-secondary { background: #fff; color: #1a1a1a; border-color: #e8e8e0; }
         .ajv-btn-secondary:disabled { color: #9ca3af; cursor: not-allowed; }
       `}</style>
@@ -838,7 +856,7 @@ function ProgressBadge({ candidate }: { candidate: CandidateRow }) {
 function ApplicantInfo({ applicant }: { applicant: ApplicantSummary }) {
   return (
     <div className="ai">
-      <h4>📋 지원자 정보</h4>
+      <h4>지원자 정보</h4>
       <div className="ai-grid">
         <div><span className="ai-l">전화</span>{applicant.phone}</div>
         <div><span className="ai-l">희망 지점</span>{applicant.branch1 ?? "-"}{applicant.branch2 ? ` / ${applicant.branch2}` : ""}</div>
@@ -904,9 +922,9 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
         ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
       >
         {loading ? (
-          <div className="ch-empty">로딩 중...</div>
+          <LoadingState label="대화 불러오는 중…" />
         ) : messages.length === 0 ? (
-          <div className="ch-empty">대화 없음</div>
+          <EmptyState title="아직 대화가 없어요" />
         ) : (
           messages.map((m) => (
             <div key={m.id} className={`ch-row ${m.direction === "outbound" ? "ch-r" : "ch-l"}`}>
@@ -968,29 +986,56 @@ function ManagerActions({
   busy: boolean;
   onPatch: (body: Record<string, unknown>) => Promise<void>;
 }) {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const stage = candidate.agent_stage;
   const isPaused = stage === "paused";
   const isAbort = stage === "abort";
 
   const pause = async () => {
-    const reason = prompt("일시정지 사유 (선택):") ?? "";
+    const reason = await prompt({
+      title: "AI 응답을 일시정지할까요?",
+      description: "매니저가 직접 대응하는 동안 AI가 답하지 않아요.",
+      placeholder: "일시정지 사유 (선택)",
+      confirmText: "일시정지",
+    });
+    if (reason == null) return;
     await onPatch({ agent_stage: "paused", paused_reason: reason || "manager pause" });
   };
 
   const resume = async () => {
-    const target = confirm("스크리닝 단계로 재개할까요?\n(취소 = 온보딩으로 재개)") ? "screening" : "onboarding";
+    const target = await prompt({
+      title: "어느 단계로 재개할까요?",
+      description: "선택한 단계부터 AI 응답이 다시 시작돼요.",
+      actions: [
+        { label: "스크리닝부터", value: "screening" },
+        { label: "온보딩(정보 수집)부터", value: "onboarding" },
+      ],
+    });
+    if (!target) return;
     await onPatch({ agent_stage: target });
   };
 
   const abort = async () => {
-    if (!confirm("부적합 처리할까요? 이 후보는 종료됩니다.")) return;
-    const reason = prompt("부적합 사유 (선택):") ?? "";
+    const ok = await confirm({
+      title: "이 후보를 부적합 처리할까요?",
+      description: "부적합으로 분류되면 이 후보의 AI 응답은 종료돼요.",
+      confirmText: "부적합 처리",
+      destructive: true,
+    });
+    if (!ok) return;
+    const reason = await prompt({
+      title: "부적합 사유를 남겨주세요",
+      placeholder: "부적합 사유 (선택)",
+      confirmText: "처리",
+    });
+    if (reason == null) return;
     await onPatch({ agent_stage: "abort", closed_reason: reason || "manager: 부적합" });
   };
 
   return (
     <div className="ma">
-      <h4>🛠 매니저 액션</h4>
+      <h4>매니저 액션</h4>
       {candidate.paused_reason && (
         <div className="ma-paused">
           ⏸ <strong>일시정지</strong>: {candidate.paused_reason}

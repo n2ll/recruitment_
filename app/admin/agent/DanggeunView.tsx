@@ -13,6 +13,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 import { SCREENING_KEYS } from "./types";
 import { sentByLabel } from "./sent-by-label";
 import ApplicantMiniDetail, { type MiniApplicantPatch } from "../ApplicantMiniDetail";
@@ -272,6 +275,8 @@ function shortWorkHours(wh: string | null): string {
 
 export default function DanggeunView({ mode = "live", branches = [] }: DanggeunViewProps) {
   const cfg = MODE_CONFIG[mode];
+  const toast = useToast();
+  const confirm = useConfirm();
   // 지점 필터(목록 좌측 패널) — '전체' / 미배정 / 각 지점
   const [branchFilter, setBranchFilter] = useState<string>("전체");
   // 인라인 상태 변경 중인 후보 (낙관적 표시용; 실패 시 fetch로 복구)
@@ -301,6 +306,8 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   const [agentStage, setAgentStage] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<AgentState>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const convBodyRef = useRef<HTMLDivElement>(null);
+  const lastConvRef = useRef<number | null>(null);
 
   // ── 연습 데이터 초기화 (practice 모드 전용) ──────────
   const [resetting, setResetting] = useState(false);
@@ -427,14 +434,32 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
     fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
 
+  // 자동 스크롤은 (1) 다른 대화를 새로 열거나 (2) 사용자가 이미 하단 근처일 때만.
+  // 위로 올려 과거 메시지를 읽는 중이면 끌어내리지 않는다.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    const el = convBodyRef.current;
+    if (!el) {
+      messagesEndRef.current?.scrollIntoView();
+      return;
+    }
+    const isNewConv = selectedId !== lastConvRef.current;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNewConv || nearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isNewConv ? "auto" : "smooth" });
+      lastConvRef.current = selectedId;
+    }
+  }, [messages.length, selectedId]);
 
   // ── 핸들러 ─────────────────────────────────────────────
   // ── 연습 데이터 초기화 (practice 모드 전용) ────────────
   const handleResetPractice = async () => {
-    if (!confirm("연습 데이터(연습용 후보·대화)를 전부 삭제합니다.\n라이브 당근 데이터는 안 건드립니다. 진행할까요?")) {
+    const ok = await confirm({
+      title: "연습 데이터를 전부 삭제할까요?",
+      description: "연습용 후보·대화가 모두 삭제돼요. 라이브 당근 데이터는 안 건드려요.",
+      confirmText: "초기화",
+      destructive: true,
+    });
+    if (!ok) {
       return;
     }
     setResetting(true);
@@ -444,15 +469,15 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "초기화 실패");
+        toast({ title: "초기화에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setSelectedId(null);
       setMessages([]);
       await fetchCandidates();
-      alert(`${json.deleted}명 삭제됨. 깨끗하게 초기화되었습니다.`);
+      toast({ title: `${json.deleted}명 삭제됨`, description: "깨끗하게 초기화됐어요.", tone: "success" });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "초기화 실패");
+      toast({ title: "초기화에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
     } finally {
       setResetting(false);
     }
@@ -496,7 +521,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       }
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.error || "발송 실패");
+        toast({ title: "발송에 실패했어요", description: j.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setOutbound("");
@@ -504,7 +529,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       // 로딩 스피너는 안 띄움 — 깜빡임 방지.
       await fetchMessages(selectedId, { silent: true });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "발송 실패");
+      toast({ title: "발송에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
     } finally {
       setSending(false);
       sendingRef.current = false;
@@ -513,6 +538,19 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
 
   // 후보 인라인 상태 변경 — 지원자목록 탭과 동일하게 PATCH /api/admin/applicants/:id
   const handleStatusChange = async (applicantId: number, newStatus: string) => {
+    // 종료성 상태(부적합/이탈)는 실수 방지용 확인.
+    if (newStatus === "부적합" || newStatus === "이탈") {
+      const c = candidates.find((x) => x.id === applicantId);
+      const ok = await confirm({
+        title: `${c?.name ?? "이 후보"} 님을 '${newStatus}'(으)로 변경할까요?`,
+        description: "종료성 상태라 파이프라인에서 빠져요.",
+        confirmText: newStatus === "부적합" ? "부적합 처리" : "이탈 처리",
+        destructive: true,
+      });
+      if (!ok) {
+        return;
+      }
+    }
     setStatusSaving(applicantId);
     // 낙관적 업데이트
     setCandidates((prev) =>
@@ -526,11 +564,11 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.error || "상태 변경 실패");
+        toast({ title: "상태 변경에 실패했어요", description: j.error || "알 수 없는 오류", tone: "error" });
         await fetchCandidates({ silent: true });
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "상태 변경 실패");
+      toast({ title: "상태 변경에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
       await fetchCandidates({ silent: true });
     } finally {
       setStatusSaving(null);
@@ -630,13 +668,16 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
           </div>
           <div className="dg-list">
             {listLoading ? (
-              <div className="dg-empty">로딩 중...</div>
+              <LoadingState label="후보 불러오는 중…" />
             ) : filteredCandidates.length === 0 ? (
-              <div className="dg-empty">
-                {candidates.length === 0
-                  ? `아직 등록된 ${cfg.channelLabel} 후보가 없습니다. [지원자 목록 → + 지원자 추가]에서 지원경로를 '${cfg.channelLabel}'으로 등록하면 여기 나타납니다.`
-                  : "검색 결과 없음"}
-              </div>
+              candidates.length === 0 ? (
+                <EmptyState
+                  title={`아직 ${cfg.channelLabel} 후보가 없어요`}
+                  hint={`[지원자 목록 → + 지원자 추가]에서 지원경로를 '${cfg.channelLabel}'으로 등록하면 여기 나타나요.`}
+                />
+              ) : (
+                <EmptyState title="검색 결과가 없어요" hint="검색어를 바꿔보세요." />
+              )
             ) : (
               filteredCandidates.map((c) => {
                 const sb = stageBadge(c.agent_stage);
@@ -744,11 +785,12 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                       className="dg-btn-pause"
                       onClick={async () => {
                         if (selectedId == null) return;
-                        if (
-                          !confirm(
-                            "AI 응답을 일시정지합니다.\n\n• 이 후보가 보내는 새 메시지에 AI가 답하지 않습니다.\n• 매니저가 직접 답변하세요.\n• 재개하려면 '▶ AI 응답 재개' 버튼을 누르세요.\n\n진행할까요?"
-                          )
-                        ) {
+                        const ok = await confirm({
+                          title: "AI 응답을 일시정지할까요?",
+                          description: "이 후보가 보내는 새 메시지에 AI가 답하지 않아요. 매니저가 직접 답변하고, 다시 '▶ AI 응답 재개'를 누르면 재개돼요.",
+                          confirmText: "일시정지",
+                        });
+                        if (!ok) {
                           return;
                         }
                         try {
@@ -759,12 +801,12 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                           });
                           const json = await res.json();
                           if (!res.ok) {
-                            alert(json.error || "일시정지 실패");
+                            toast({ title: "일시정지에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
                             return;
                           }
                           await fetchMessages(selectedId, { silent: true });
                         } catch (e) {
-                          alert(e instanceof Error ? e.message : "일시정지 실패");
+                          toast({ title: "일시정지에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
                         }
                       }}
                     >
@@ -783,7 +825,12 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     target === "screening"
                       ? "스크리닝부터 다시 진행합니다. (진행 상태 = 스크리닝 중)"
                       : "스크리닝 체크리스트를 완료한 것으로 처리하고 정보 수집(배민 아이디) 단계로 넘어갑니다. 앱설치 안내가 자동 발송됩니다. (진행 상태 = 스크리닝 완료)";
-                  if (!confirm(`'${targetLabel}' 단계로 변경합니다.\n\n${note}\n\n진행할까요?`)) return;
+                  const ok = await confirm({
+                    title: `'${targetLabel}' 단계로 변경할까요?`,
+                    description: note,
+                    confirmText: "단계 변경",
+                  });
+                  if (!ok) return;
                   try {
                     const res = await fetch("/api/admin/agent/set-stage", {
                       method: "POST",
@@ -792,12 +839,12 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     });
                     const json = await res.json();
                     if (!res.ok) {
-                      alert(json.error || "단계 변경 실패");
+                      toast({ title: "단계 변경에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
                       return;
                     }
                     await fetchMessages(selectedId, { silent: true });
                   } catch (e) {
-                    alert(e instanceof Error ? e.message : "단계 변경 실패");
+                    toast({ title: "단계 변경에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
                   }
                 }}
               />
@@ -821,11 +868,12 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                       className="dg-btn dg-btn-resume"
                       onClick={async () => {
                         if (selectedId == null) return;
-                        if (
-                          !confirm(
-                            "AI 응답을 재개합니다.\n\n• 이 버튼을 누른 시점 이후 후보가 새로 보내는 메시지부터 AI가 응답합니다.\n• 이미 도착해 있는 메시지에는 자동 응답하지 않습니다.\n• 매니저 직접 응답은 그대로 가능합니다.\n\n진행할까요?"
-                          )
-                        ) {
+                        const ok = await confirm({
+                          title: "AI 응답을 재개할까요?",
+                          description: "이 버튼을 누른 시점 이후 후보가 새로 보내는 메시지부터 AI가 응답해요. 이미 도착한 메시지엔 자동 응답하지 않고, 매니저 직접 응답은 그대로 가능해요.",
+                          confirmText: "재개",
+                        });
+                        if (!ok) {
                           return;
                         }
                         try {
@@ -836,13 +884,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                           });
                           const json = await res.json();
                           if (!res.ok) {
-                            alert(json.error || "재개 실패");
+                            toast({ title: "재개에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
                             return;
                           }
-                          alert(`AI 재개됨 (stage='${json.restored_stage}'). 다음 후보 답장부터 적용됩니다.`);
+                          toast({ title: "AI 응답을 재개했어요", description: `단계 '${json.restored_stage}' — 다음 후보 답장부터 적용돼요.`, tone: "success" });
                           await fetchMessages(selectedId, { silent: true });
                         } catch (e) {
-                          alert(e instanceof Error ? e.message : "재개 실패");
+                          toast({ title: "재개에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
                         }
                       }}
                     >
@@ -892,11 +940,11 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                 </div>
               )}
 
-              <div className="dg-conv-body">
+              <div className="dg-conv-body" ref={convBodyRef}>
                 {msgLoading ? (
-                  <div className="dg-empty">로딩 중...</div>
+                  <LoadingState label="대화 불러오는 중…" />
                 ) : messages.length === 0 ? (
-                  <div className="dg-empty">대화 내역 없음</div>
+                  <EmptyState title="아직 대화가 없어요" />
                 ) : (
                   messages.map((m) => (
                     <div
@@ -992,9 +1040,9 @@ const css = `
   }
   .dg-toolbar-left { display: flex; align-items: center; gap: 8px; }
   .dg-toolbar-actions { display: flex; gap: 8px; align-items: center; }
-  .dg-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0; }
-  .dg-count { color: #6b7280; font-weight: 500; margin-left: 4px; }
-  .dg-help { font-size: 11px; color: #6b7280; margin-left: 10px; }
+  .dg-title { font-size: 20px; font-weight: 600; color: #151515; margin: 0; letter-spacing: -0.01em; }
+  .dg-count { color: #808080; font-weight: 500; margin-left: 4px; }
+  .dg-help { font-size: 11px; color: #808080; margin-left: 10px; }
   .dg-conv-input-practice {
     background: linear-gradient(to bottom, #FEF3C7, #fff);
   }
@@ -1017,8 +1065,8 @@ const css = `
     flex-direction: column;
     gap: 8px;
     background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    border: 1px solid #e5e6e1;
+    border-radius: 12px;
     padding: 12px;
   }
   .dg-search { flex: 1; min-width: 0; }
@@ -1098,8 +1146,8 @@ const css = `
     display: flex;
     flex-direction: column;
     background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    border: 1px solid #e5e6e1;
+    border-radius: 12px;
     overflow: hidden;
     min-width: 0;
   }
@@ -1107,18 +1155,18 @@ const css = `
   .dg-input, .dg-textarea {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
+    border: 1px solid #d8d7d0;
+    border-radius: 8px;
     font-size: 13px;
     font-family: inherit;
     background: #fff;
-    color: #111827;
+    color: #151515;
   }
   .dg-textarea { resize: vertical; min-height: 60px; }
   .dg-input:focus, .dg-textarea:focus {
     outline: none;
-    border-color: #F5C518;
-    box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
+    border-color: #453b60;
+    box-shadow: 0 0 0 2px rgba(69,59,96,0.18);
   }
 
   .dg-field { display: flex; flex-direction: column; gap: 4px; }
@@ -1133,9 +1181,9 @@ const css = `
     cursor: pointer;
     font-family: inherit;
   }
-  .dg-btn-primary { background: #1f2937; color: #fff; }
-  .dg-btn-primary:hover:not(:disabled) { background: #111827; }
-  .dg-btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+  .dg-btn-primary { background: #151515; color: #fff; border-radius: 100px; padding: 8px 18px; }
+  .dg-btn-primary:hover:not(:disabled) { background: #23241f; }
+  .dg-btn-primary:disabled { background: #b8b6ae; cursor: not-allowed; }
   .dg-btn-ghost {
     background: transparent;
     border: 1px solid #d1d5db;
@@ -1173,8 +1221,8 @@ const css = `
     gap: 4px;
     font-family: inherit;
   }
-  .dg-list-item:hover { background: #f9fafb; }
-  .dg-list-active { background: #FFFBEB !important; border-color: #F5C518; }
+  .dg-list-item:hover { background: #f6f5f1; }
+  .dg-list-active { background: #efecf4 !important; border-color: #453b60; }
   .dg-list-row { display: flex; align-items: center; gap: 6px; }
   .dg-list-name { font-weight: 600; font-size: 13px; color: #111827; flex: 1; }
   .dg-list-meta { font-size: 11px; color: #6b7280; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
@@ -1218,11 +1266,11 @@ const css = `
   .dg-conv-head {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid #e5e7eb;
-    background: #f9fafb;
+    border-bottom: 1px solid #e5e6e1;
+    background: #fbfbf9;
   }
-  .dg-conv-name { font-weight: 700; font-size: 14px; color: #111827; }
-  .dg-conv-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .dg-conv-name { font-weight: 700; font-size: 14px; color: #151515; }
+  .dg-conv-sub { font-size: 12px; color: #3a4444; margin-top: 2px; }
   .dg-conv-actions { display: flex; gap: 6px; }
   .dg-btn-pause {
     background: #FEF3C7;
@@ -1243,7 +1291,7 @@ const css = `
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background: #f9fafb;
+    background: #fbfbf9;
   }
   .dg-msg { display: flex; flex-direction: column; max-width: 70%; }
   .dg-msg-in { align-self: flex-start; }
@@ -1256,13 +1304,13 @@ const css = `
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .dg-msg-in .dg-msg-bubble { background: #fff; border: 1px solid #e5e7eb; }
-  .dg-msg-out .dg-msg-bubble { background: #FEF3C7; color: #1f2937; }
-  .dg-msg-meta { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+  .dg-msg-in .dg-msg-bubble { background: #fff; border: 1px solid #e5e6e1; color: #151515; }
+  .dg-msg-out .dg-msg-bubble { background: #453b60; color: #ffffff; }
+  .dg-msg-meta { font-size: 10px; color: #808080; margin-top: 3px; }
   .dg-msg-reasoning {
     font-size: 11px;
-    background: #EFF6FF;
-    border-left: 3px solid #3B82F6;
+    background: #efecf4;
+    border-left: 3px solid #453b60;
     padding: 6px 10px;
     margin-top: 6px;
     border-radius: 0 6px 6px 0;
@@ -1274,12 +1322,12 @@ const css = `
   .dg-reasoning-label {
     font-size: 10px;
     font-weight: 700;
-    color: #1D4ED8;
+    color: #453b60;
     margin-bottom: 2px;
     letter-spacing: 0.02em;
   }
   .dg-reasoning-body {
-    color: #1E40AF;
+    color: #3a4444;
   }
   .dg-typing-bubble {
     display: inline-flex;

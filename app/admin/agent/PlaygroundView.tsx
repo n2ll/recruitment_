@@ -11,6 +11,9 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { EmptyState } from "@/components/ui/states";
 import {
   AgentState,
   ONBOARDING_KEYS,
@@ -57,6 +60,8 @@ interface ConvTurn {
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 
 export default function PlaygroundView({ branches }: PlaygroundViewProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   // ── 공고 ──────────────────────────────────────────────
   const [rough, setRough] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -126,7 +131,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
   const generateBody = async () => {
     if (!rough.trim()) {
-      alert("메모를 입력해주세요.");
+      toast({ title: "메모를 입력해주세요", tone: "info" });
       return;
     }
     setGenerating(true);
@@ -139,7 +144,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "공고 생성 실패");
+        toast({ title: "공고 생성에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setJobBody(json.posting || "");
@@ -147,7 +152,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
       const firstLine = (json.posting as string).split("\n")[0]?.replace(/[\[\]]/g, "").trim();
       if (firstLine) setJobTitle(firstLine.slice(0, 60));
     } catch {
-      alert("공고 생성 중 오류");
+      toast({ title: "공고 생성 중 오류가 발생했어요", tone: "error" });
     } finally {
       setGenerating(false);
     }
@@ -155,7 +160,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
   const fetchRecommendations = async () => {
     if (!jobBody.trim()) {
-      alert("공고 본문을 먼저 작성해주세요.");
+      toast({ title: "공고 본문을 먼저 작성해주세요", tone: "info" });
       return;
     }
     setRecLoading(true);
@@ -171,13 +176,13 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "추천 실패");
+        toast({ title: "추천에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setCandidates(json.candidates || []);
       if (!jobPickup && json.job?.address) setJobPickup(json.job.address);
     } catch {
-      alert("추천 중 오류");
+      toast({ title: "추천 중 오류가 발생했어요", tone: "error" });
     } finally {
       setRecLoading(false);
     }
@@ -188,11 +193,18 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
     setAppPhone(c.phone);
     setAppLocation(c.location ?? c.sigungu ?? "");
     setAppOwnVehicle(c.own_vehicle ?? "있음");
-    alert(`${c.name}님의 정보를 지원자로 가져왔습니다.`);
+    toast({ title: `${c.name}님의 정보를 지원자로 가져왔어요`, tone: "success" });
   };
 
-  const resetSim = () => {
-    if (conversation.length > 0 && !confirm("대화·체크리스트를 초기화할까요?")) return;
+  const resetSim = async () => {
+    if (conversation.length > 0) {
+      const ok = await confirm({
+        title: "대화·체크리스트를 초기화할까요?",
+        confirmText: "초기화",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
     setStage("exploration");
     setAgentState({});
     setConversation([]);
@@ -534,10 +546,10 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
         >
           {conversation.length === 0 ? (
-            <div className="pg-empty">
-              아래에 <strong>지원자처럼</strong> 메시지를 입력하면<br/>
-              실제 stage 모듈이 호출되어 응답이 옵니다.
-            </div>
+            <EmptyState
+              title="지원자처럼 메시지를 입력해보세요"
+              hint="입력하면 실제 stage 모듈이 호출되어 응답이 옵니다."
+            />
           ) : (
             conversation.map((t, idx) => (
               <div key={idx} className={`pg-row ${t.direction === "inbound" ? "pg-l" : "pg-r"}`}>

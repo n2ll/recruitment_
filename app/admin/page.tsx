@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
@@ -11,204 +11,36 @@ import { sourceLabel } from "@/lib/applicant-source";
 import ApplicantFormModal, { type ApplicantFormValue } from "./ApplicantFormModal";
 import PendingInboxView from "./inbox/PendingInboxView";
 import ApplicantMiniDetail from "./ApplicantMiniDetail";
-
-interface Applicant {
-  id: number;
-  created_at: string;
-  name: string;
-  birth_date: string;
-  phone: string;
-  location: string;
-  own_vehicle: string;
-  license_type: string;
-  vehicle_type: string;
-  branch1: string;
-  branch2: string | null;
-  work_hours: string;
-  introduction: string | null;
-  experience: string | null;
-  available_date: string | null;
-  self_ownership: string;
-  screening: string | null;
-  status: string;
-  branch: string | null;
-  source: string;
-  filter_pass: string | null;
-  note: string | null;        // 시스템 태그 ("중복지원" 등) — UI 읽기 전용
-  memo: string | null;        // 매니저 자유 메모 — UI에서 편집
-  sort_order: number | null;  // PPC 표 안에서 매니저가 ↑↓로 조정하는 순서
-  last_message_at: string | null;
-  unread_count: number;
-  start_date: string | null;
-  confirmed_slot: string | null;
-  confirmed_branch: string | null;
-  current_branch: string | null;
-  churned_at: string | null;
-  churn_reason: string | null;
-  agent_stage?: string | null;   // GET 응답에 attached (당근마켓구인과 동일 출처)
-  // PPC 상세 페이지 필드
-  baemin_id: string | null;
-  guide_sent: boolean;
-  onboarding_call_status: string | null;
-  kakao_channel_friend: boolean | null;
-  bname: string | null;          // 거주지 동 단위 (지오코딩 결과)
-  sigungu: string | null;        // 거주지 시군구 (bname 없을 때 fallback)
-}
-
-interface Message {
-  id: string;
-  applicant_id: number | null;
-  applicant_phone: string;
-  direction: "inbound" | "outbound";
-  body: string;
-  status: string;
-  sent_by: string | null;
-  solapi_msg_id: string | null;
-  created_at: string;
-  reasoning?: string | null;
-}
-
-interface Heartbeat {
-  device_id: string;
-  last_seen_at: string;
-  pending_count: number;
-  battery_level: number;
-  app_version: string | null;
-}
-
-type Tab = "dashboard" | "applicants" | "contact" | "inbox" | "hope-slots" | "confirmed-slots" | "recommend" | "branches" | "site-managers" | "agent" | "playground" | "danggeun" | "baemin" | "danggeun-practice" | "klod";
-
-interface RecommendResponse {
-  success: boolean;
-  job: {
-    address: string;
-    lat: number;
-    lng: number;
-    sigungu?: string | null;
-    vehicle_required: boolean;
-    schedule?: string;
-    summary?: string;
-  };
-  poolSize: number;
-  candidates: Array<{
-    id: number;
-    source: "applicant" | "legacy";
-    name: string;
-    phone: string;
-    sigungu?: string | null;
-    location?: string | null;
-    own_vehicle?: string | null;
-    created_at: string;
-    birth_date?: string | null;
-    score: {
-      total: number;
-      distance: number;
-      vehicle: number;
-      recency: number;
-      distanceKm: number;
-    };
-  }>;
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  "스크리닝 전":   "#9CA3AF",  // 회색 (대기/시작 전)
-  "스크리닝 중":   "#6b7280",  // 진한 회색
-  "스크리닝 완료": "#0EA5E9",  // 하늘색
-  "기타":          "#8B5CF6",  // 보라 (특수 케이스 보관용)
-  "확정인력":      "#10b981",  // 초록 (매니저 확정)
-  "대기자":        "#f59e0b",  // 주황 (매니저 보류)
-  "부적합":        "#ef4444",  // 빨강
-  "이탈":          "#7f1d1d",  // 진한 적갈색 (확정 → 이탈)
-};
-
-const ALL_STATUSES = [
-  "스크리닝 전", "스크리닝 중", "스크리닝 완료", "기타", "확정인력", "대기자", "부적합", "이탈",
-];
-
-interface Branch {
-  id: number;
-  name: string;
-  sort_order: number;
-  active: boolean;
-  slot_capacity?: Record<string, number>;
-  ai_facts?: string | null;
-}
-
-const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
-type SlotKey = typeof SLOTS[number];
-
-// 소싱팀 원칙: 오전 3, 오후 4 (평일/주말 동일).
-const DEFAULT_SLOT_CAPACITY: Record<SlotKey, number> = {
-  평일오전: 3,
-  평일오후: 4,
-  주말오전: 3,
-  주말오후: 4,
-};
-
-function getSlotCapacity(branch: Branch | undefined, slot: SlotKey): number {
-  const v = branch?.slot_capacity?.[slot];
-  return typeof v === "number" ? v : DEFAULT_SLOT_CAPACITY[slot];
-}
-
-// birth_date(YYMMDD) → 만 나이. 50~99 → 19xx, 00~49 → 20xx.
-function calcAge(birth_date: string | null | undefined): number | null {
-  if (!birth_date || !/^\d{6}$/.test(birth_date)) return null;
-  const yy = parseInt(birth_date.slice(0, 2), 10);
-  const mm = parseInt(birth_date.slice(2, 4), 10);
-  const dd = parseInt(birth_date.slice(4, 6), 10);
-  const year = yy >= 50 ? 1900 + yy : 2000 + yy;
-  const today = new Date();
-  let age = today.getFullYear() - year;
-  const beforeBirthday =
-    today.getMonth() + 1 < mm ||
-    (today.getMonth() + 1 === mm && today.getDate() < dd);
-  if (beforeBirthday) age--;
-  return age;
-}
-
-// work_hours 값을 짧은 표기로 ("평일(월~금) 오전 타임 (09:00 ~ 14:00)" → "평일 오전")
-function shortWorkHours(wh: string | null | undefined): string {
-  if (!wh) return "";
-  return wh
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((token) => {
-      const day = token.includes("주말") ? "주말" : token.includes("평일") ? "평일" : "";
-      const time = token.includes("오전") ? "오전" : token.includes("오후") ? "오후" : "";
-      return day && time ? `${day} ${time}` : token;
-    })
-    .join(", ");
-}
-
-// work_hours 텍스트(콤마 join된 4슬롯 중 선택값) → 슬롯 매칭
-function matchesSlot(workHours: string | null | undefined, slot: SlotKey): boolean {
-  if (!workHours) return false;
-  const wantPyeongil = slot.startsWith("평일");
-  const wantMorning = slot.endsWith("오전");
-  return workHours.split(",").map((t) => t.trim()).some((tok) => {
-    const dayOk = wantPyeongil ? tok.includes("평일") : tok.includes("주말");
-    const timeOk = wantMorning ? tok.includes("오전") : tok.includes("오후");
-    return dayOk && timeOk;
-  });
-}
-
-// 확정 슬롯 매트릭스·PPC 표용 — 매니저가 확정한 slot이 있으면 그것, 없으면 희망(work_hours)로 폴백.
-// (희망 슬롯 탭에서는 항상 work_hours를 그대로 쓴다)
-function effectiveSlot(a: { confirmed_slot?: string | null; work_hours?: string | null }): string | null {
-  if (a.confirmed_slot && a.confirmed_slot.trim()) return a.confirmed_slot;
-  return a.work_hours ?? null;
-}
-
-const ACTIVE_STATUSES = ["스크리닝 전", "스크리닝 중", "스크리닝 완료", "확정인력", "대기자"];
+import { AppShell } from "@/components/admin/AppShell";
+import { PipelineView } from "@/components/admin/PipelineView";
+import { DashboardView } from "@/components/admin/DashboardView";
+import { RecommendView } from "@/components/admin/RecommendView";
+import { BranchAdminView } from "@/components/admin/BranchAdminView";
+import { HopeSlotsView } from "@/components/admin/HopeSlotsView";
+import { ConfirmedSlotsView } from "@/components/admin/ConfirmedSlotsView";
+import { ChatPanel } from "@/components/admin/ChatPanel";
+import { ApplicantDetailView } from "@/components/admin/ApplicantDetailView";
+import { useToast } from "@/components/ui/toast";
+import { LoadingState, EmptyState } from "@/components/ui/states";
+import {
+  type Applicant,
+  type Heartbeat,
+  type Branch,
+  type Tab,
+  STATUS_COLORS,
+  ALL_STATUSES,
+  SLOTS,
+  calcAge,
+  shortWorkHours,
+  matchesSlot,
+} from "@/lib/admin/types";
 
 const SIDEBAR_PIN_KEY = "admin_sidebar_pinned";
 
 export default function AdminPage() {
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [sidebarPinned, setSidebarPinned] = useState(true);
-  const [sidebarHovered, setSidebarHovered] = useState(false);
-  const sidebarExpanded = sidebarPinned || sidebarHovered;
   const [showOther, setShowOther] = useState(false);
 
   // 사이드바 핀 상태 — localStorage 복구
@@ -229,6 +61,7 @@ export default function AdminPage() {
   }, [sidebarPinned]);
   const [data, setData] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("전체");
@@ -240,20 +73,8 @@ export default function AdminPage() {
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
   const [modalInitial, setModalInitial] = useState<ApplicantFormValue | null>(null);
 
-  // 문자 대화 관련 state
+  // 문자 대화 — 열린 지원자만 page가 보관(나머지 상태/구독은 ChatPanel이 소유)
   const [chatApplicant, setChatApplicant] = useState<Applicant | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [msgInput, setMsgInput] = useState("");
-  const [msgSending, setMsgSending] = useState(false);
-  const [draft, setDraft] = useState<{
-    id: string;
-    draft_text: string | null;
-    reasoning: string | null;
-    missing_info: string | null;
-    status: "pending" | "need_info";
-  } | null>(null);
-  const [draftEdited, setDraftEdited] = useState(false);
 
   // 구인 에이전트 테스트 탭 (세션 기반 — 공고만으로 응대 시뮬레이션)
   type AgentSessionTurn = {
@@ -277,7 +98,7 @@ export default function AdminPage() {
   const runAgentTest = async () => {
     const inbound = agentNextInbound.trim();
     if (!inbound) {
-      alert("인입 메시지를 입력해주세요.");
+      toast({ title: "인입 메시지를 입력해주세요", tone: "info" });
       return;
     }
     setAgentLoading(true);
@@ -305,7 +126,7 @@ export default function AdminPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "테스트 실패");
+        toast({ title: json.error || "테스트에 실패했어요", tone: "error" });
         setAgentSession([
           ...sessionWithInbound,
           {
@@ -336,7 +157,7 @@ export default function AdminPage() {
       ]);
     } catch (e) {
       console.error(e);
-      alert("테스트 중 오류");
+      toast({ title: "테스트 중 오류가 발생했어요", tone: "error" });
     } finally {
       setAgentLoading(false);
     }
@@ -355,430 +176,25 @@ export default function AdminPage() {
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
 
-  // 희망 슬롯 탭의 셀 드릴다운 (확정 슬롯 탭은 풀스크린 PPC로 이전됨)
-  const [slotCell, setSlotCell] = useState<{ branch: string; slot: SlotKey } | null>(null);
-  // 확정 슬롯 탭에서 지점 행 클릭 시 열리는 PPC 상세 (풀스크린 토글)
-  const [branchDetail, setBranchDetail] = useState<string | null>(null);
-  // PPC 상세에서 시간대 필터 (복수 선택 가능. 비어 있으면 전체)
-  const [ppcSlotFilter, setPpcSlotFilter] = useState<Set<SlotKey>>(new Set());
   // PPC 상세에서 '✏️ 편집' 버튼으로 여는 미니 모달 — 지원자 목록과 동일한 섹션 편집 UX.
   const [ppcDetailId, setPpcDetailId] = useState<number | null>(null);
 
-  // 상세 패널 임시 편집 상태 (명시적 저장)
-  const [editDraft, setEditDraft] = useState<Partial<Applicant>>({});
-  const [savingEdit, setSavingEdit] = useState(false);
-  // 지원자 상세 풀스크린에서 어떤 섹션이 편집 모드인지 (한 번에 하나만)
-  const [editingSection, setEditingSection] = useState<string | null>(null);
-  // 지원자 바뀌면 편집 상태 자동 초기화 (다른 사람 데이터 오염 방지)
-  useEffect(() => {
-    setEditDraft({});
-    setEditingSection(null);
-  }, [selectedId]);
-  useEffect(() => { setEditDraft({}); }, [selectedId]);
-
   // 추천 받기 state
-  const [recPosting, setRecPosting] = useState("");
-  const [recManualAddr, setRecManualAddr] = useState("");
-  const [recVehicleRequired, setRecVehicleRequired] = useState(true);
-  const [recLoading, setRecLoading] = useState(false);
-  const [recResult, setRecResult] = useState<RecommendResponse | null>(null);
-  const [recSelected, setRecSelected] = useState<Set<string>>(new Set());
-  const [recSending, setRecSending] = useState(false);
-  const [recRough, setRecRough] = useState("");
-  const [recGenerating, setRecGenerating] = useState(false);
-  const [recGenMissing, setRecGenMissing] = useState<string[]>([]);
-
-  const candidateKey = (c: { source: string; id: number }) => `${c.source}-${c.id}`;
-
-  const generateRecPosting = async () => {
-    if (!recRough.trim()) {
-      alert("간단한 메모를 입력해주세요.");
-      return;
-    }
-    setRecGenerating(true);
-    setRecGenMissing([]);
-    try {
-      const res = await fetch("/api/admin/recommend/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rough: recRough }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error || "공고 생성 실패");
-        return;
-      }
-      setRecPosting(json.posting || "");
-      setRecGenMissing(Array.isArray(json.missing) ? json.missing : []);
-    } catch (e) {
-      console.error(e);
-      alert("공고 생성 중 오류가 발생했습니다.");
-    } finally {
-      setRecGenerating(false);
-    }
-  };
-
-  const ageFromBirthDate = (birth: string | null | undefined): number | null => {
-    if (!birth) return null;
-    const d = birth.replace(/\D/g, "");
-    if (d.length !== 6) return null;
-    const yy = parseInt(d.slice(0, 2), 10);
-    const mm = parseInt(d.slice(2, 4), 10);
-    const dd = parseInt(d.slice(4, 6), 10);
-    if (isNaN(yy) || isNaN(mm) || isNaN(dd)) return null;
-    const now = new Date();
-    const currentYY = now.getFullYear() % 100;
-    const fullYear = yy <= currentYY ? 2000 + yy : 1900 + yy;
-    let age = now.getFullYear() - fullYear;
-    const beforeBirthday =
-      now.getMonth() + 1 < mm ||
-      (now.getMonth() + 1 === mm && now.getDate() < dd);
-    if (beforeBirthday) age -= 1;
-    return age >= 0 && age < 120 ? age : null;
-  };
-
-  const runRecommend = async () => {
-    if (!recPosting.trim()) {
-      alert("공고 내용을 입력해주세요.");
-      return;
-    }
-    setRecLoading(true);
-    setRecResult(null);
-    setRecSelected(new Set());
-    try {
-      const res = await fetch("/api/admin/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          posting: recPosting,
-          manualAddress: recManualAddr || undefined,
-          manualVehicleRequired: recVehicleRequired,
-          topN: 10,
-        }),
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (!json.success) {
-        alert("추천 실패: " + (json.error || "알 수 없는 오류"));
-        return;
-      }
-      setRecResult(json);
-      setRecSelected(new Set(json.candidates.map(candidateKey)));
-    } catch {
-      alert("네트워크 오류");
-    } finally {
-      setRecLoading(false);
-    }
-  };
-
-  const loadMoreRec = async () => {
-    if (!recResult || recLoading) return;
-    const currentCount = recResult.candidates.length;
-    const newTopN = currentCount + 10;
-    if (newTopN > 50) {
-      alert("최대 50명까지 표시 가능합니다.");
-      return;
-    }
-    setRecLoading(true);
-    try {
-      const res = await fetch("/api/admin/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          posting: recPosting,
-          manualAddress: recManualAddr || undefined,
-          manualVehicleRequired: recVehicleRequired,
-          topN: newTopN,
-        }),
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (!json.success) {
-        alert("추가 추천 실패: " + (json.error || "알 수 없는 오류"));
-        return;
-      }
-      // 신규 후보만 디폴트 체크 (기존 선택 상태는 유지)
-      const previouslyShown = new Set(recResult.candidates.map(candidateKey));
-      const next = new Set(recSelected);
-      for (const c of json.candidates) {
-        const k = candidateKey(c);
-        if (!previouslyShown.has(k)) next.add(k);
-      }
-      setRecResult(json);
-      setRecSelected(next);
-    } catch {
-      alert("네트워크 오류");
-    } finally {
-      setRecLoading(false);
-    }
-  };
-
-  const toggleRecPick = (key: string) => {
-    setRecSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const sendRecMessages = async () => {
-    if (!recResult) return;
-    const picked = recResult.candidates.filter((c) => recSelected.has(candidateKey(c)));
-    if (picked.length === 0) {
-      alert("발송 대상을 선택해주세요.");
-      return;
-    }
-    if (!confirm(`${picked.length}명에게 SMS 발송하시겠습니까?`)) return;
-    setRecSending(true);
-    try {
-      const res = await fetch("/api/admin/messages/bulk-send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipients: picked.map((c) => ({
-            phone: c.phone,
-            applicant_id: c.source === "applicant" ? c.id : null,
-          })),
-          body: recPosting,
-        }),
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert(`발송 완료: 성공 ${json.sent}건 / 실패 ${json.failed}건`);
-      } else {
-        alert("발송 실패: " + (json.error || ""));
-      }
-    } catch {
-      alert("네트워크 오류");
-    } finally {
-      setRecSending(false);
-    }
-  };
-
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/admin/applicants", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json.data || []);
+      setLoadError(false);
     } catch {
       console.error("데이터 로딩 실패");
+      setLoadError(true);
     } finally {
       if (!silent) setLoading(false);
     }
   }, []);
-
-  const [newBranchName, setNewBranchName] = useState("");
-  const [branchSaving, setBranchSaving] = useState(false);
-  const [localBranches, setLocalBranches] = useState<Branch[]>([]);
-  const [dragId, setDragId] = useState<number | null>(null);
-  const [dragOverId, setDragOverId] = useState<number | null>(null);
-  // 지점관리 행에서 AI 참고 정보(ai_facts) 입력 영역 펼침 (한 번에 하나만)
-  const [expandedAiFactsId, setExpandedAiFactsId] = useState<number | null>(null);
-  const userEditedRef = useRef(false);
-
-  // 사용자가 편집 중이면 서버 동기화로 덮어쓰지 않음
-  useEffect(() => {
-    if (!userEditedRef.current) {
-      const sorted = [...branches].sort((a, b) => a.sort_order - b.sort_order);
-      setLocalBranches(sorted);
-    }
-  }, [branches]);
-
-  // 변경 여부 계산 (UI 표시용)
-  const branchesDirty = (() => {
-    if (localBranches.length !== branches.length) return false; // 길이 다르면 아직 sync 안 된 것
-    const serverOrdered = [...branches].sort((a, b) => a.sort_order - b.sort_order);
-    for (let i = 0; i < localBranches.length; i++) {
-      const lb = localBranches[i];
-      const sb = serverOrdered[i];
-      if (!sb) return true;
-      if (lb.id !== sb.id) return true;
-      if (lb.name !== sb.name || lb.active !== sb.active) return true;
-      if ((lb.ai_facts ?? "") !== (sb.ai_facts ?? "")) return true;
-      // slot_capacity 변경 감지
-      for (const k of SLOTS) {
-        if (getSlotCapacity(lb, k) !== getSlotCapacity(sb, k)) return true;
-      }
-    }
-    return false;
-  })();
-
-  const markEdited = () => {
-    userEditedRef.current = true;
-  };
-
-  const updateLocalBranch = (id: number, updates: Partial<Branch>) => {
-    markEdited();
-    setLocalBranches((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, ...updates } : b))
-    );
-  };
-
-  const handleDragStart = (id: number) => setDragId(id);
-  const handleDragOver = (e: React.DragEvent, id: number) => {
-    e.preventDefault();
-    if (id !== dragOverId) setDragOverId(id);
-  };
-  const handleDrop = (targetId: number) => {
-    if (dragId === null || dragId === targetId) {
-      setDragId(null);
-      setDragOverId(null);
-      return;
-    }
-    markEdited();
-    setLocalBranches((prev) => {
-      const fromIdx = prev.findIndex((b) => b.id === dragId);
-      const toIdx = prev.findIndex((b) => b.id === targetId);
-      if (fromIdx < 0 || toIdx < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, moved);
-      return next;
-    });
-    setDragId(null);
-    setDragOverId(null);
-  };
-
-  const resetBranchChanges = () => {
-    userEditedRef.current = false;
-    const sorted = [...branches].sort((a, b) => a.sort_order - b.sort_order);
-    setLocalBranches(sorted);
-  };
-
-  const saveBranchChanges = async () => {
-    const byId = new Map(branches.map((b) => [b.id, b]));
-    const ops: Array<Promise<{ ok: boolean; id: number; error?: string }>> = [];
-
-    localBranches.forEach((lb, idx) => {
-      const sb = byId.get(lb.id);
-      if (!sb) return;
-      const newSortOrder = (idx + 1) * 10;
-      const updates: Partial<Branch> = {};
-      if (lb.name !== sb.name) updates.name = lb.name;
-      if (lb.active !== sb.active) updates.active = lb.active;
-      if ((lb.ai_facts ?? "") !== (sb.ai_facts ?? "")) updates.ai_facts = lb.ai_facts ?? null;
-      if (newSortOrder !== sb.sort_order) updates.sort_order = newSortOrder;
-      // slot_capacity 변경 감지
-      const capDiff = SLOTS.some(
-        (k) => getSlotCapacity(lb, k) !== getSlotCapacity(sb, k)
-      );
-      if (capDiff) {
-        const cap: Record<string, number> = {};
-        for (const k of SLOTS) cap[k] = getSlotCapacity(lb, k);
-        updates.slot_capacity = cap;
-      }
-      if (Object.keys(updates).length === 0) return;
-
-      // 이름 변경 시 사용 중이면 사전 확인
-      if (updates.name) {
-        const usage = data.filter(
-          (a) =>
-            a.branch === sb.name ||
-            a.branch1 === sb.name ||
-            a.branch2 === sb.name ||
-            a.confirmed_branch === sb.name ||
-            a.current_branch === sb.name
-        ).length;
-        if (usage > 0) {
-          if (
-            !confirm(
-              `'${sb.name}' → '${updates.name}' 로 이름이 변경됩니다.\n` +
-                `이 지점은 지원자 ${usage}명이 참조 중이며, 기존 데이터의 지점 이름은 자동 변경되지 않습니다.\n계속하시겠어요?`
-            )
-          ) {
-            // 이 한 건만 롤백
-            updateLocalBranch(lb.id, { name: sb.name });
-            return;
-          }
-        }
-      }
-
-      ops.push(
-        fetch(`/api/admin/branches/${lb.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(updates),
-        }).then(async (res) => {
-          const json = await res.json();
-          return { ok: res.ok, id: lb.id, error: json.error };
-        })
-      );
-    });
-
-    if (ops.length === 0) return;
-    setBranchSaving(true);
-    try {
-      const results = await Promise.all(ops);
-      const fails = results.filter((r) => !r.ok);
-      if (fails.length > 0) {
-        alert(`${fails.length}건 저장 실패: ${fails[0].error || "오류"}`);
-      }
-      userEditedRef.current = false;
-      await fetchBranchesRef.current?.();
-    } catch (e) {
-      console.error(e);
-      alert("저장 중 오류가 발생했습니다.");
-    } finally {
-      setBranchSaving(false);
-    }
-  };
-
-  const addBranch = async () => {
-    const name = newBranchName.trim();
-    if (!name) {
-      alert("지점 이름을 입력해주세요.");
-      return;
-    }
-    setBranchSaving(true);
-    try {
-      const res = await fetch("/api/admin/branches", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error || "지점 추가 실패");
-        return;
-      }
-      setNewBranchName("");
-      userEditedRef.current = false;
-      await fetchBranchesRef.current?.();
-    } catch (e) {
-      console.error(e);
-      alert("지점 추가 중 오류");
-    } finally {
-      setBranchSaving(false);
-    }
-  };
-
-  const deleteBranch = async (id: number, name: string) => {
-    if (!confirm(`'${name}' 지점을 삭제하시겠어요?\n해당 지점에 지원자가 있으면 비활성화 처리됩니다.`)) return;
-    setBranchSaving(true);
-    try {
-      const res = await fetch(`/api/admin/branches/${id}`, { method: "DELETE" });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error || "삭제 실패");
-        return;
-      }
-      if (json.soft) {
-        alert(json.message || "지원자가 있어 비활성화 처리했습니다.");
-      }
-      userEditedRef.current = false;
-      await fetchBranchesRef.current?.();
-    } catch (e) {
-      console.error(e);
-      alert("삭제 중 오류");
-    } finally {
-      setBranchSaving(false);
-    }
-  };
-
-  const fetchBranchesRef = useRef<(() => Promise<void>) | null>(null);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -791,10 +207,6 @@ export default function AdminPage() {
       setBranchesLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    fetchBranchesRef.current = fetchBranches;
-  }, [fetchBranches]);
 
   const fetchHeartbeats = useCallback(async () => {
     try {
@@ -818,7 +230,7 @@ export default function AdminPage() {
         });
         const json = await res.json();
         if (!json.success) {
-          alert("저장 실패: " + (json.error || "알 수 없는 오류"));
+          toast({ title: "저장에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
           fetchData(true);
           return false;
         }
@@ -826,115 +238,24 @@ export default function AdminPage() {
         return true;
       } catch (err) {
         console.error("[patchApplicant]", err);
-        alert("네트워크 오류");
+        toast({ title: "네트워크 오류가 발생했어요", tone: "error" });
         fetchData(true);
         return false;
       }
     },
-    [fetchData]
+    [fetchData, toast]
   );
 
-  const openChat = async (applicant: Applicant) => {
+  const openChat = (applicant: Applicant) => {
     setChatApplicant(applicant);
-    setChatLoading(true);
-    setDraft(null);
-    setDraftEdited(false);
-    try {
-      const res = await fetch(`/api/admin/messages/${applicant.id}`, { cache: "no-store" });
-      const json = await res.json();
-      setMessages(json.data || []);
-      setDraft(json.draft || null);
-      // unread_count 로컬 초기화
-      setData((prev) =>
-        prev.map((a) => (a.id === applicant.id ? { ...a, unread_count: 0 } : a))
-      );
-    } catch {
-      console.error("대화 로딩 실패");
-    } finally {
-      setChatLoading(false);
-    }
   };
 
-  const closeChat = () => {
-    setChatApplicant(null);
-    setMessages([]);
-    setMsgInput("");
-    setDraft(null);
-    setDraftEdited(false);
-  };
-
-  const useDraftAsInput = () => {
-    if (!draft?.draft_text) return;
-    setMsgInput(draft.draft_text);
-    setDraftEdited(false);
-  };
-
-  const ignoreDraft = async () => {
-    if (!draft) return;
-    const id = draft.id;
-    setDraft(null);
-    try {
-      await fetch(`/api/admin/drafts/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ignored" }),
-      });
-    } catch {
-      // ignore
-    }
-  };
-
-  const sendBody = async (text: string, opts: { draftId?: string; edited?: boolean }) => {
-    if (!chatApplicant || !text.trim() || msgSending) return;
-    setMsgSending(true);
-    try {
-      const res = await fetch("/api/admin/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicant_id: chatApplicant.id,
-          phone: chatApplicant.phone,
-          body: text.trim(),
-          sent_by: "관리자",
-          draft_id: opts.draftId,
-          draft_was_edited: !!opts.edited,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setMessages((prev) => [...prev, json.message]);
-        setMsgInput("");
-        setDraft(null);
-        setDraftEdited(false);
-      } else {
-        alert("발송 실패: " + (json.error || "알 수 없는 오류"));
-      }
-    } catch {
-      alert("발송 중 오류 발생");
-    } finally {
-      setMsgSending(false);
-    }
-  };
-
-  const sendMessage = () => {
-    if (!msgInput.trim()) return;
-    const text = msgInput.trim();
-    const usingDraft = !!draft?.draft_text && draft.draft_text === text;
-    const editedDraft = !!draft?.draft_text && draft.draft_text !== text && draftEdited;
-    sendBody(text, {
-      draftId: usingDraft || editedDraft ? draft?.id : undefined,
-      edited: editedDraft,
-    });
-  };
-
-  const sendDraftDirect = () => {
-    if (!draft?.draft_text) return;
-    sendBody(draft.draft_text, { draftId: draft.id, edited: false });
-  };
-
-  // 현재 열려있는 chat applicant 참조 — Realtime 핸들러 안에서 최신 값 접근용
-  const chatApplicantRef = useRef<Applicant | null>(null);
-  useEffect(() => { chatApplicantRef.current = chatApplicant; }, [chatApplicant]);
+  // ChatPanel 열람 시 목록의 unread_count를 0으로 동기화
+  const clearUnread = useCallback((applicantId: number) => {
+    setData((prev) =>
+      prev.map((a) => (a.id === applicantId ? { ...a, unread_count: 0 } : a))
+    );
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -946,7 +267,7 @@ export default function AdminPage() {
     return () => { clearInterval(dataInterval); clearInterval(hbInterval); };
   }, [fetchData, fetchHeartbeats, fetchBranches]);
 
-  // ── Realtime 구독: applicants / messages / device_heartbeat ──
+  // ── Realtime 구독: applicants / device_heartbeat (messages·drafts는 ChatPanel이 소유) ──
   useEffect(() => {
     const supabase = getBrowserClient();
 
@@ -969,52 +290,6 @@ export default function AdminPage() {
           } else if (payload.eventType === "DELETE") {
             const oldRow = payload.old as Applicant;
             setData((prev) => prev.filter((a) => a.id !== oldRow.id));
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const msg = payload.new as Message;
-          const current = chatApplicantRef.current;
-          if (
-            current &&
-            (msg.applicant_id === current.id || msg.applicant_phone === current.phone)
-          ) {
-            setMessages((prev) =>
-              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "message_drafts" },
-        (payload) => {
-          const d = payload.new as {
-            id: string;
-            applicant_id: number | null;
-            applicant_phone: string;
-            draft_text: string | null;
-            reasoning: string | null;
-            missing_info: string | null;
-            status: string;
-          };
-          if (d.status !== "pending" && d.status !== "need_info") return;
-          const current = chatApplicantRef.current;
-          if (
-            current &&
-            (d.applicant_id === current.id || d.applicant_phone === current.phone)
-          ) {
-            setDraft({
-              id: d.id,
-              draft_text: d.draft_text,
-              reasoning: d.reasoning,
-              missing_info: d.missing_info,
-              status: d.status as "pending" | "need_info",
-            });
-            setDraftEdited(false);
           }
         }
       )
@@ -1092,139 +367,24 @@ export default function AdminPage() {
 
   const selected = data.find((a) => a.id === selectedId);
 
+  const navBadges: Record<string, number | undefined> = {
+    applicants: stats.screeningInProg,
+    contact: data.reduce((s, a) => s + (a.unread_count || 0), 0),
+  };
+
   return (
     <>
-      <style>{css}</style>
-      <div className={`admin ${sidebarPinned ? "pinned" : ""}`}>
-        {/* 사이드바 */}
-        <nav
-          className={`sidebar ${sidebarExpanded ? "sidebar-expanded" : "sidebar-collapsed"}`}
-          onMouseEnter={() => setSidebarHovered(true)}
-          onMouseLeave={() => setSidebarHovered(false)}
-        >
-          <div className="sidebar-logo">
-            <img src="/logo.png" alt="옹고잉" className="logo-sm-img" />
-            <span className="sidebar-title">옹고잉 관리자</span>
-          </div>
-
-          <div className="nav-group-label">AI 에이전트</div>
-          <button className={`nav-btn ${tab === "danggeun" ? "nav-active" : ""}`}
-            onClick={() => setTab("danggeun")} title="당근마켓구인">
-            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🥕</span>
-            <span className="nav-label">당근마켓구인</span>
-          </button>
-          <button className={`nav-btn ${tab === "baemin" ? "nav-active" : ""}`}
-            onClick={() => setTab("baemin")} title="배달의민족구인">
-            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>📱</span>
-            <span className="nav-label">배달의민족구인</span>
-          </button>
-          <button className={`nav-btn ${tab === "klod" ? "nav-active" : ""}`}
-            onClick={() => setTab("klod")} title="클로드 조련하기">
-            <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧠</span>
-            <span className="nav-label">클로드 조련하기</span>
-          </button>
-
-          <div className="nav-group-label">운영</div>
-          <button className={`nav-btn ${tab === "dashboard" ? "nav-active" : ""}`}
-            onClick={() => setTab("dashboard")} title="대시보드">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="1" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><rect x="10" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/></svg>
-            <span className="nav-label">대시보드</span>
-          </button>
-          <button className={`nav-btn ${tab === "applicants" ? "nav-active" : ""}`}
-            onClick={() => setTab("applicants")} title="지원자 목록">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 15v-1.5a3 3 0 00-3-3H8a3 3 0 00-3 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/></svg>
-            <span className="nav-label">지원자 목록</span>
-            {stats.screeningInProg > 0 && <span className="badge">{stats.screeningInProg}</span>}
-          </button>
-          <button className={`nav-btn ${tab === "confirmed-slots" ? "nav-active" : ""}`}
-            onClick={() => setTab("confirmed-slots")} title="확정 슬롯">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2h5v5H2zM11 2h5v5h-5zM2 11h5v5H2zM11 11h5v5h-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
-            <span className="nav-label">확정 슬롯</span>
-          </button>
-          <button className={`nav-btn ${tab === "branches" ? "nav-active" : ""}`}
-            onClick={() => setTab("branches")} title="지점 관리">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l7 4v8l-7 4-7-4V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-            <span className="nav-label">지점 관리</span>
-          </button>
-
-          {/* 기타 — collapsible, 디폴트 접힘. 자주 안 쓰는 메뉴들. */}
-          <button
-            className="nav-group-toggle"
-            onClick={() => setShowOther((v) => !v)}
-            title={showOther ? "기타 접기" : "기타 펼치기"}
-          >
-            <span className="nav-group-label-inline">
-              기타 {showOther ? "▾" : "▸"}
-            </span>
-          </button>
-          {showOther && (
-            <>
-              <button className={`nav-btn ${tab === "contact" ? "nav-active" : ""}`}
-                onClick={() => setTab("contact")} title="배송원 컨택">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4.5h14a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M1 4.5l8 5 8-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                <span className="nav-label">배송원 컨택</span>
-                {data.reduce((s, a) => s + (a.unread_count || 0), 0) > 0 && <span className="badge">{data.reduce((s, a) => s + (a.unread_count || 0), 0)}</span>}
-              </button>
-              <button className={`nav-btn ${tab === "inbox" ? "nav-active" : ""}`}
-                onClick={() => setTab("inbox")} title="미분류 인박스">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 10v4a1 1 0 001 1h12a1 1 0 001-1v-4M2 10l3-6h8l3 6M2 10h4l1 2h4l1-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                <span className="nav-label">미분류 인박스</span>
-              </button>
-              <button className={`nav-btn ${tab === "danggeun-practice" ? "nav-active" : ""}`}
-                onClick={() => setTab("danggeun-practice")} title="당근마켓구인 (연습용)">
-                <span style={{ fontSize: 18, lineHeight: 1, width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧪</span>
-                <span className="nav-label">당근마켓구인 (연습용)</span>
-              </button>
-              <button className={`nav-btn ${tab === "agent" ? "nav-active" : ""}`}
-                onClick={() => setTab("agent")} title="구인 에이전트">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M6 8h.01M12 8h.01M6 11s1 2 3 2 3-2 3-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                <span className="nav-label">구인 에이전트</span>
-              </button>
-              <button className={`nav-btn ${tab === "hope-slots" ? "nav-active" : ""}`}
-                onClick={() => setTab("hope-slots")} title="희망 슬롯">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="2" fill="currentColor"/><rect x="2" y="8" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="2" y="12" width="14" height="2" fill="currentColor" opacity="0.3"/></svg>
-                <span className="nav-label">희망 슬롯</span>
-              </button>
-              <button className={`nav-btn ${tab === "recommend" ? "nav-active" : ""}`}
-                onClick={() => setTab("recommend")} title="추천 받기">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                <span className="nav-label">추천 받기</span>
-              </button>
-              <button className={`nav-btn ${tab === "site-managers" ? "nav-active" : ""}`}
-                onClick={() => setTab("site-managers")} title="현장 매니저">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M3 16c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                <span className="nav-label">현장 매니저</span>
-              </button>
-              <button className={`nav-btn ${tab === "playground" ? "nav-active" : ""}`}
-                onClick={() => setTab("playground")} title="플레이그라운드">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5"/></svg>
-                <span className="nav-label">플레이그라운드</span>
-              </button>
-            </>
-          )}
-
-          <div className="sidebar-footer">
-            <button className="nav-btn" onClick={() => fetchData()} title="새로고침">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9a7.5 7.5 0 0113.1-5M16.5 9a7.5 7.5 0 01-13.1 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              <span className="nav-label">새로고침</span>
-            </button>
-            <button
-              className="nav-btn nav-pin"
-              onClick={() => setSidebarPinned((p) => !p)}
-              title={sidebarPinned ? "사이드바 펼침 고정 해제" : "사이드바 펼침 고정"}
-            >
-              {sidebarPinned ? (
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2l-2 4-4 1 3 3-1 5 4-2 4 2-1-5 3-3-4-1z" fill="currentColor"/></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2l-2 4-4 1 3 3-1 5 4-2 4 2-1-5 3-3-4-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-              )}
-              <span className="nav-label">{sidebarPinned ? "고정됨" : "사이드바 고정"}</span>
-            </button>
-          </div>
-        </nav>
-
-        {/* 메인 */}
-        <main className="main">
+      <style suppressHydrationWarning>{css}</style>
+      <AppShell
+        active={tab}
+        onNavigate={(t) => setTab(t as Tab)}
+        pinned={sidebarPinned}
+        onTogglePin={() => setSidebarPinned((p) => !p)}
+        showOther={showOther}
+        onToggleOther={() => setShowOther((v) => !v)}
+        badges={navBadges}
+        onRefresh={() => fetchData()}
+      >
           {/* 전용 폰 상태 바 */}
           <div className={`phone-bar ${phoneStatus.online ? "phone-online" : "phone-offline"}`}>
             <span className={`phone-dot ${phoneStatus.online ? "dot-green" : "dot-red"}`} />
@@ -1242,1421 +402,70 @@ export default function AdminPage() {
           </div>
 
           {loading ? (
-            <div className="loading">로딩 중...</div>
+            <LoadingState label="데이터 불러오는 중…" />
           ) : tab === "dashboard" ? (
             <div className="content">
-              <h2 className="page-title">대시보드</h2>
-              <div className="stat-grid">
-                <div className="stat-card"><div className="stat-num">{stats.total}</div><div className="stat-label">전체 지원자</div></div>
-                <div className="stat-card accent"><div className="stat-num">{stats.today}</div><div className="stat-label">오늘 지원</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.screeningPre}</div><div className="stat-label">스크리닝 전</div></div>
-                <div className="stat-card warn"><div className="stat-num">{stats.screeningInProg}</div><div className="stat-label">스크리닝 중</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.screeningDone}</div><div className="stat-label">스크리닝 완료</div></div>
-                <div className="stat-card success"><div className="stat-num">{stats.confirmed}</div><div className="stat-label">확정인력</div></div>
-                <div className="stat-card"><div className="stat-num">{stats.waiting}</div><div className="stat-label">대기자</div></div>
-              </div>
-
-              <h3 className="section-title">지점별 현황</h3>
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>지점</th>
-                      <th>전체</th>
-                      <th>스크리닝 전</th>
-                      <th>스크리닝 중</th>
-                      <th>스크리닝 완료</th>
-                      <th>확정인력</th>
-                      <th>대기자</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {branchStats.map((b) => (
-                      <tr key={b.name}>
-                        <td className="td-bold">{b.name}</td>
-                        <td>{b.total}</td>
-                        <td>{b.pre || <span className="td-muted">0</span>}</td>
-                        <td>{b.inProg > 0 ? <span className="td-warn">{b.inProg}</span> : <span className="td-muted">0</span>}</td>
-                        <td>{b.done || <span className="td-muted">0</span>}</td>
-                        <td>{b.confirmed > 0 ? <span className="td-success">{b.confirmed}</span> : <span className="td-muted">0</span>}</td>
-                        <td>{b.waiting > 0 ? <span className="td-orange">{b.waiting}</span> : <span className="td-muted">0</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DashboardView stats={stats} branchStats={branchStats} />
             </div>
           ) : tab === "applicants" ? (
             <div className="content">
-              <div className="applicants-head">
-                <h2 className="page-title">지원자 목록 <span className="count">{filtered.length}명</span></h2>
-                <button
-                  className="add-applicant-btn"
-                  onClick={() => { setModalInitial(null); setModalMode("create"); }}
-                >
-                  + 지원자 추가
-                </button>
-              </div>
-              <div className="filters">
-                <select className="filter-select" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-                  {["전체", ...allBranchNames].map((b) => <option key={b}>{b}</option>)}
-                </select>
-                <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  {["전체", ...ALL_STATUSES].map((s) => <option key={s}>{s}</option>)}
-                </select>
-                <input className="filter-input" placeholder="이름 또는 전화번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
-              </div>
-
               {!selected && (
-              <div className="table-wrap applicants-table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr><th>성함</th><th style={{ width: 50 }}>나이</th><th>연락처</th><th>지점</th><th>차량</th><th>시간대</th><th>시작가능일</th><th>상태</th><th>채널</th><th>지원일</th></tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((a) => (
-                      <tr key={a.id} className={`clickable ${selectedId === a.id ? "row-selected" : ""}`} onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}>
-                        <td className="td-bold">
-                          {/* 이름 클릭 → 메시지 대화창 열기 기능은 보류 (행 클릭 = 상세로 통일).
-                              나중에 다시 활성화하려면 아래 span의 onClick·class를 복원하세요.
-                          <span className="name-link" onClick={(e) => { e.stopPropagation(); openChat(a); }}>{a.name}</span>
-                          */}
-                          <span>{a.name}</span>
-                          {a.note === "중복지원" && <span className="dup-tag">중복</span>}
-                        </td>
-                        <td>{calcAge(a.birth_date) ?? "—"}</td>
-                        <td>{a.phone}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <select
-                            className="inline-select inline-branch"
-                            value={a.branch ?? ""}
-                            onChange={(e) => patchApplicant(a.id, { branch: e.target.value || null })}
-                          >
-                            <option value="">—</option>
-                            {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        </td>
-                        <td>{a.own_vehicle}</td>
-                        <td>{shortWorkHours(a.work_hours) || "—"}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="date"
-                            className="inline-date"
-                            value={a.available_date ?? ""}
-                            onChange={(e) => patchApplicant(a.id, { available_date: e.target.value || null })}
-                          />
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <select
-                            className="inline-select inline-status"
-                            value={a.status}
-                            onChange={(e) => patchApplicant(a.id, { status: e.target.value })}
-                            style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}
-                          >
-                            {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        </td>
-                        <td>{sourceLabel(a.source)}</td>
-                        <td>{new Date(a.created_at).toLocaleDateString("ko-KR")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <PipelineView
+                  applicants={filtered}
+                  loading={loading}
+                  loadError={loadError}
+                  onRetry={() => fetchData()}
+                  branchNames={allBranchNames}
+                  allStatuses={ALL_STATUSES}
+                  branchFilter={branchFilter}
+                  statusFilter={statusFilter}
+                  search={search}
+                  onBranchFilter={setBranchFilter}
+                  onStatusFilter={setStatusFilter}
+                  onSearch={setSearch}
+                  onSelect={(id) => setSelectedId(id)}
+                  onAdd={() => { setModalInitial(null); setModalMode("create"); }}
+                  onPatch={(id, patch) => patchApplicant(id, patch as Partial<Applicant>)}
+                  calcAge={calcAge}
+                  formatWorkHours={shortWorkHours}
+                />
               )}
 
-              {selected && (() => {
-                const a = selected;  // 별칭 — 클로저 안에서 selected 변수 shadowing 방지
-                const draftVal = <K extends keyof Applicant>(key: K): Applicant[K] =>
-                  (key in editDraft ? editDraft[key] : a[key]) as Applicant[K];
-                const setDraft = <K extends keyof Applicant>(key: K, value: Applicant[K]) =>
-                  setEditDraft((prev) => ({ ...prev, [key]: value }));
-                const hasChanges = Object.keys(editDraft).length > 0;
-
-                // 섹션별 편집 가능 필드 매핑 (시스템 컬럼 제외)
-                const SECTION_FIELDS: Record<string, (keyof Applicant)[]> = {
-                  personal: ["name", "birth_date", "phone", "status", "source"],
-                  address: ["location"],
-                  vehicle: ["own_vehicle", "license_type", "vehicle_type", "self_ownership"],
-                  hope: ["branch1", "branch2", "work_hours", "available_date"],
-                  onboarding: ["baemin_id", "kakao_channel_friend", "guide_sent", "onboarding_call_status"],
-                  confirmed: ["confirmed_branch", "confirmed_slot", "current_branch", "start_date", "churn_reason"],
-                  memo: ["memo"],
-                };
-
-                const isEditing = (section: string) => editingSection === section;
-
-                const saveSection = async (section: string) => {
-                  const fields = SECTION_FIELDS[section] ?? [];
-                  const patch: Partial<Applicant> = {};
-                  for (const k of fields) {
-                    if (k in editDraft) (patch as Record<string, unknown>)[k] = editDraft[k];
-                  }
-                  if (Object.keys(patch).length > 0) {
-                    setSavingEdit(true);
-                    const ok = await patchApplicant(a.id, patch);
-                    setSavingEdit(false);
-                    if (!ok) return;
-                    setEditDraft((prev) => {
-                      const next = { ...prev };
-                      for (const k of fields) delete next[k];
-                      return next;
-                    });
-                  }
-                  setEditingSection(null);
-                };
-
-                const cancelSection = (section: string) => {
-                  setEditDraft((prev) => {
-                    const next = { ...prev };
-                    for (const k of (SECTION_FIELDS[section] ?? [])) delete next[k];
-                    return next;
-                  });
-                  setEditingSection(null);
-                };
-
-                const SectionHeader = ({ section, title }: { section: string; title: string }) => (
-                  <div className="section-header-row">
-                    <h4 className="detail-section-title section-title-inline">{title}</h4>
-                    {isEditing(section) ? (
-                      <div className="section-edit-actions">
-                        <button className="cancel-btn cancel-btn-sm" onClick={() => cancelSection(section)} disabled={savingEdit}>
-                          취소
-                        </button>
-                        <button className="save-btn save-btn-sm" onClick={() => saveSection(section)} disabled={savingEdit}>
-                          {savingEdit ? "저장 중…" : "저장"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="section-edit-btn"
-                        onClick={() => {
-                          if (editingSection && editingSection !== section) cancelSection(editingSection);
-                          setEditingSection(section);
-                        }}
-                      >
-                        ✏️ 편집
-                      </button>
-                    )}
-                  </div>
-                );
-
-                return (
-                <div className="detail-panel detail-fullscreen">
-                  <div className="detail-header">
-                    <button
-                      className="ppc-back-btn"
-                      onClick={() => { setSelectedId(null); setEditDraft({}); setEditingSection(null); }}
-                    >
-                      ← 목록으로
-                    </button>
-                    <h3 className="detail-title">
-                      {a.name} 상세 정보
-                      {hasChanges && <span className="dirty-tag">변경됨</span>}
-                    </h3>
-                  </div>
-
-                  {/* 👤 인적사항 */}
-                  <SectionHeader section="personal" title="👤 인적사항" />
-                  <div className="detail-grid">
-                    <div>
-                      <span className="dl">성함</span>
-                      {isEditing("personal") ? (
-                        <input className="edit-select" value={(draftVal("name") as string) || ""} onChange={(e) => setDraft("name", e.target.value)} />
-                      ) : (a.name)}
-                    </div>
-                    <div>
-                      <span className="dl">나이 (생년월일)</span>
-                      {isEditing("personal") ? (
-                        <input
-                          className="edit-select" maxLength={6} placeholder="YYMMDD"
-                          value={(draftVal("birth_date") as string) || ""}
-                          onChange={(e) => setDraft("birth_date", e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
-                        />
-                      ) : (
-                        <>
-                          {calcAge(a.birth_date) ?? "—"}
-                          {a.birth_date ? ` (${a.birth_date.slice(0, 2)}/${a.birth_date.slice(2, 4)}/${a.birth_date.slice(4, 6)})` : ""}
-                        </>
-                      )}
-                    </div>
-                    <div>
-                      <span className="dl">전화</span>
-                      {isEditing("personal") ? (
-                        <input className="edit-select" value={(draftVal("phone") as string) || ""} onChange={(e) => setDraft("phone", e.target.value)} />
-                      ) : (a.phone)}
-                    </div>
-                    <div>
-                      <span className="dl">진행 상태</span>
-                      {isEditing("personal") ? (
-                        <select className="edit-select" value={(draftVal("status") as string) || ""} onChange={(e) => setDraft("status", e.target.value)}>
-                          {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      ) : (
-                        <span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span>
-                      )}
-                    </div>
-                    <div>
-                      <span className="dl">지원경로</span>
-                      {isEditing("personal") ? (
-                        <select className="edit-select" value={(draftVal("source") as string) || ""} onChange={(e) => setDraft("source", e.target.value)}>
-                          <option value="danggeun">당근</option>
-                          <option value="baemin">배민</option>
-                          <option value="manual">수기</option>
-                          <option value="direct">기타</option>
-                        </select>
-                      ) : sourceLabel(a.source)}
-                    </div>
-                    <div><span className="dl">지원일</span>{new Date(a.created_at).toLocaleDateString("ko-KR")}</div>
-                    <div><span className="dl">AI 단계</span>{a.agent_stage ?? "—"}</div>
-                    <div><span className="dl">안 읽음</span>{a.unread_count || 0}</div>
-                  </div>
-
-                  {/* 🏠 거주지 */}
-                  <SectionHeader section="address" title="🏠 거주지" />
-                  <div className="detail-grid">
-                    <div className="detail-wide">
-                      <span className="dl">주소</span>
-                      {isEditing("address") ? (
-                        <input className="edit-select" value={(draftVal("location") as string) || ""} onChange={(e) => setDraft("location", e.target.value)} />
-                      ) : (a.location || "—")}
-                    </div>
-                    <div><span className="dl">동(자동)</span>{a.bname || "—"}</div>
-                    <div><span className="dl">시군구(자동)</span>{a.sigungu || "—"}</div>
-                  </div>
-
-                  {/* 🚗 차량·면허 */}
-                  <SectionHeader section="vehicle" title="🚗 차량·면허" />
-                  <div className="detail-grid">
-                    <div>
-                      <span className="dl">자차</span>
-                      {isEditing("vehicle") ? (
-                        <select className="edit-select" value={(draftVal("own_vehicle") as string) || ""} onChange={(e) => setDraft("own_vehicle", e.target.value)}>
-                          <option value="">—</option>
-                          <option value="있음">있음</option>
-                          <option value="없음">없음</option>
-                        </select>
-                      ) : (a.own_vehicle || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">면허</span>
-                      {isEditing("vehicle") ? (
-                        <select className="edit-select" value={(draftVal("license_type") as string) || ""} onChange={(e) => setDraft("license_type", e.target.value)}>
-                          <option value="">—</option>
-                          <option value="1종 보통">1종 보통</option>
-                          <option value="2종 보통">2종 보통</option>
-                          <option value="1종 대형">1종 대형</option>
-                          <option value="없음">없음</option>
-                        </select>
-                      ) : (a.license_type || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">차종</span>
-                      {isEditing("vehicle") ? (
-                        <input className="edit-select" value={(draftVal("vehicle_type") as string) || ""} onChange={(e) => setDraft("vehicle_type", e.target.value)} />
-                      ) : (a.vehicle_type || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">본인명의</span>
-                      {isEditing("vehicle") ? (
-                        <select className="edit-select" value={(draftVal("self_ownership") as string) || ""} onChange={(e) => setDraft("self_ownership", e.target.value)}>
-                          <option value="">—</option>
-                          <option value="문제 없음">문제 없음</option>
-                          <option value="문제 있음">문제 있음</option>
-                        </select>
-                      ) : (a.self_ownership || "—")}
-                    </div>
-                  </div>
-
-                  {/* 📍 희망 지점·시간 */}
-                  <SectionHeader section="hope" title="📍 희망 지점·시간" />
-                  <div className="detail-grid">
-                    <div>
-                      <span className="dl">1지망</span>
-                      {isEditing("hope") ? (
-                        <select className="edit-select" value={(draftVal("branch1") as string) || ""} onChange={(e) => setDraft("branch1", e.target.value)}>
-                          <option value="">—</option>
-                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      ) : (a.branch1 || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">2지망</span>
-                      {isEditing("hope") ? (
-                        <select className="edit-select" value={(draftVal("branch2") as string) || ""} onChange={(e) => setDraft("branch2", e.target.value || null)}>
-                          <option value="">—</option>
-                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      ) : (a.branch2 || "—")}
-                    </div>
-                    <div className="detail-wide">
-                      <span className="dl">희망시간 (복수)</span>
-                      {isEditing("hope") ? (
-                        <div className="slot-toggle-row">
-                          {SLOTS.map((s) => {
-                            const raw = (draftVal("work_hours") as string) || "";
-                            const set = new Set(raw.split(",").map((t) => t.trim()).filter(Boolean));
-                            const on = set.has(s);
-                            return (
-                              <button
-                                key={s} type="button"
-                                className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
-                                onClick={() => {
-                                  const next = new Set(set);
-                                  if (on) next.delete(s); else next.add(s);
-                                  const joined = SLOTS.filter((x) => next.has(x)).join(", ");
-                                  setDraft("work_hours", joined);
-                                }}
-                              >{s}</button>
-                            );
-                          })}
-                        </div>
-                      ) : (a.work_hours || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">시작가능일</span>
-                      {isEditing("hope") ? (
-                        <input type="date" className="edit-select edit-date" value={(draftVal("available_date") as string) || ""} onChange={(e) => setDraft("available_date", e.target.value || null)} />
-                      ) : (a.available_date || "—")}
-                    </div>
-                  </div>
-
-                  {/* 📱 온보딩 진행 */}
-                  <SectionHeader section="onboarding" title="📱 온보딩 진행 (매니저 체크용)" />
-                  <div className="detail-grid">
-                    <div>
-                      <span className="dl">배민 아이디</span>
-                      {isEditing("onboarding") ? (
-                        <input className="edit-select" value={(draftVal("baemin_id") as string) || ""} onChange={(e) => setDraft("baemin_id", e.target.value || null)} />
-                      ) : (a.baemin_id || <span className="td-muted">미수집</span>)}
-                    </div>
-                    <div>
-                      <span className="dl">카톡 채널</span>
-                      {isEditing("onboarding") ? (
-                        <label className="check-label">
-                          <input type="checkbox" className="ppc-check" checked={!!draftVal("kakao_channel_friend")} onChange={(e) => setDraft("kakao_channel_friend", e.target.checked)} />
-                          친구추가됨
-                        </label>
-                      ) : (a.kakao_channel_friend ? "✓ 친구추가됨" : "—")}
-                    </div>
-                    <div>
-                      <span className="dl">가이드 전달</span>
-                      {isEditing("onboarding") ? (
-                        <label className="check-label">
-                          <input type="checkbox" className="ppc-check" checked={!!draftVal("guide_sent")} onChange={(e) => setDraft("guide_sent", e.target.checked)} />
-                          전달완료
-                        </label>
-                      ) : (a.guide_sent ? "✓ 전달완료" : "—")}
-                    </div>
-                    <div>
-                      <span className="dl">온보딩 통화</span>
-                      {isEditing("onboarding") ? (
-                        <input className="edit-select" value={(draftVal("onboarding_call_status") as string) || ""} onChange={(e) => setDraft("onboarding_call_status", e.target.value || null)} />
-                      ) : (a.onboarding_call_status || "—")}
-                    </div>
-                  </div>
-
-                  {/* ✓ 확정·근무 */}
-                  <SectionHeader section="confirmed" title="✓ 확정·근무" />
-                  <div className="detail-grid">
-                    <div>
-                      <span className="dl">확정지점</span>
-                      {isEditing("confirmed") ? (
-                        <select className="edit-select" value={(draftVal("confirmed_branch") as string) || ""} onChange={(e) => setDraft("confirmed_branch", e.target.value || null)}>
-                          <option value="">—</option>
-                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      ) : (a.confirmed_branch || "—")}
-                    </div>
-                    <div className="detail-wide">
-                      <span className="dl">희망슬롯 (지원자 작성, 읽기 전용)</span>
-                      <div className="slot-chips">
-                        {SLOTS.filter((s) => matchesSlot(a.work_hours, s)).map((s) => (
-                          <span key={s} className={`slot-chip ${(
-                            s === "평일오전" ? "chip-wd-am" :
-                            s === "평일오후" ? "chip-wd-pm" :
-                            s === "주말오전" ? "chip-we-am" : "chip-we-pm"
-                          )}`}>{s}</span>
-                        ))}
-                        {!SLOTS.some((s) => matchesSlot(a.work_hours, s)) && <span className="td-muted">—</span>}
-                      </div>
-                    </div>
-                    <div className="detail-wide">
-                      <span className="dl">확정슬롯 (매니저 확정 — 미입력 시 희망슬롯 그대로)</span>
-                      {isEditing("confirmed") ? (() => {
-                        // 편집 시작 시 confirmed_slot이 비어있으면 work_hours에서 도출한 canonical 값을 prefill.
-                        const draftRaw = (draftVal("confirmed_slot") as string | null);
-                        const initial = (draftRaw != null && draftRaw !== "")
-                          ? draftRaw
-                          : SLOTS.filter((s) => matchesSlot(a.work_hours, s)).join(",");
-                        const set = new Set(initial.split(",").map((t) => t.trim()).filter(Boolean));
-                        return (
-                          <div className="slot-toggle-row">
-                            {SLOTS.map((s) => {
-                              const on = set.has(s);
-                              return (
-                                <button
-                                  key={s} type="button"
-                                  className={`slot-toggle ${on ? "slot-toggle-on" : ""}`}
-                                  onClick={() => {
-                                    const next = new Set(set);
-                                    if (on) next.delete(s); else next.add(s);
-                                    const joined = SLOTS.filter((x) => next.has(x)).join(",");
-                                    setDraft("confirmed_slot", joined || null);
-                                  }}
-                                >{s}</button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })() : (() => {
-                        const effective = a.confirmed_slot
-                          ? a.confirmed_slot.split(",").map((t) => t.trim()).filter(Boolean)
-                          : SLOTS.filter((s) => matchesSlot(a.work_hours, s));
-                        const usingFallback = !a.confirmed_slot;
-                        if (!effective.length) return <span className="td-muted">—</span>;
-                        return (
-                          <>
-                            <div className="slot-chips">
-                              {effective.map((s) => (
-                                <span key={s} className={`slot-chip ${(
-                                  s === "평일오전" ? "chip-wd-am" :
-                                  s === "평일오후" ? "chip-wd-pm" :
-                                  s === "주말오전" ? "chip-we-am" : "chip-we-pm"
-                                )}`}>{s}</span>
-                              ))}
-                            </div>
-                            {usingFallback && (
-                              <div className="ppc-filter-label" style={{ marginTop: 4 }}>
-                                ※ 희망슬롯 그대로 사용 중 (편집 시 분리됨)
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                    <div>
-                      <span className="dl">희망근무일자</span>
-                      {a.available_date || "—"}
-                    </div>
-                    <div>
-                      <span className="dl">현재 근무지점</span>
-                      {isEditing("confirmed") ? (
-                        <select className="edit-select" value={(draftVal("current_branch") as string) || ""} onChange={(e) => setDraft("current_branch", e.target.value || null)}>
-                          <option value="">—</option>
-                          {allBranchNames.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      ) : (a.current_branch || "—")}
-                    </div>
-                    <div>
-                      <span className="dl">시작일</span>
-                      {isEditing("confirmed") ? (
-                        <input type="date" className="edit-select edit-date" value={(draftVal("start_date") as string) || ""} onChange={(e) => setDraft("start_date", e.target.value || null)} />
-                      ) : (a.start_date || "—")}
-                    </div>
-                    <div><span className="dl">이탈일(자동)</span>{a.churned_at ? new Date(a.churned_at).toLocaleDateString("ko-KR") : "—"}</div>
-                    <div className="detail-wide">
-                      <span className="dl">이탈/대기 사유</span>
-                      {isEditing("confirmed") ? (
-                        <input className="edit-select" value={(draftVal("churn_reason") as string) || ""} onChange={(e) => setDraft("churn_reason", e.target.value || null)} />
-                      ) : (a.churn_reason || "—")}
-                    </div>
-                  </div>
-
-                  {/* 📝 매니저 메모 — 어디서나 편집 가능. 시스템 태그(note)는 별도 컬럼. */}
-                  <SectionHeader section="memo" title="📝 메모" />
-                  <div className="detail-grid">
-                    <div className="detail-wide">
-                      {isEditing("memo") ? (
-                        <textarea
-                          className="edit-select"
-                          style={{ minHeight: 80, resize: "vertical", padding: 8, lineHeight: 1.5 }}
-                          value={(draftVal("memo") as string) || ""}
-                          onChange={(e) => setDraft("memo", e.target.value || null)}
-                          placeholder="자유 메모 — 연락 시 참고할 사항, 특이사항 등"
-                        />
-                      ) : (
-                        a.memo
-                          ? <p className="detail-text" style={{ whiteSpace: "pre-wrap" }}>{a.memo}</p>
-                          : <span className="td-muted">메모 없음</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 자기소개·경력은 [+ 지원자 추가] 모달로 신규 생성 시에만 입력 (읽기 전용) */}
-                  {a.introduction && (
-                    <div className="detail-section">
-                      <h4 className="detail-section-title">💬 자기소개</h4>
-                      <p className="detail-text">{a.introduction}</p>
-                    </div>
-                  )}
-                  {a.experience && (
-                    <div className="detail-section">
-                      <h4 className="detail-section-title">📋 경력</h4>
-                      <p className="detail-text">{a.experience}</p>
-                    </div>
-                  )}
-                </div>
-                );
-              })()}
+              {selected && (
+                <ApplicantDetailView
+                  key={selected.id}
+                  applicant={selected}
+                  branches={allBranchNames}
+                  onClose={() => setSelectedId(null)}
+                  onPatch={(id, patch) => patchApplicant(id, patch)}
+                />
+              )}
             </div>
           ) : tab === "hope-slots" ? (
-            <div className="content">
-              <h2 className="page-title">희망 슬롯 분포</h2>
-              <p className="page-desc">
-                지원자가 <strong>희망한</strong> 시간대·지점 기준 풀 분포입니다.
-                셀을 클릭하면 해당 조건의 지원자 목록이 표시됩니다.
-                (활성 상태만 집계 — 부적합 제외)
-              </p>
-
-              <div className="matrix-wrap">
-                <table className="matrix">
-                  <thead>
-                    <tr>
-                      <th>지점 \ 슬롯</th>
-                      {SLOTS.map((s) => <th key={s}>{s}</th>)}
-                      <th>지점 합계</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allBranchNames.map((b) => {
-                      const rowTotal = data.filter(
-                        (a) =>
-                          ACTIVE_STATUSES.includes(a.status) &&
-                          (a.branch1 === b || a.branch2 === b)
-                      ).length;
-                      return (
-                        <tr key={b}>
-                          <td className="td-bold">{b}</td>
-                          {SLOTS.map((s) => {
-                            const n = data.filter(
-                              (a) =>
-                                ACTIVE_STATUSES.includes(a.status) &&
-                                (a.branch1 === b || a.branch2 === b) &&
-                                matchesSlot(a.work_hours, s)
-                            ).length;
-                            const active = slotCell?.branch === b && slotCell?.slot === s;
-                            return (
-                              <td
-                                key={s}
-                                className={`matrix-cell ${n === 0 ? "cell-zero" : n >= 3 ? "cell-hot" : "cell-some"} ${active ? "cell-active" : ""}`}
-                                onClick={() => setSlotCell(active ? null : { branch: b, slot: s })}
-                              >
-                                {n}
-                              </td>
-                            );
-                          })}
-                          <td className="td-total">{rowTotal}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="matrix-total-row">
-                      <td className="td-bold">슬롯 합계</td>
-                      {SLOTS.map((s) => (
-                        <td key={s} className="td-total">
-                          {data.filter(
-                            (a) =>
-                              ACTIVE_STATUSES.includes(a.status) &&
-                              matchesSlot(a.work_hours, s)
-                          ).length}
-                        </td>
-                      ))}
-                      <td className="td-total">
-                        {data.filter(
-                          (a) => ACTIVE_STATUSES.includes(a.status)
-                        ).length}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {slotCell && (() => {
-                const list = data.filter(
-                  (a) =>
-                    ACTIVE_STATUSES.includes(a.status) &&
-                    (a.branch1 === slotCell.branch || a.branch2 === slotCell.branch) &&
-                    matchesSlot(a.work_hours, slotCell.slot)
-                );
-                return (
-                  <div className="slot-drill">
-                    <div className="slot-drill-header">
-                      <h3>{slotCell.branch} · {slotCell.slot} · {list.length}명</h3>
-                      <button className="close-btn" onClick={() => setSlotCell(null)}>X</button>
-                    </div>
-                    {list.length === 0 ? (
-                      <div className="empty">해당 조건의 지원자가 없습니다.</div>
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table">
-                          <thead>
-                            <tr><th>성함</th><th>연락처</th><th>희망지점</th><th>상태</th><th>시작가능일</th><th>희망시간</th></tr>
-                          </thead>
-                          <tbody>
-                            {list.map((a) => (
-                              <tr key={a.id} className="clickable" onClick={() => { setTab("applicants"); setSelectedId(a.id); }}>
-                                <td className="td-bold">{a.name}</td>
-                                <td>{a.phone}</td>
-                                <td>{a.branch1}{a.branch2 ? ` / ${a.branch2}` : ""}</td>
-                                <td><span className="status-badge" style={{ background: STATUS_COLORS[a.status] || "#6b7280" }}>{a.status}</span></td>
-                                <td>{a.available_date}</td>
-                                <td className="td-slim">{a.work_hours}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+            <HopeSlotsView
+              data={data}
+              branchNames={allBranchNames}
+              onSelectApplicant={(id) => {
+                setTab("applicants");
+                setSelectedId(id);
+              }}
+            />
           ) : tab === "confirmed-slots" ? (
-            <div className="content">
-              {!branchDetail && (
-              <>
-              <h2 className="page-title">확정 슬롯 현황</h2>
-              <p className="page-desc">
-                지점별 슬롯 충족 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
-                <strong>지점 행을 클릭하면 해당 지점 상세 페이지(풀스크린)</strong>가 열립니다.
-              </p>
-
-              <div className="matrix-legend">
-                <span className="lg-dot lg-full" /> 정원 충족
-                <span className="lg-dot lg-half" /> 정원 미달 (1명 이상)
-                <span className="lg-dot lg-zero" /> 빈 슬롯
-              </div>
-
-              <div className="matrix-wrap">
-                <table className="matrix">
-                  <thead>
-                    <tr>
-                      <th>지점 \ 슬롯</th>
-                      {SLOTS.map((s) => <th key={s}>{s}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {branches.map((branch) => {
-                      const b = branch.name;
-                      return (
-                      <tr
-                        key={b}
-                        className="branch-row clickable"
-                        onClick={() => setBranchDetail(b)}
-                        title="클릭하면 이 지점 상세 페이지로 이동합니다"
-                      >
-                        <td className="td-bold branch-name-cell">{b}</td>
-                        {SLOTS.map((s) => {
-                          const capacity = getSlotCapacity(branch, s);
-                          // 확정인력/대기자의 슬롯 = effectiveSlot (confirmed_slot 있으면 그것, 없으면 work_hours).
-                          // 매니저가 confirmed_branch를 안 채웠을 때는 branch1로 fallback.
-                          const confirmed = data.filter(
-                            (a) =>
-                              a.status === "확정인력" &&
-                              matchesSlot(effectiveSlot(a), s) &&
-                              (a.confirmed_branch ?? a.branch1) === b
-                          ).length;
-                          const waiting = data.filter(
-                            (a) =>
-                              a.status === "대기자" &&
-                              matchesSlot(effectiveSlot(a), s) &&
-                              (a.confirmed_branch ?? a.branch1) === b
-                          ).length;
-                          // 시각적 신호: 정원 0(미운영)은 중립 회색, 0/N=빨강, 1~N미만=노랑, N이상=초록.
-                          const cellClass =
-                            capacity === 0 ? "cell-disabled"
-                            : confirmed >= capacity ? "cell-full"
-                            : confirmed === 0 ? "cell-empty"
-                            : "cell-partial";
-                          return (
-                            <td key={s} className={`matrix-cell ${cellClass}`}>
-                              <div className="conf-main">{confirmed}<span className="conf-cap">/{capacity}</span></div>
-                              {waiting > 0 && <div className="conf-sub">대기 {waiting}</div>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              </>
-              )}
-
-              {/* PPC 상세 풀스크린 — 매트릭스 자리에 통째로 표시 */}
-              {branchDetail && (() => {
-                const branchObj = branches.find((br) => br.name === branchDetail);
-                const morningCap = branchObj ? getSlotCapacity(branchObj, "평일오전") : 0;
-                const afternoonCap = branchObj ? getSlotCapacity(branchObj, "평일오후") : 0;
-                // confirmed_branch가 없으면 branch1(지원 시 1지망)로 fallback. 매니저가
-                // 지원자 목록에서 status만 확정/대기로 바꾸고 지점을 안 채워도 PPC에서 보이게.
-                const inBranch = data.filter((a) => (a.confirmed_branch ?? a.branch1) === branchDetail);
-                // 슬롯 필터 — effectiveSlot 기준 (confirmed_slot이 있으면 그것, 없으면 work_hours).
-                const applyFilter = (list: Applicant[]) => {
-                  if (ppcSlotFilter.size === 0) return list;
-                  return list.filter((a) => SLOTS.some((s) => ppcSlotFilter.has(s) && matchesSlot(effectiveSlot(a), s)));
-                };
-                // 매니저가 ↑↓로 조정한 sort_order 기준 정렬. sort_order가 null인 row는 id로 폴백.
-                const bySort = (a: Applicant, b: Applicant) =>
-                  (a.sort_order ?? a.id) - (b.sort_order ?? b.id);
-                const confirmed = applyFilter(inBranch.filter((a) => a.status === "확정인력")).sort(bySort);
-                const waiting = applyFilter(inBranch.filter((a) => a.status === "대기자")).sort(bySort);
-                const totalConfirmed = inBranch.filter((a) => a.status === "확정인력").length;
-                const totalWaiting = inBranch.filter((a) => a.status === "대기자").length;
-                const filterOn = ppcSlotFilter.size > 0;
-
-                const SLOT_CHIP_CLASS: Record<string, string> = {
-                  "평일오전": "chip-wd-am",
-                  "평일오후": "chip-wd-pm",
-                  "주말오전": "chip-we-am",
-                  "주말오후": "chip-we-pm",
-                };
-
-                // work_hours(verbose 또는 축약)에서 활성 슬롯 키를 뽑아 chip으로 표시
-                const SlotChips = ({ workHours }: { workHours: string | null }) => {
-                  const active = SLOTS.filter((s) => matchesSlot(workHours, s));
-                  if (!active.length) return <span className="td-muted">—</span>;
-                  return (
-                    <div className="slot-chips">
-                      {active.map((s) => (
-                        <span key={s} className={`slot-chip ${SLOT_CHIP_CLASS[s] || ""}`}>{s}</span>
-                      ))}
-                    </div>
-                  );
-                };
-
-                // 인접 row와 sort_order 교환 — 같은 그룹(확정인력 또는 대기자) 안에서만 사용.
-                const swapOrder = async (list: Applicant[], idx: number, dir: -1 | 1) => {
-                  const j = idx + dir;
-                  if (j < 0 || j >= list.length) return;
-                  const a = list[idx];
-                  const b = list[j];
-                  const av = a.sort_order ?? a.id;
-                  const bv = b.sort_order ?? b.id;
-                  // 동일 값(둘 다 id로 폴백된 경우)이면 살짝 다르게 만든다 — av를 bv보다 작게/크게
-                  const [newA, newB] = av === bv
-                    ? (dir === -1 ? [bv - 1, bv] : [bv, bv + 1])
-                    : [bv, av];
-                  // 낙관적 업데이트
-                  setData((prev) => prev.map((x) =>
-                    x.id === a.id ? { ...x, sort_order: newA }
-                    : x.id === b.id ? { ...x, sort_order: newB }
-                    : x
-                  ));
-                  await Promise.all([
-                    patchApplicant(a.id, { sort_order: newA }),
-                    patchApplicant(b.id, { sort_order: newB }),
-                  ]);
-                };
-
-                const PpcRow = (a: Applicant, idx: number, list: Applicant[]) => (
-                  <tr key={a.id}>
-                    <td className="td-bold">
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <span className="ppc-order-buttons">
-                          <button
-                            className="ppc-order-btn"
-                            title="위로"
-                            disabled={idx === 0}
-                            onClick={() => swapOrder(list, idx, -1)}
-                          >▲</button>
-                          <button
-                            className="ppc-order-btn"
-                            title="아래로"
-                            disabled={idx === list.length - 1}
-                            onClick={() => swapOrder(list, idx, 1)}
-                          >▼</button>
-                        </span>
-                        {a.name}
-                        <button
-                          className="ppc-edit-btn"
-                          title="지원자 상세 편집"
-                          onClick={() => setPpcDetailId(a.id)}
-                        >
-                          ✏️
-                        </button>
-                      </span>
-                    </td>
-                    <td>{calcAge(a.birth_date) ?? "—"}</td>
-                    <td>{a.phone}</td>
-                    <td>{a.bname || a.sigungu || "—"}</td>
-                    <td><SlotChips workHours={effectiveSlot(a)} /></td>
-                    <td>
-                      <input
-                        type="text"
-                        className="inline-memo"
-                        defaultValue={a.baemin_id ?? ""}
-                        onBlur={(e) => {
-                          const next = e.target.value.trim();
-                          if (next !== (a.baemin_id ?? "")) patchApplicant(a.id, { baemin_id: next || null });
-                        }}
-                      />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <input
-                        type="checkbox"
-                        className="ppc-check"
-                        checked={!!a.kakao_channel_friend}
-                        onChange={(e) => patchApplicant(a.id, { kakao_channel_friend: e.target.checked })}
-                      />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <input
-                        type="checkbox"
-                        className="ppc-check"
-                        checked={!!a.guide_sent}
-                        onChange={(e) => patchApplicant(a.id, { guide_sent: e.target.checked })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="inline-memo"
-                        defaultValue={a.onboarding_call_status ?? ""}
-                        onBlur={(e) => {
-                          const next = e.target.value.trim();
-                          if (next !== (a.onboarding_call_status ?? "")) {
-                            patchApplicant(a.id, { onboarding_call_status: next || null });
-                          }
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="inline-memo"
-                        defaultValue={a.memo ?? ""}
-                        onBlur={(e) => {
-                          const next = e.target.value.trim();
-                          if (next !== (a.memo ?? "")) patchApplicant(a.id, { memo: next || null });
-                        }}
-                      />
-                    </td>
-                  </tr>
-                );
-
-                const PpcHeader = (
-                  <tr>
-                    <th>성함</th><th style={{ width: 50 }}>나이</th><th>휴대폰</th><th>거주지</th>
-                    <th style={{ minWidth: 160 }}>타임</th>
-                    <th style={{ width: 140 }}>아이디</th>
-                    <th style={{ width: 70 }}>채널추가</th>
-                    <th style={{ width: 70 }}>가이드</th>
-                    <th style={{ width: 140 }}>온보딩 통화</th>
-                    <th style={{ minWidth: 160 }}>비고</th>
-                  </tr>
-                );
-
-                return (
-                  <div className="ppc-fullscreen">
-                    <div className="ppc-toolbar">
-                      <button
-                        className="ppc-back-btn"
-                        onClick={() => { setBranchDetail(null); setPpcSlotFilter(new Set()); }}
-                      >
-                        ← 매트릭스로
-                      </button>
-                      <h2 className="ppc-title">
-                        📍 {branchDetail}
-                        <span className="ppc-cap">정원 평일 오전 {morningCap} / 오후 {afternoonCap}</span>
-                      </h2>
-                      <div className="ppc-summary">
-                        ✓ 확정 {totalConfirmed} · ⏳ 대기 {totalWaiting}
-                      </div>
-                    </div>
-
-                    <div className="ppc-filter-bar">
-                      <span className="ppc-filter-label">시간대 필터:</span>
-                      {SLOTS.map((s) => {
-                        // 필터 비어 있을 때는 모두 풀컬러(=전체). 필터 켜지면 선택된 것만 풀컬러.
-                        const visual = !filterOn || ppcSlotFilter.has(s) ? "slot-chip-on" : "slot-chip-off";
-                        return (
-                          <button
-                            key={s}
-                            type="button"
-                            className={`slot-chip slot-chip-btn ${SLOT_CHIP_CLASS[s] || ""} ${visual}`}
-                            onClick={() => {
-                              setPpcSlotFilter((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(s)) next.delete(s); else next.add(s);
-                                return next;
-                              });
-                            }}
-                          >
-                            {s}
-                          </button>
-                        );
-                      })}
-                      {filterOn && (
-                        <button
-                          type="button"
-                          className="ppc-filter-clear"
-                          onClick={() => setPpcSlotFilter(new Set())}
-                        >
-                          필터 해제
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="slot-section-title">
-                      ✓ 확정인력 ({confirmed.length}
-                      {filterOn && totalConfirmed !== confirmed.length && <span className="ppc-filtered-of"> / 전체 {totalConfirmed}</span>})
-                    </div>
-                    {confirmed.length === 0 ? (
-                      <div className="empty">
-                        {filterOn ? "해당 시간대 확정인력이 없습니다." : "확정인력이 없습니다. 지원자 목록에서 status='확정인력' + 확정 지점을 지정해주세요."}
-                      </div>
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table ppc-table">
-                          <thead>{PpcHeader}</thead>
-                          <tbody>{confirmed.map((a, i) => PpcRow(a, i, confirmed))}</tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    <div className="slot-section-title slot-section-waiting">
-                      ⏳ 대기자 ({waiting.length}
-                      {filterOn && totalWaiting !== waiting.length && <span className="ppc-filtered-of"> / 전체 {totalWaiting}</span>})
-                    </div>
-                    {waiting.length === 0 ? (
-                      <div className="empty">{filterOn ? "해당 시간대 대기자가 없습니다." : "대기자가 없습니다."}</div>
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table ppc-table">
-                          <thead>{PpcHeader}</thead>
-                          <tbody>{waiting.map((a, i) => PpcRow(a, i, waiting))}</tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+            <ConfirmedSlotsView
+              data={data}
+              branches={branches}
+              onPatch={(id, patch) => patchApplicant(id, patch)}
+              onOpenDetail={setPpcDetailId}
+            />
           ) : tab === "recommend" ? (
-            <div className="content">
-              <h2 className="page-title">배송원 추천</h2>
-              <p className="page-desc">
-                공고 내용을 붙여넣으면 Claude가 상차지 주소를 추출하고, 등록된 후보 풀에서 점수 상위 10명을 추천합니다.
-                선택 후 공고 내용을 그대로 SMS로 일괄 발송할 수 있습니다.
-              </p>
-
-              <div className="rec-input-wrap">
-                <details className="rec-generate" open={!recPosting}>
-                  <summary>✨ 공고 자동 생성 (대충 입력하면 Claude가 다듬어줍니다)</summary>
-                  <div className="rec-generate-body">
-                    <textarea
-                      className="rec-input"
-                      placeholder="예) 강북미아 토일 장보기 자차, 시급 1.5~2만, 픽업 도봉로 34"
-                      rows={3}
-                      value={recRough}
-                      onChange={(e) => setRecRough(e.target.value)}
-                    />
-                    <button
-                      className="rec-btn-secondary rec-gen-btn"
-                      onClick={generateRecPosting}
-                      disabled={recGenerating}
-                    >
-                      {recGenerating ? "생성 중..." : "공고 생성하기"}
-                    </button>
-                    {recGenMissing.length > 0 && (
-                      <div className="rec-gen-missing">
-                        ⚠️ 메모에 빠진 항목이 있어 <code>[?]</code>로 표시했습니다 — 직접 채워주세요:&nbsp;
-                        {recGenMissing.map((m) => (
-                          <span key={m} className="rec-missing-chip">{m}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-
-                <label className="rec-label">공고 내용 <span className="req">*</span></label>
-                <textarea
-                  className="rec-textarea"
-                  placeholder="예) [내이루리] 마포구 상암동 평일 오전 자차 배송원 1명 급구 — 시급 25,000원..."
-                  rows={10}
-                  value={recPosting}
-                  onChange={(e) => setRecPosting(e.target.value)}
-                />
-
-                <div className="rec-row">
-                  <label className="rec-label">차량 필요 여부 <span className="req">*</span></label>
-                  <div className="radio-group">
-                    {[
-                      { v: true, label: "차량 필요" },
-                      { v: false, label: "차량 불필요" },
-                    ].map((opt) => (
-                      <button
-                        key={String(opt.v)}
-                        type="button"
-                        className={`radio-btn ${recVehicleRequired === opt.v ? "radio-on" : ""}`}
-                        onClick={() => setRecVehicleRequired(opt.v)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <details className="rec-advanced">
-                  <summary>상차지 주소 (Claude 자동 추출 건너뛰기)</summary>
-                  <input
-                    className="rec-input"
-                    placeholder="예) 서울 마포구 상암동"
-                    value={recManualAddr}
-                    onChange={(e) => setRecManualAddr(e.target.value)}
-                  />
-                </details>
-
-                <button className="rec-btn-primary" onClick={runRecommend} disabled={recLoading}>
-                  {recLoading ? "추천 중..." : "추천 받기"}
-                </button>
-              </div>
-
-              {recResult && (
-                <div className="rec-result">
-                  <div className="rec-job-info">
-                    <div><span className="dl">상차지 주소</span>{recResult.job.address}</div>
-                    <div><span className="dl">시군구</span>{recResult.job.sigungu || "-"}</div>
-                    <div><span className="dl">차량 필요</span>{recResult.job.vehicle_required ? "필요" : "불필요"}</div>
-                    {recResult.job.schedule && <div><span className="dl">시간대</span>{recResult.job.schedule}</div>}
-                    <div><span className="dl">전체 풀</span>{recResult.poolSize}명</div>
-                  </div>
-
-                  <div className="rec-actions">
-                    <button
-                      className="rec-btn-secondary"
-                      onClick={() => setRecSelected(new Set(recResult.candidates.map(candidateKey)))}
-                    >
-                      전체 선택
-                    </button>
-                    <button
-                      className="rec-btn-secondary"
-                      onClick={() => setRecSelected(new Set())}
-                    >
-                      전체 해제
-                    </button>
-                    <span className="rec-count">{recSelected.size} / {recResult.candidates.length}명 선택됨</span>
-                    {recResult.candidates.length < 50 && (
-                      <button
-                        className="rec-btn-secondary"
-                        onClick={loadMoreRec}
-                        disabled={recLoading}
-                      >
-                        {recLoading ? "불러오는 중..." : "10명 더 받기"}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: 40 }}></th>
-                          <th>순위</th>
-                          <th>이름</th>
-                          <th>나이</th>
-                          <th>출처</th>
-                          <th>거리</th>
-                          <th>차량</th>
-                          <th>시군구</th>
-                          <th>점수</th>
-                          <th>세부</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recResult.candidates.map((c, idx) => {
-                          const k = candidateKey(c);
-                          const age = ageFromBirthDate(c.birth_date);
-                          return (
-                            <tr key={k}>
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  checked={recSelected.has(k)}
-                                  onChange={() => toggleRecPick(k)}
-                                />
-                              </td>
-                              <td className="td-bold">#{idx + 1}</td>
-                              <td>{c.name} <span className="td-meta">{c.phone}</span></td>
-                              <td>{age !== null ? `${age}세` : "-"}</td>
-                              <td>
-                                <span className={`source-badge ${c.source === "legacy" ? "src-legacy" : "src-active"}`}>
-                                  {c.source === "legacy" ? "레거시" : "신규"}
-                                </span>
-                              </td>
-                              <td>{c.score.distanceKm.toFixed(1)} km</td>
-                              <td>{c.own_vehicle || "-"}</td>
-                              <td>{c.sigungu || "-"}</td>
-                              <td className="td-bold rec-score-total">{c.score.total}</td>
-                              <td className="td-meta">
-                                거리 {c.score.distance} · 차량 {c.score.vehicle} · 최신성 {c.score.recency}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {recResult && (
-                <div className="rec-preview-inline">
-                  <h3 className="section-title">📤 발송 미리보기</h3>
-                  <div className="rec-preview-meta">
-                    SMS로 발송됩니다. 한 번 발송된 메시지는 회수할 수 없습니다.
-                  </div>
-                  <div className="rec-message-preview">{recPosting || "(공고 내용을 입력하세요)"}</div>
-
-                  {recSelected.size > 0 ? (
-                    <div className="rec-recipients-preview">
-                      <strong>수신자 ({recSelected.size}명):</strong>
-                      <div className="rec-recipients-list">
-                        {recResult.candidates
-                          .filter((c) => recSelected.has(candidateKey(c)))
-                          .map((c) => (
-                            <span key={candidateKey(c)} className="rec-recipient-chip">
-                              {c.name}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rec-empty-recipients">위 표에서 발송 대상을 체크해주세요.</div>
-                  )}
-
-                  <button
-                    className="rec-btn-primary rec-send-btn"
-                    onClick={sendRecMessages}
-                    disabled={recSending || recSelected.size === 0}
-                  >
-                    {recSending
-                      ? "발송 중..."
-                      : recSelected.size === 0
-                      ? "발송 대상 선택 필요"
-                      : `${recSelected.size}명에게 발송`}
-                  </button>
-                </div>
-              )}
-            </div>
+            <RecommendView />
           ) : tab === "branches" ? (
-            <div className="content">
-              <h2 className="page-title">지점 관리 <span className="count">{localBranches.filter((b) => b.active).length}개 활성</span></h2>
-              <p className="page-desc">
-                /apply 페이지의 지점 드롭다운과 /admin의 모든 지점 필터·통계가 이 목록을 사용합니다.
-                행을 드래그해서 순서를 바꾸고, 변경사항은 [저장] 버튼을 눌러야 반영됩니다.
-              </p>
-
-              <div className="branch-add-row">
-                <input
-                  className="filter-input"
-                  placeholder="새 지점 이름 (예: 송파잠실)"
-                  value={newBranchName}
-                  onChange={(e) => setNewBranchName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addBranch(); }}
-                />
-                <button
-                  className="rec-btn-secondary"
-                  onClick={addBranch}
-                  disabled={branchSaving}
-                >
-                  + 지점 추가
-                </button>
-              </div>
-
-              <div className="branch-save-bar">
-                {branchesDirty ? (
-                  <span className="branch-dirty-msg">⚠️ 저장되지 않은 변경사항이 있습니다.</span>
-                ) : (
-                  <span className="branch-clean-msg">변경사항 없음</span>
-                )}
-                <div className="branch-save-actions">
-                  <button
-                    className="rec-btn-secondary"
-                    onClick={resetBranchChanges}
-                    disabled={!branchesDirty || branchSaving}
-                  >
-                    취소
-                  </button>
-                  <button
-                    className="rec-btn-primary"
-                    onClick={saveBranchChanges}
-                    disabled={!branchesDirty || branchSaving}
-                    style={{ marginTop: 0 }}
-                  >
-                    {branchSaving ? "저장 중..." : "변경사항 저장"}
-                  </button>
-                </div>
-              </div>
-
-              {branchesLoading ? (
-                <div className="loading">로딩 중...</div>
-              ) : (
-                <div className="table-wrap">
-                  <table className="table branch-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: 32 }}></th>
-                        <th>지점명</th>
-                        <th style={{ width: 90 }}>활성</th>
-                        <th style={{ width: 130 }}>상태</th>
-                        <th style={{ width: 80 }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {localBranches.map((b) => {
-                        const usageCount = data.filter(
-                          (a) =>
-                            a.branch === b.name ||
-                            a.branch1 === b.name ||
-                            a.branch2 === b.name ||
-                            a.confirmed_branch === b.name ||
-                            a.current_branch === b.name
-                        ).length;
-                        const isDragging = dragId === b.id;
-                        const isDragOver = dragOverId === b.id && dragId !== b.id;
-                        return (
-                          <Fragment key={b.id}>
-                          <tr
-                            draggable
-                            onDragStart={() => handleDragStart(b.id)}
-                            onDragOver={(e) => handleDragOver(e, b.id)}
-                            onDragLeave={() => setDragOverId(null)}
-                            onDrop={() => handleDrop(b.id)}
-                            onDragEnd={() => { setDragId(null); setDragOverId(null); }}
-                            className={`branch-row ${isDragging ? "drag-ghost" : ""} ${isDragOver ? "drag-over" : ""}`}
-                            style={{ opacity: isDragging ? 0.4 : b.active ? 1 : 0.55 }}
-                          >
-                            <td className="branch-drag-handle" title="드래그해서 순서 변경">⋮⋮</td>
-                            <td>
-                              <input
-                                type="text"
-                                className="branch-name-input"
-                                value={b.name}
-                                disabled={branchSaving}
-                                onChange={(e) => updateLocalBranch(b.id, { name: e.target.value })}
-                              />
-                            </td>
-                            <td>
-                              <label className="toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={b.active}
-                                  disabled={branchSaving}
-                                  onChange={(e) => updateLocalBranch(b.id, { active: e.target.checked })}
-                                />
-                                <span className="toggle-slider" />
-                              </label>
-                            </td>
-                            <td className="td-meta">
-                              {usageCount > 0 ? `지원자 ${usageCount}명` : "사용 0"}
-                            </td>
-                            <td className="branch-row-actions">
-                              <button
-                                className={`branch-ai-btn ${(b.ai_facts ?? "").trim() ? "branch-ai-btn-filled" : ""}`}
-                                disabled={branchSaving}
-                                title={(b.ai_facts ?? "").trim() ? "AI 참고 정보 있음 — 편집" : "AI 참고 정보 추가"}
-                                onClick={() => setExpandedAiFactsId(expandedAiFactsId === b.id ? null : b.id)}
-                              >
-                                🤖 AI
-                              </button>
-                              <button
-                                className="rec-btn-secondary"
-                                disabled={branchSaving}
-                                onClick={() => deleteBranch(b.id, b.name)}
-                              >
-                                삭제
-                              </button>
-                            </td>
-                          </tr>
-                          {expandedAiFactsId === b.id && (
-                            <tr className="branch-ai-row">
-                              <td colSpan={5}>
-                                <div className="branch-ai-wrap">
-                                  <div className="branch-ai-label">
-                                    🤖 <b>{b.name}</b> 지점 AI 참고 정보 (응대 시 이 지점 지원자에게만 주입됨)
-                                  </div>
-                                  <textarea
-                                    className="branch-ai-textarea"
-                                    rows={6}
-                                    placeholder={`예) 시급: 18,000~20,000원\n근무시간: 평일 08~16시\n위치: 서울 강북구 ...\n픽업: 강북미아 비마트 1층`}
-                                    value={b.ai_facts ?? ""}
-                                    disabled={branchSaving}
-                                    onChange={(e) => updateLocalBranch(b.id, { ai_facts: e.target.value })}
-                                  />
-                                  <div className="branch-ai-hint">
-                                    공통 정보(전 지점)는 [🧠 클로드 조련하기 → 운영 정보]에서 관리. 위 입력은 공통과 다른 내용이 있으면 <b>이 지점이 우선</b>됩니다.
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* 슬롯 정원 매트릭스 */}
-              {!branchesLoading && localBranches.length > 0 && (
-                <div className="slot-capacity-card">
-                  <h3 className="slot-capacity-title">슬롯 정원 매트릭스</h3>
-                  <p className="page-desc" style={{ marginTop: 0 }}>
-                    지점별 슬롯 정원을 직접 편집합니다. 확정 슬롯 매트릭스와 추천·확정 로직이 이 값을 기준으로 동작합니다.
-                  </p>
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th style={{ minWidth: 120 }}>지점</th>
-                          {SLOTS.map((s) => (
-                            <th key={s} style={{ textAlign: "center", width: 100 }}>{s}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {localBranches.filter((b) => b.active).map((b) => (
-                          <tr key={b.id}>
-                            <td><b>{b.name}</b></td>
-                            {SLOTS.map((s) => (
-                              <td key={s} style={{ textAlign: "center" }}>
-                                <input
-                                  type="number"
-                                  className="slot-cap-input"
-                                  min={0}
-                                  max={99}
-                                  value={getSlotCapacity(b, s)}
-                                  disabled={branchSaving}
-                                  onFocus={(e) => e.currentTarget.select()}
-                                  onChange={(e) => {
-                                    // leading-zero('05') 케이스에서도 5가 들어가도록 parseInt 사용 후 clamp.
-                                    const raw = e.target.value;
-                                    const parsed = raw === "" ? 0 : parseInt(raw, 10);
-                                    const n = Math.max(0, Math.min(99, Number.isFinite(parsed) ? parsed : 0));
-                                    const prevCap = {
-                                      ...DEFAULT_SLOT_CAPACITY,
-                                      ...(b.slot_capacity ?? {}),
-                                    };
-                                    updateLocalBranch(b.id, {
-                                      slot_capacity: { ...prevCap, [s]: n },
-                                    });
-                                  }}
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            <BranchAdminView
+              branches={branches}
+              branchesLoading={branchesLoading}
+              data={data}
+              onBranchesChanged={fetchBranches}
+            />
           ) : tab === "site-managers" ? (
             <SiteManagersView branches={allBranchNames} />
           ) : tab === "agent" ? (
@@ -2705,7 +514,7 @@ export default function AdminPage() {
                     });
 
                   return contactList.length === 0 ? (
-                    <div className="empty">해당하는 지원자가 없습니다.</div>
+                    <EmptyState title="대화할 지원자가 없어요" hint="검색어나 필터를 바꿔보세요." />
                   ) : (
                     contactList.map((a) => (
                       <div key={a.id} className={`contact-card ${a.unread_count > 0 ? "contact-unread" : ""}`} onClick={() => openChat(a)}>
@@ -2731,124 +540,15 @@ export default function AdminPage() {
               </div>
             </div>
           ) : null}
-          {/* 대화 패널 (카카오톡 스타일) */}
+          {/* 대화 패널 (카카오톡 스타일) — ChatPanel이 메시지/초안/발송/구독 소유 */}
           {chatApplicant && (
-            <div className="chat-overlay">
-              <div className="chat-panel">
-                <div className="chat-header">
-                  <div>
-                    <h3 className="chat-name">{chatApplicant.name}</h3>
-                    <span className="chat-phone">{chatApplicant.phone}</span>
-                  </div>
-                  <button className="close-btn" onClick={closeChat}>✕</button>
-                </div>
-
-                <div className="chat-messages" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
-                  {chatLoading ? (
-                    <div className="chat-loading">로딩 중...</div>
-                  ) : messages.length === 0 ? (
-                    <div className="chat-empty">대화 내역이 없습니다.</div>
-                  ) : (
-                    messages.map((msg) => (
-                      <div key={msg.id} className={`chat-bubble-wrap ${msg.direction === "outbound" ? "bubble-right" : "bubble-left"}`}>
-                        <div className={`chat-bubble ${msg.direction === "outbound" ? "bubble-out" : "bubble-in"}`}>
-                          <p className="bubble-body">{msg.body}</p>
-                          {msg.reasoning && (
-                            <div className="bubble-reasoning">🤖 {msg.reasoning}</div>
-                          )}
-                          <div className="bubble-meta">
-                            {msg.sent_by && <span>{msg.sent_by}</span>}
-                            <span>{new Date(msg.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {draft && (
-                  <div className={`ai-draft ${draft.status === "need_info" ? "ai-draft-warn" : ""}`}>
-                    <div className="ai-draft-header">
-                      <span className="ai-draft-label">
-                        {draft.status === "need_info" ? "⚠️ AI 응대 불가" : "🤖 AI 제안"}
-                      </span>
-                      {draft.reasoning && (
-                        <span className="ai-draft-reason">{draft.reasoning}</span>
-                      )}
-                    </div>
-                    {draft.status === "need_info" ? (
-                      <div className="ai-draft-body">
-                        <p className="ai-draft-need">
-                          모자란 정보: <strong>{draft.missing_info}</strong>
-                        </p>
-                        <p className="ai-draft-need-sub">슬랙으로 알림 보냄. 매니저가 직접 답변하세요.</p>
-                        <div className="ai-draft-actions">
-                          <button className="ai-draft-btn-secondary" onClick={ignoreDraft}>닫기</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="ai-draft-body">
-                        <p className="ai-draft-text">{draft.draft_text}</p>
-                        <div className="ai-draft-actions">
-                          <button
-                            className="ai-draft-btn-primary"
-                            onClick={sendDraftDirect}
-                            disabled={msgSending}
-                          >
-                            그대로 보내기
-                          </button>
-                          <button
-                            className="ai-draft-btn-secondary"
-                            onClick={useDraftAsInput}
-                            disabled={msgSending}
-                          >
-                            수정해서 보내기
-                          </button>
-                          <button
-                            className="ai-draft-btn-ghost"
-                            onClick={ignoreDraft}
-                            disabled={msgSending}
-                          >
-                            무시
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="chat-input-area">
-                  <textarea
-                    className="chat-input"
-                    placeholder="메시지를 입력하세요..."
-                    value={msgInput}
-                    onChange={(e) => {
-                      setMsgInput(e.target.value);
-                      if (draft?.draft_text && e.target.value !== draft.draft_text) {
-                        setDraftEdited(true);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                    rows={2}
-                  />
-                  <button
-                    className={`chat-send-btn ${msgSending ? "sc-btn-loading" : ""}`}
-                    onClick={sendMessage}
-                    disabled={msgSending || !msgInput.trim()}
-                  >
-                    {msgSending ? "발송중" : "발송"}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <ChatPanel
+              applicant={chatApplicant}
+              onClose={() => setChatApplicant(null)}
+              onUnreadCleared={clearUnread}
+            />
           )}
-        </main>
-      </div>
+      </AppShell>
 
       {modalMode && (
         <ApplicantFormModal
@@ -2887,7 +587,7 @@ export default function AdminPage() {
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans KR', sans-serif; background: #f5f5f0; color: #1a1a1a; }
+  body { font-family: var(--font-sans); background: #ffffff; color: #151515; }
 
   .admin { display: flex; min-height: 100vh; }
 
@@ -2970,8 +670,8 @@ const css = `
   .sidebar-collapsed .nav-label { width: 0; }
 
   .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
-  .nav-active { background: rgba(245,197,24,0.15); color: #F5C518; }
-  .nav-active:hover { background: rgba(245,197,24,0.2); color: #F5C518; }
+  .nav-active { background: rgba(245,197,24,0.15); color: #e4b976; }
+  .nav-active:hover { background: rgba(245,197,24,0.2); color: #e4b976; }
   .nav-pin { color: #6b7280; }
   .badge {
     background: #ef4444; color: #fff; font-size: 11px; font-weight: 700;
@@ -2993,19 +693,19 @@ const css = `
   .loading { padding: 100px; text-align: center; color: #9ca3af; font-size: 15px; }
 
   .page-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
-  .page-desc { font-size: 13px; color: #6b7280; margin: -16px 0 24px; }
-  .count { font-size: 14px; font-weight: 500; color: #9ca3af; margin-left: 8px; }
+  .page-desc { font-size: 13px; color: #4b5563; margin: -16px 0 24px; }
+  .count { font-size: 14px; font-weight: 500; color: #6b7280; margin-left: 8px; }
   .applicants-head {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 24px;
   }
   .applicants-head .page-title { margin-bottom: 0; }
   .add-applicant-btn {
-    background: #1F2937; color: #fff; border: none; padding: 8px 14px;
+    background: #e4b976; color: #3D2B00; border: none; padding: 8px 14px;
     border-radius: 6px; font-size: 13px; font-weight: 600;
-    cursor: pointer; font-family: inherit;
+    cursor: pointer; font-family: inherit; transition: background 0.15s;
   }
-  .add-applicant-btn:hover { background: #111827; }
+  .add-applicant-btn:hover { background: #d2a55f; }
 
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 32px; }
   .stat-card {
@@ -3025,7 +725,7 @@ const css = `
     padding: 8px 12px; border: 1.5px solid #e8e8e0; border-radius: 8px;
     font-size: 13px; font-family: inherit; background: #fff; outline: none;
   }
-  .filter-select:focus, .filter-input:focus { border-color: #F5C518; }
+  .filter-select:focus, .filter-input:focus { border-color: #e4b976; }
   .filter-input { min-width: 200px; }
 
   .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; border: 1px solid #e8e8e0; }
@@ -3038,8 +738,8 @@ const css = `
   .table td { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; white-space: nowrap; }
   .table tbody tr:last-child td { border-bottom: none; }
   .clickable { cursor: pointer; transition: background 0.1s; }
-  .clickable:hover { background: #FFFBEB; }
-  .row-selected { background: #FFFBEB; }
+  .clickable:hover { background: #f7eedd; }
+  .row-selected { background: #f7eedd; }
   .td-bold { font-weight: 600; }
   .td-warn { color: #f59e0b; font-weight: 700; }
   .td-success { color: #10b981; font-weight: 700; }
@@ -3101,12 +801,12 @@ const css = `
   }
   .detail-actions { display: flex; gap: 8px; align-items: center; }
   .save-btn {
-    padding: 7px 16px; background: #F5C518; color: #3D2B00;
+    padding: 7px 16px; background: #e4b976; color: #3D2B00;
     border: none; border-radius: 8px; font-size: 13px; font-weight: 700;
     font-family: inherit; cursor: pointer; transition: background 0.15s;
   }
-  .save-btn:hover:not(:disabled) { background: #E6B800; }
-  .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .save-btn:hover:not(:disabled) { background: #d2a55f; }
+  .save-btn:disabled { background: #ECECEC; color: #B0B0B0; cursor: not-allowed; }
   .cancel-btn {
     padding: 7px 14px; background: #fff; color: #6b7280;
     border: 1.5px solid #E8E8E0; border-radius: 8px; font-size: 13px; font-weight: 600;
@@ -3158,7 +858,7 @@ const css = `
   /* 편집 가능 영역 */
   .edit-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px; padding: 16px; background: #FFFBEB; border: 1px solid #F5C518;
+    gap: 12px; padding: 16px; background: #f7eedd; border: 1px solid #e4b976;
     border-radius: 10px; margin-bottom: 16px;
   }
   .edit-field { display: flex; flex-direction: column; gap: 6px; }
@@ -3213,7 +913,7 @@ const css = `
   .cell-partial  { color: #854d0e; background: #fef9c3; }  /* 1~N미만 — 노랑 */
   .cell-full     { color: #064e3b; background: #d1fae5; }  /* N이상 — 초록 (재정의) */
   .cell-disabled { color: #d1d5db; background: #fafafa; }  /* 정원=0(미운영) — 중립 회색 */
-  .cell-active { outline: 2px solid #F5C518; outline-offset: -2px; }
+  .cell-active { outline: 2px solid #e4b976; outline-offset: -2px; }
   .conf-main { font-size: 14px; font-weight: 700; }
   .conf-cap { font-size: 11px; font-weight: 500; opacity: 0.55; margin-left: 1px; }
   .conf-sub { font-size: 10px; font-weight: 500; opacity: 0.7; margin-top: 2px; }
@@ -3300,7 +1000,7 @@ const css = `
     font-family: inherit;
     line-height: 1;
   }
-  .ppc-edit-btn:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
+  .ppc-edit-btn:hover { background: #f7eedd; border-color: #e4b976; color: #92650A; }
   .ppc-order-buttons {
     display: inline-flex;
     flex-direction: column;
@@ -3324,8 +1024,8 @@ const css = `
     padding: 0;
   }
   .ppc-order-btn:hover:not(:disabled) {
-    background: #FFFBEB;
-    border-color: #F5C518;
+    background: #f7eedd;
+    border-color: #e4b976;
     color: #92650A;
   }
   .ppc-order-btn:disabled { opacity: 0.25; cursor: not-allowed; }
@@ -3358,7 +1058,7 @@ const css = `
     transition: all 0.15s;
   }
   .rec-row .radio-on {
-    border-color: #F5C518; background: #FFFBEB;
+    border-color: #e4b976; background: #f7eedd;
     color: #92650A; font-weight: 700;
     box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
   }
@@ -3367,22 +1067,22 @@ const css = `
     font-family: inherit; font-size: 13px; line-height: 1.6; outline: none;
     resize: vertical;
   }
-  .rec-textarea:focus { border-color: #F5C518; }
+  .rec-textarea:focus { border-color: #e4b976; }
   .rec-input {
     width: 100%; padding: 10px 12px; border: 1.5px solid #e8e8e0; border-radius: 8px;
     font-family: inherit; font-size: 13px; outline: none; margin-top: 8px;
   }
-  .rec-input:focus { border-color: #F5C518; }
+  .rec-input:focus { border-color: #e4b976; }
   .rec-advanced { margin-top: 12px; }
   .rec-advanced summary { font-size: 12px; color: #6b7280; cursor: pointer; padding: 4px 0; }
   .rec-btn-primary {
     margin-top: 14px; padding: 10px 24px;
-    background: #F5C518; color: #3D2B00; border: none; border-radius: 8px;
+    background: #e4b976; color: #3D2B00; border: none; border-radius: 8px;
     font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
     transition: background 0.15s;
   }
-  .rec-btn-primary:hover:not(:disabled) { background: #E6B800; }
-  .rec-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rec-btn-primary:hover:not(:disabled) { background: #d2a55f; }
+  .rec-btn-primary:disabled { background: #ECECEC; color: #B0B0B0; cursor: not-allowed; }
   .rec-btn-secondary {
     padding: 7px 14px; background: #fff; color: #374151;
     border: 1.5px solid #E8E8E0; border-radius: 8px;
@@ -3403,7 +1103,7 @@ const css = `
   .rec-gen-btn { margin-top: 10px; }
   .rec-gen-missing {
     margin-top: 10px; padding: 8px 10px;
-    background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 6px;
+    background: #FEF3C7; border: 1px solid #e4b976; border-radius: 6px;
     font-size: 12px; color: #78350F; line-height: 1.6;
   }
   .rec-gen-missing code {
@@ -3411,7 +1111,7 @@ const css = `
   }
   .rec-missing-chip {
     display: inline-block; margin: 2px 4px 2px 0; padding: 1px 8px;
-    background: #fff; border: 1px solid #FCD34D; border-radius: 10px;
+    background: #fff; border: 1px solid #e4b976; border-radius: 10px;
     font-size: 11px; color: #78350F; font-weight: 600;
   }
 
@@ -3425,7 +1125,7 @@ const css = `
     font-family: inherit; font-size: 13px; outline: none; background: #fff;
     width: 100%; max-width: 240px; font-weight: 600;
   }
-  .branch-name-input:focus { border-color: #F5C518; }
+  .branch-name-input:focus { border-color: #e4b976; }
   .branch-name-input:disabled { background: #f9fafb; }
 
   .branch-save-bar {
@@ -3440,8 +1140,8 @@ const css = `
 
   .branch-table tr.branch-row { cursor: grab; transition: background 0.12s; }
   .branch-table tr.branch-row:active { cursor: grabbing; }
-  .branch-table tr.drag-ghost { background: #FFFBEB; }
-  .branch-table tr.drag-over { box-shadow: inset 0 2px 0 #F5C518; }
+  .branch-table tr.drag-ghost { background: #f7eedd; }
+  .branch-table tr.drag-over { box-shadow: inset 0 2px 0 #e4b976; }
   .branch-drag-handle {
     color: #9ca3af; font-size: 14px; letter-spacing: -2px; user-select: none;
     cursor: grab; width: 32px; text-align: center;
@@ -3468,7 +1168,7 @@ const css = `
   }
   .slot-cap-input:focus {
     outline: none;
-    border-color: #F5C518;
+    border-color: #e4b976;
     box-shadow: 0 0 0 2px rgba(245,197,24,0.2);
   }
 
@@ -3512,7 +1212,7 @@ const css = `
 
   .rec-result { margin-top: 12px; }
   .rec-job-info {
-    background: #FFFBEB; padding: 14px 16px; border-radius: 10px; border: 1px solid #F5C518;
+    background: #f7eedd; padding: 14px 16px; border-radius: 10px; border: 1px solid #e4b976;
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px;
     margin-bottom: 16px; font-size: 13px;
   }
@@ -3527,7 +1227,7 @@ const css = `
   }
   .src-active { background: #dbeafe; color: #1e3a8a; }
   .src-legacy { background: #f3f4f6; color: #6b7280; }
-  .td-meta { font-size: 11px; color: #9ca3af; }
+  .td-meta { font-size: 11px; color: #6b7280; }
 
   .rec-preview-inline {
     margin-top: 24px; background: #fff; padding: 20px; border-radius: 12px;
@@ -3539,7 +1239,7 @@ const css = `
     border-radius: 6px; margin-bottom: 14px; font-weight: 500;
   }
   .rec-message-preview {
-    background: #FFFBEB; border: 1px solid #F5C518; border-radius: 10px;
+    background: #f7eedd; border: 1px solid #e4b976; border-radius: 10px;
     padding: 14px 16px; font-size: 13px; line-height: 1.7;
     white-space: pre-wrap; margin-bottom: 16px; max-height: 240px; overflow-y: auto;
     color: #374151;
@@ -3571,23 +1271,23 @@ const css = `
   .sc-details { font-size: 12px; color: #9ca3af; margin-bottom: 6px; display: flex; gap: 16px; }
   .sc-intro { font-size: 12px; color: #6b7280; line-height: 1.5; }
   .sc-btn {
-    padding: 8px 16px; background: #F5C518; color: #3D2B00;
+    padding: 8px 16px; background: #e4b976; color: #3D2B00;
     border: none; border-radius: 8px; font-size: 13px; font-weight: 700;
     font-family: inherit; cursor: pointer; white-space: nowrap;
     transition: background 0.15s;
   }
-  .sc-btn:hover { background: #E6B800; }
+  .sc-btn:hover { background: #d2a55f; }
   .sc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .sc-btn-loading { background: #d4a50e; }
 
   .row-action-btn {
-    padding: 5px 10px; background: #F5C518; color: #3D2B00;
+    padding: 5px 10px; background: #e4b976; color: #3D2B00;
     border: none; border-radius: 6px; font-size: 11px; font-weight: 700;
     font-family: inherit; cursor: pointer; white-space: nowrap;
     transition: background 0.15s;
   }
-  .row-action-btn:hover:not(:disabled) { background: #E6B800; }
-  .row-action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .row-action-btn:hover:not(:disabled) { background: #d2a55f; }
+  .row-action-btn:disabled { background: #ECECEC; color: #B0B0B0; cursor: not-allowed; }
   .row-action-loading { background: #d4a50e; }
 
   /* 전용 폰 상태 바 */
@@ -3614,7 +1314,7 @@ const css = `
     background: #fff; border: 1px solid #e8e8e0; border-radius: 12px;
     padding: 16px 20px; cursor: pointer; transition: all 0.15s;
   }
-  .contact-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #F5C518; }
+  .contact-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #e4b976; }
   .contact-unread { border-left: 3px solid #ef4444; background: #fffbfb; }
   .contact-left { flex: 1; }
   .contact-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -3671,7 +1371,7 @@ const css = `
     border-top-left-radius: 4px;
   }
   .bubble-out {
-    background: #F5C518; color: #3D2B00;
+    background: #e4b976; color: #3D2B00;
     border-top-right-radius: 4px;
   }
   .bubble-body { margin: 0; white-space: pre-wrap; }
@@ -3712,7 +1412,7 @@ const css = `
     color: #6b7280; background: #fff; cursor: pointer;
   }
   .agent-radio-row .radio-on {
-    border-color: #F5C518; background: #FFFBEB;
+    border-color: #e4b976; background: #f7eedd;
     color: #92650A; font-weight: 700;
   }
   .agent-manual-fields { display: flex; flex-direction: column; gap: 6px; }
@@ -3754,7 +1454,7 @@ const css = `
     align-self: flex-start; background: #fff; border-color: #e8e8e0;
   }
   .agent-turn-out {
-    align-self: flex-end; background: #FFFBEB; border-color: #FCD34D;
+    align-self: flex-end; background: #f7eedd; border-color: #e4b976;
   }
   .agent-turn-label {
     display: flex; align-items: center; gap: 6px;
@@ -3803,7 +1503,7 @@ const css = `
     font-size: 13px;
   }
   .ai-draft-warn {
-    background: #FEF3C7; border-color: #FCD34D;
+    background: #FEF3C7; border-color: #e4b976;
   }
   .ai-draft-header {
     display: flex; align-items: center; gap: 8px;
@@ -3851,14 +1551,14 @@ const css = `
     padding: 10px 12px; font-size: 13px; font-family: inherit;
     resize: none; outline: none;
   }
-  .chat-input:focus { border-color: #F5C518; }
+  .chat-input:focus { border-color: #e4b976; }
   .chat-send-btn {
-    padding: 10px 20px; background: #F5C518; color: #3D2B00;
+    padding: 10px 20px; background: #e4b976; color: #3D2B00;
     border: none; border-radius: 10px; font-size: 13px; font-weight: 700;
     font-family: inherit; cursor: pointer; white-space: nowrap;
     align-self: flex-end;
   }
-  .chat-send-btn:hover { background: #E6B800; }
+  .chat-send-btn:hover { background: #d2a55f; }
   .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   @media (max-width: 768px) {
@@ -3873,5 +1573,17 @@ const css = `
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
     .detail-grid { grid-template-columns: 1fr 1fr; }
     .detail-grid .detail-wide { grid-column: span 2; }
+  }
+
+  /* 키보드 포커스 가시화 — 마우스 클릭엔 영향 없음(:focus-visible) */
+  .admin a:focus-visible,
+  .admin button:focus-visible,
+  .admin input:focus-visible,
+  .admin select:focus-visible,
+  .admin textarea:focus-visible,
+  .admin [tabindex]:focus-visible {
+    outline: 2px solid #e4b976;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 `;

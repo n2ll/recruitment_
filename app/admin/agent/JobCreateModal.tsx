@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 
 interface SiteManager {
   id: number;
@@ -49,6 +51,8 @@ function ageFromBirth(b: string | null | undefined): number | null {
 }
 
 export default function JobCreateModal({ branches, onClose, onCreated }: JobCreateModalProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [rough, setRough] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateMissing, setGenerateMissing] = useState<string[]>([]);
@@ -87,7 +91,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
 
   const generateBody = async () => {
     if (!rough.trim()) {
-      alert("메모를 입력해주세요.");
+      toast({ title: "메모를 입력해주세요", tone: "info" });
       return;
     }
     setGenerating(true);
@@ -100,7 +104,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "공고 생성 실패");
+        toast({ title: "공고 생성에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setBody(json.posting || "");
@@ -111,7 +115,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
       if (firstLine && !title) setTitle(firstLine.slice(0, 60));
     } catch (e) {
       console.error(e);
-      alert("공고 생성 중 오류");
+      toast({ title: "공고 생성 중 오류가 발생했어요", tone: "error" });
     } finally {
       setGenerating(false);
     }
@@ -119,7 +123,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
 
   const fetchRecommendations = async () => {
     if (!body.trim()) {
-      alert("공고 본문을 먼저 작성해주세요.");
+      toast({ title: "공고 본문을 먼저 작성해주세요", tone: "info" });
       return;
     }
     setRecLoading(true);
@@ -135,7 +139,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "추천 실패");
+        toast({ title: "후보 추천에 실패했어요", description: json.error || "알 수 없는 오류", tone: "error" });
         return;
       }
       setCandidates(json.candidates || []);
@@ -143,7 +147,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
       if (!pickupAddress && json.job?.address) setPickupAddress(json.job.address);
     } catch (e) {
       console.error(e);
-      alert("추천 중 오류");
+      toast({ title: "추천 중 오류가 발생했어요", tone: "error" });
     } finally {
       setRecLoading(false);
     }
@@ -173,6 +177,12 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
       setError("발송할 후보를 1명 이상 선택해주세요.");
       return;
     }
+    const ok = await confirm({
+      title: `선택한 ${selected.size}명에게 공고 SMS를 발송할까요?`,
+      description: "실제 문자가 즉시 나가고, 발송된 메시지는 회수할 수 없어요.",
+      confirmText: `${selected.size}명에게 발송`,
+    });
+    if (!ok) return;
     setSubmitting(true);
     try {
       // 1) 공고 저장
@@ -224,11 +234,13 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
         throw new Error(dispatchJson.error || "발송 실패");
       }
 
-      alert(
-        `공고 생성 완료.\n발송 ${dispatchJson.sent}명 / 스킵 ${dispatchJson.skipped}명${
-          dispatchJson.conflicts?.length ? `\n⚠️ 다른 공고 진행 중 ${dispatchJson.conflicts.length}명 보류됨` : ""
-        }`
-      );
+      toast({
+        title: "공고를 만들고 발송했어요",
+        description: `발송 ${dispatchJson.sent}명 · 스킵 ${dispatchJson.skipped}명${
+          dispatchJson.conflicts?.length ? ` · 다른 공고 진행 중 ${dispatchJson.conflicts.length}명 보류` : ""
+        }`,
+        tone: "success",
+      });
       onCreated(jobId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류");

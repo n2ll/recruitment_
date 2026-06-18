@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 const SLOTS = ["평일오전", "평일오후", "주말오전", "주말오후"] as const;
 type SlotKey = (typeof SLOTS)[number];
@@ -128,6 +129,7 @@ export default function ApplicantMiniDetail({
   onClose: () => void;
   onPatched: (patch: MiniApplicantPatch) => void;
 }) {
+  const toast = useToast();
   const [draft, setDraft] = useState<Partial<MiniApplicant>>({});
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -163,7 +165,7 @@ export default function ApplicantMiniDetail({
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        alert(json.error || "저장 실패");
+        toast({ title: "지원자 정보 저장에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       onPatched(json.data as MiniApplicantPatch);
@@ -174,7 +176,7 @@ export default function ApplicantMiniDetail({
       });
       setEditingSection(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패");
+      toast({ title: "지원자 정보 저장에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     } finally {
       setSaving(false);
     }

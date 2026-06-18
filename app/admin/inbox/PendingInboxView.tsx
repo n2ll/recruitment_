@@ -10,6 +10,9 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 interface PendingMessage {
   id: string;
@@ -27,6 +30,8 @@ function formatPhone(raw: string): string {
 }
 
 export default function PendingInboxView() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState<PendingMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
@@ -51,7 +56,12 @@ export default function PendingInboxView() {
   const classify = async (id: string, action: "baemin" | "other") => {
     if (acting) return;
     if (action === "baemin") {
-      if (!confirm("배민 지원자로 분류합니다.\n\n• 자동으로 후보 생성 + AI 응대 시작\n• 동일 번호의 다른 미분류 메시지도 같이 배민으로 분류됨\n\n진행할까요?")) return;
+      const ok = await confirm({
+        title: "배민 지원자로 분류할까요?",
+        description: "후보가 자동 생성되고 AI 응대가 시작돼요. 같은 번호의 다른 미분류 메시지도 함께 배민으로 분류됩니다.",
+        confirmText: "배민 지원자로 분류",
+      });
+      if (!ok) return;
     }
     setActing(id);
     try {
@@ -62,12 +72,12 @@ export default function PendingInboxView() {
       });
       const json = await res.json();
       if (!res.ok) {
-        alert(json.error || "분류 실패");
+        toast({ title: "메시지 분류에 실패했어요", description: json.error || "잠시 후 다시 시도해주세요", tone: "error" });
         return;
       }
       await fetchPending();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "분류 실패");
+      toast({ title: "메시지 분류에 실패했어요", description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요", tone: "error" });
     } finally {
       setActing(null);
     }
@@ -89,9 +99,9 @@ export default function PendingInboxView() {
       </p>
 
       {loading ? (
-        <div className="loading">로딩 중...</div>
+        <LoadingState label="미분류 메시지 불러오는 중…" />
       ) : items.length === 0 ? (
-        <div className="pi-empty">미분류 메시지가 없습니다 ✨</div>
+        <EmptyState title="미분류 메시지가 없어요" hint="새 인입 메시지가 들어오면 여기에 표시돼요." />
       ) : (
         <div className="pi-list">
           {items.map((m) => (
