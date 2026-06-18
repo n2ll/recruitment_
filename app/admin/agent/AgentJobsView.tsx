@@ -541,7 +541,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         .ajv-create-btn {
           padding: 8px 14px;
           background: #e4b976;
-          color: #3D2B00;
+          color: #151515;
           border: none;
           border-radius: 8px;
           font-size: 12px;
@@ -572,7 +572,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         .ajv-tt-on {
           background: #fff;
           color: #1a1a1a;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+          border: 1px solid #e8e8e0;
         }
         .ajv-chips {
           flex: 1;
@@ -623,7 +623,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           display: flex; gap: 6px; flex-wrap: wrap;
         }
         .ajv-status-badge { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-        .ajv-st-closed { background: #e5e7eb; color: #4b5563; }
+        .ajv-st-closed { background: #e5e6e1; color: #4b5563; }
 
         /* 칸반 */
         .ajv-kanban {
@@ -671,8 +671,8 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         }
         .ajv-kan-card:hover { background: #f3f4f6; }
         .ajv-kan-active {
-          border-color: #F5C518 !important;
-          background: #FFFBEB !important;
+          border-color: #e4b976 !important;
+          background: #f7eedd !important;
         }
         .ajv-kan-card-name { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
         .ajv-kan-card-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b7280; }
@@ -696,7 +696,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         .ajv-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
         .ajv-tr { cursor: pointer; }
         .ajv-tr:hover { background: #f9fafb; }
-        .ajv-tr-active { background: #FFFBEB; }
+        .ajv-tr-active { background: #f7eedd; }
         .ajv-bold { font-weight: 700; }
         .ajv-meta-text { color: #6b7280; font-size: 11px; }
         .ajv-loading { text-align: center; padding: 30px; color: #9ca3af; }
@@ -705,7 +705,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           color: #fff; font-size: 11px; font-weight: 600;
         }
         .ajv-unread {
-          background: #ef4444; color: #fff;
+          background: #5c2529; color: #fff;
           font-size: 10px; font-weight: 700;
           padding: 1px 6px; border-radius: 8px;
         }
@@ -750,7 +750,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           border-radius: 8px;
           resize: none; outline: none;
         }
-        .ajv-panel-input:focus { border-color: #F5C518; }
+        .ajv-panel-input:focus { border-color: #e4b976; }
 
         /* 공통 버튼 */
         .ajv-btn-primary, .ajv-btn-secondary {
@@ -762,7 +762,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
           cursor: pointer;
           border: 1.5px solid;
         }
-        .ajv-btn-primary { background: #e4b976; color: #3D2B00; border-color: #e4b976; }
+        .ajv-btn-primary { background: #e4b976; color: #151515; border-color: #e4b976; }
         .ajv-btn-primary:hover { background: #d2a55f; border-color: #d2a55f; }
         .ajv-btn-primary:disabled { background: #ECECEC; color: #B0B0B0; border-color: #ECECEC; cursor: not-allowed; }
         .ajv-btn-secondary { background: #fff; color: #1a1a1a; border-color: #e8e8e0; }
@@ -808,8 +808,8 @@ function JobChip({
         }
         .jc:hover { background: #f9fafb; }
         .jc-active {
-          background: #FFFBEB !important;
-          border-color: #F5C518 !important;
+          background: #f7eedd !important;
+          border-color: #e4b976 !important;
         }
         .jc-title {
           font-size: 12px;
@@ -906,7 +906,7 @@ function Checklist({ candidate }: { candidate: CandidateRow }) {
         .cl li {
           padding: 4px 0; font-size: 12px; color: #6b7280;
         }
-        .cl-on { color: #10b981; font-weight: 600; }
+        .cl-on { color: #453b60; font-weight: 600; }
         .cl-mark { display: inline-block; width: 18px; }
       `}</style>
     </div>
@@ -956,7 +956,7 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
         .ch-r { justify-content: flex-end; }
         .ch-bub { max-width: 80%; padding: 7px 10px; border-radius: 8px; }
         .ch-in { background: #fff; border: 1px solid #e8e8e0; }
-        .ch-out { background: #FFEB99; }
+        .ch-out { background: #efecf4; }
         .ch-bub p { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
         .ch-reason {
           font-size: 10px;
@@ -1055,8 +1055,8 @@ function ManagerActions({
       <style jsx>{`
         .ma h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
         .ma-paused {
-          padding: 8px 10px; background: #fef3c7;
-          border-radius: 6px; font-size: 12px; color: #92400e;
+          padding: 8px 10px; background: #f7eedd;
+          border-radius: 6px; font-size: 12px; color: #65451d;
           margin-bottom: 8px;
         }
         .ma-row { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1066,8 +1066,8 @@ function ManagerActions({
           border-radius: 6px; font-family: inherit;
           font-size: 12px; cursor: pointer;
         }
-        .ma-btn-ok { background: #10b981; color: #fff; border-color: #10b981; }
-        .ma-btn-warn { background: #fff; color: #ef4444; border-color: #fecaca; }
+        .ma-btn-ok { background: #453b60; color: #fff; border-color: #453b60; }
+        .ma-btn-warn { background: #fff; color: #5c2529; border-color: #d79caa; }
         .ma-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </div>

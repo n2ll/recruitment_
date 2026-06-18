@@ -114,14 +114,14 @@ export const STAGE_LABEL: Record<string, string> = {
 };
 
 export const STAGE_COLOR: Record<string, string> = {
-  sent: "#9ca3af",
-  null: "#9ca3af",
-  exploration: "#06b6d4",
-  screening: "#3b82f6",
-  onboarding: "#f59e0b",
-  active: "#10b981",
-  paused: "#a855f7",
-  abort: "#ef4444",
+  sent: "#b8b6ae",
+  null: "#b8b6ae",
+  exploration: "#808080",
+  screening: "#453b60",
+  onboarding: "#65451d",
+  active: "#cb9da2",
+  paused: "#e4b976",
+  abort: "#5c2529",
 };
 
 export const STAGE_ORDER: ReadonlyArray<string> = [
