@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 const TIMESLOTS = [
   { label: "평일 오전", sub: "월~금 09:00 ~ 14:00", value: "평일(월~금) 오전 타임 (09:00 ~ 14:00)" },
@@ -320,7 +321,9 @@ function ApplyPage() {
 
         {/* 헤더 */}
         <header className="header">
-          <img src="/logo.png" alt="옹보딩" className="logo-img" />
+          <div className="logo-wrap">
+            <Wordmark size="lg" />
+          </div>
           <h1 className="header-title">배송 파트너 지원서</h1>
           <p className="header-sub">옹보딩 채용</p>
         </header>
@@ -621,11 +624,7 @@ const css = `
     position: relative;
     border-bottom: 3px solid #F5C518;
   }
-  .logo-img {
-    height: 56px; width: auto; max-width: 180px;
-    display: block; margin: 0 auto 8px;
-    object-fit: contain;
-  }
+  .logo-wrap { margin-bottom: 10px; }
   .header-title {
     color: #1a1a1a; font-size: 22px; font-weight: 700;
     letter-spacing: -0.02em; margin-bottom: 4px;
@@ -848,7 +847,6 @@ const css = `
   @media (min-width: 480px) {
     .form-body { padding: 32px 24px 80px; }
     .header { padding: 40px 24px 32px; }
-    .logo-img { height: 64px; max-width: 200px; }
     .header-title { font-size: 26px; }
   }
 `;
