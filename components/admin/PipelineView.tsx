@@ -62,6 +62,17 @@ const COLUMN_ACCENT: Record<string, string> = {
   기타: "bg-mist-gray",
 };
 
+const COLUMN_TINT: Record<string, string> = {
+  "스크리닝 전": "bg-bone/40",
+  "스크리닝 중": "bg-sage-soft",
+  "스크리닝 완료": "bg-lavender-soft",
+  확정인력: "bg-rose-soft",
+  대기자: "bg-amber-soft",
+  부적합: "bg-burgundy/10",
+  이탈: "bg-burgundy/10",
+  기타: "bg-bone/40",
+};
+
 export function PipelineView(props: PipelineViewProps) {
   const {
     applicants,
@@ -192,9 +203,14 @@ export function PipelineView(props: PipelineViewProps) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: Math.min(colIdx * 0.05, 0.3), ease: "easeOut" }}
-                className="flex w-[280px] shrink-0 flex-col rounded-list border border-bone bg-bone/20"
+                className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-list border border-bone bg-paper-white"
               >
-                <header className="flex items-center justify-between gap-2 px-3 py-3">
+                <header
+                  className={cn(
+                    "flex items-center justify-between gap-2 border-b border-bone px-3 py-3",
+                    COLUMN_TINT[status],
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <span className={cn("h-2 w-2 rounded-full", COLUMN_ACCENT[status])} />
                     <span className="text-[13px] font-medium text-ink-black">{status}</span>
@@ -205,7 +221,9 @@ export function PipelineView(props: PipelineViewProps) {
                 </header>
                 <div className="ob-scroll flex max-h-[calc(100vh-280px)] flex-col gap-2 overflow-y-auto px-2 pb-3">
                   {items.length === 0 ? (
-                    <p className="px-2 py-6 text-center text-[12px] text-mist-gray">비어 있어요</p>
+                    <p className="px-2 py-6 text-center text-[12px] text-mist-gray">
+                      이 단계 지원자가 없어요
+                    </p>
                   ) : (
                     items.map((a, i) => (
                       <motion.div
