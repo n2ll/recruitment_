@@ -667,19 +667,19 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           background: #fff;
           outline: none;
         }
-        .pg-input:focus, .pg-textarea:focus { border-color: #F5C518; }
+        .pg-input:focus, .pg-textarea:focus { border-color: #e4b976; }
         .pg-textarea { resize: vertical; min-height: 50px; line-height: 1.55; }
 
         .pg-gen {
-          background: #fffbea;
-          border: 1px solid #fde68a;
+          background: #f7eedd;
+          border: 1px solid #e4b976;
           border-radius: 8px;
           padding: 10px 12px;
           margin-bottom: 10px;
         }
-        .pg-gen summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #92400e; }
+        .pg-gen summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #65451d; }
         .pg-gen-body { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-        .pg-warn { font-size: 11px; color: #92400e; }
+        .pg-warn { font-size: 11px; color: #65451d; }
 
         .pg-meta-grid {
           display: grid;
@@ -724,7 +724,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           cursor: pointer;
           text-align: left;
         }
-        .pg-rec-row:hover { background: #FFFBEB; border-color: #F5C518; }
+        .pg-rec-row:hover { background: #f7eedd; border-color: #e4b976; }
         .pg-meta-text { color: #9ca3af; }
 
         .pg-stage-row { display: flex; gap: 6px; margin-bottom: 10px; }
@@ -761,8 +761,8 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
         .pg-btn-secondary { background: #fff; color: #1a1a1a; border-color: #e8e8e0; }
         .pg-btn-warn {
           background: #fff;
-          color: #b45309;
-          border-color: #fde68a;
+          color: #65451d;
+          border-color: #e4b976;
         }
         .pg-btn-warn:disabled { color: #9ca3af; border-color: #e8e8e0; cursor: not-allowed; }
 
@@ -782,7 +782,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           margin-left: auto;
           font-size: 11px;
           color: #9ca3af;
-          background: #fef3c7;
+          background: #f7eedd;
           padding: 3px 8px;
           border-radius: 6px;
         }
@@ -803,8 +803,8 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           border-radius: 6px;
         }
         .pg-cl-on {
-          background: #d1fae5 !important;
-          color: #065f46 !important;
+          background: #efecf4 !important;
+          color: #453b60 !important;
           font-weight: 600;
         }
 
@@ -844,7 +844,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           white-space: pre-wrap;
         }
         .pg-in { background: #f3f4f6; color: #1a1a1a; }
-        .pg-out { background: #FFEB99; color: #1a1a1a; }
+        .pg-out { background: #efecf4; color: #1a1a1a; }
         .pg-typing { color: #9ca3af; }
 
         .pg-reason {
@@ -861,9 +861,9 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           font-weight: 700;
           display: inline-block;
         }
-        .pg-tr-adv { background: #d1fae5; color: #065f46; }
-        .pg-tr-pause { background: #fef3c7; color: #92400e; }
-        .pg-tr-abort { background: #fee2e2; color: #991b1b; }
+        .pg-tr-adv { background: #efecf4; color: #453b60; }
+        .pg-tr-pause { background: #f7eedd; color: #65451d; }
+        .pg-tr-abort { background: #f4e8ea; color: #5c2529; }
 
         .pg-auto {
           margin-top: 6px;
@@ -874,7 +874,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
         .pg-auto summary {
           cursor: pointer;
           font-size: 11px;
-          color: #2563eb;
+          color: #453b60;
           font-weight: 600;
         }
         .pg-auto-msg {
@@ -891,8 +891,8 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
         .pg-error {
           margin-top: 8px;
           padding: 8px 12px;
-          background: #fee2e2;
-          color: #991b1b;
+          background: #f4e8ea;
+          color: #5c2529;
           border-radius: 8px;
           font-size: 12px;
         }
