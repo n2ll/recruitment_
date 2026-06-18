@@ -36,16 +36,18 @@ const STATUS_OPTIONS = [
   "이탈",
 ];
 
-const STATUS_BG: Record<string, string> = {
-  "스크리닝 전":   "#9CA3AF",
-  "스크리닝 중":   "#6b7280",
-  "스크리닝 완료": "#0EA5E9",
-  "기타":          "#8B5CF6",
-  "확정인력":      "#10b981",
-  "대기자":        "#f59e0b",
-  "부적합":        "#ef4444",
-  "이탈":          "#7f1d1d",
+const STATUS_TONE_DEFAULT = { bg: "#e5e6e1", fg: "#3a4444" };
+const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
+  "스크리닝 전":   { bg: "#e5e6e1", fg: "#3a4444" },
+  "스크리닝 중":   { bg: "#d3e5e9", fg: "#151515" },
+  "스크리닝 완료": { bg: "#efecf4", fg: "#453b60" },
+  "기타":          { bg: "#e5e6e1", fg: "#3a4444" },
+  "확정인력":      { bg: "#f4e8ea", fg: "#5c2529" },
+  "대기자":        { bg: "#f7eedd", fg: "#65451d" },
+  "부적합":        { bg: "#5c2529", fg: "#ffffff" },
+  "이탈":          { bg: "#5c2529", fg: "#ffffff" },
 };
+const statusTone = (s: string | null | undefined) => STATUS_TONE[s ?? ""] ?? STATUS_TONE_DEFAULT;
 
 interface ModeConfig {
   source: string;
@@ -164,20 +166,20 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 const STAGE_COLOR: Record<string, { bg: string; fg: string }> = {
-  exploration: { bg: "#DBEAFE", fg: "#1E40AF" },
-  screening: { bg: "#FEF3C7", fg: "#92400E" },
-  onboarding: { bg: "#E9D5FF", fg: "#6B21A8" },
-  active: { bg: "#D1FAE5", fg: "#065F46" },
-  paused: { bg: "#FEE2E2", fg: "#991B1B" },
-  abort: { bg: "#F3F4F6", fg: "#6B7280" },
+  exploration: { bg: "#eaf3f5", fg: "#3a4444" },
+  screening: { bg: "#f7eedd", fg: "#65451d" },
+  onboarding: { bg: "#efecf4", fg: "#453b60" },
+  active: { bg: "#d3e5e9", fg: "#151515" },
+  paused: { bg: "#f4e8ea", fg: "#5c2529" },
+  abort: { bg: "#e5e6e1", fg: "#3a4444" },
 };
 
 function stageBadge(stage: string | null) {
-  if (!stage) return { label: "—", bg: "#F3F4F6", fg: "#9CA3AF" };
+  if (!stage) return { label: "—", bg: "#e5e6e1", fg: "#808080" };
   return {
     label: STAGE_LABEL[stage] ?? stage,
-    bg: STAGE_COLOR[stage]?.bg ?? "#F3F4F6",
-    fg: STAGE_COLOR[stage]?.fg ?? "#6B7280",
+    bg: STAGE_COLOR[stage]?.bg ?? "#e5e6e1",
+    fg: STAGE_COLOR[stage]?.fg ?? "#3a4444",
   };
 }
 
@@ -692,7 +694,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                       {(c.status === "확정인력" || c.status === "대기자") && (
                         <span
                           className="dg-status-pill"
-                          style={{ background: STATUS_BG[c.status] }}
+                          style={{ background: statusTone(c.status).bg, color: statusTone(c.status).fg }}
                           title={c.status}
                         >
                           {c.status}
@@ -743,7 +745,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                       onClick={() => setDetailOpen(true)}
                       title="지원자 상세 정보(편집 가능) 열기"
                     >
-                      📋 상세정보
+                      상세정보
                     </button>
                     {(() => {
                       const sb = stageBadge(selectedCandidate.agent_stage);
@@ -761,7 +763,10 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     {formatPhone(selectedCandidate.phone)} · {selectedCandidate.branch ?? "-"} ·{" "}
                     <span
                       className="dg-status-wrap"
-                      style={{ background: STATUS_BG[selectedCandidate.status ?? ""] || "#6b7280" }}
+                      style={{
+                        background: statusTone(selectedCandidate.status).bg,
+                        color: statusTone(selectedCandidate.status).fg,
+                      }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <select
@@ -1044,11 +1049,11 @@ const css = `
   .dg-count { color: #808080; font-weight: 500; margin-left: 4px; }
   .dg-help { font-size: 11px; color: #808080; margin-left: 10px; }
   .dg-conv-input-practice {
-    background: linear-gradient(to bottom, #FEF3C7, #fff);
+    background: linear-gradient(to bottom, #f7eedd, #fff);
   }
   .dg-conv-input-practice .dg-textarea {
-    border-color: #F5C518;
-    background: #FFFEF7;
+    border-color: #e4b976;
+    background: #fdfaf2;
   }
 
   .dg-body {
@@ -1105,13 +1110,13 @@ const css = `
     padding: 3px 16px 3px 8px;
     font-size: 11px;
     font-weight: 700;
-    color: #fff;
+    color: inherit;
     cursor: pointer;
     font-family: inherit;
     line-height: 1.4;
   }
   .dg-status-select::-ms-expand { display: none; }
-  .dg-status-select:focus { outline: 2px solid rgba(245,197,24,0.6); outline-offset: 1px; }
+  .dg-status-select:focus { outline: 2px solid rgba(69,59,96,0.5); outline-offset: 1px; }
   .dg-status-select:disabled { opacity: 0.5; cursor: wait; }
   /* 펼친 옵션 메뉴는 흰 배경이라 흰글씨가 안 보임 — 옵션만 검정으로 복구 */
   .dg-status-select option {
@@ -1121,7 +1126,7 @@ const css = `
   }
   .dg-status-arrow {
     pointer-events: none;
-    color: #fff;
+    color: inherit;
     font-size: 10px;
     margin-left: -12px;
     margin-right: 2px;
@@ -1140,7 +1145,7 @@ const css = `
     cursor: pointer;
     vertical-align: middle;
   }
-  .dg-btn-detail:hover { background: #FFFBEB; border-color: #F5C518; color: #92650A; }
+  .dg-btn-detail:hover { background: #f7eedd; border-color: #e4b976; color: #65451d; }
   .dg-right {
     flex: 2;
     display: flex;
@@ -1202,11 +1207,11 @@ const css = `
   }
   .dg-btn-ghost-bordered:hover { background: #f3f4f6; }
   .dg-btn-warn {
-    background: #FEF3C7;
-    border: 1px solid #F5C518;
-    color: #92400E;
+    background: #f7eedd;
+    border: 1px solid #e4b976;
+    color: #65451d;
   }
-  .dg-btn-warn:hover { background: #FDE68A; }
+  .dg-btn-warn:hover { background: #f0e0c0; }
 
   .dg-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; min-height: 0; }
   .dg-list-item {
@@ -1228,7 +1233,7 @@ const css = `
   .dg-list-meta { font-size: 11px; color: #6b7280; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
   .dg-list-slot { color: #92650A; font-weight: 600; }
   .dg-badge {
-    background: #ef4444;
+    background: #5c2529;
     color: #fff;
     font-size: 10px;
     padding: 1px 6px;
@@ -1247,7 +1252,6 @@ const css = `
     padding: 2px 8px;
     border-radius: 99px;
     font-weight: 700;
-    color: #fff;
     display: inline-block;
     white-space: nowrap;
   }
@@ -1273,9 +1277,9 @@ const css = `
   .dg-conv-sub { font-size: 12px; color: #3a4444; margin-top: 2px; }
   .dg-conv-actions { display: flex; gap: 6px; }
   .dg-btn-pause {
-    background: #FEF3C7;
-    border: 1px solid #FCD34D;
-    color: #92400E;
+    background: #f7eedd;
+    border: 1px solid #e4b976;
+    color: #65451d;
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -1283,7 +1287,7 @@ const css = `
     cursor: pointer;
     font-family: inherit;
   }
-  .dg-btn-pause:hover { background: #FDE68A; }
+  .dg-btn-pause:hover { background: #f0e0c0; }
   .dg-conv-body {
     flex: 1;
     overflow-y: auto;
@@ -1359,13 +1363,13 @@ const css = `
   }
   .dg-checklist {
     padding: 10px 16px;
-    background: #FFFBEB;
-    border-bottom: 1px solid #F5C518;
+    background: #f7eedd;
+    border-bottom: 1px solid #e4b976;
     font-size: 11px;
   }
   .dg-checklist-title {
     font-weight: 700;
-    color: #92400E;
+    color: #65451d;
     margin-bottom: 6px;
     display: flex;
     align-items: center;
@@ -1373,8 +1377,8 @@ const css = `
   }
   .dg-checklist-count {
     font-weight: 600;
-    color: #92650A;
-    background: #FEF3C7;
+    color: #65451d;
+    background: #fdfaf2;
     padding: 1px 8px;
     border-radius: 99px;
   }
@@ -1387,16 +1391,16 @@ const css = `
     color: #9ca3af;
     font-weight: 500;
   }
-  .dg-chk-done { color: #065F46; font-weight: 700; }
+  .dg-chk-done { color: #453b60; font-weight: 700; }
 
   .dg-banner {
     padding: 10px 16px;
     font-size: 12px;
     line-height: 1.5;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e6e1;
   }
-  .dg-banner-info { background: #EFF6FF; color: #1E3A8A; border-bottom-color: #BFDBFE; }
-  .dg-banner-warn { background: #FEE2E2; color: #991B1B; border-bottom-color: #FCA5A5; }
+  .dg-banner-info { background: #eaf3f5; color: #3a4444; border-bottom-color: #d3e5e9; }
+  .dg-banner-warn { background: #f4e8ea; color: #5c2529; border-bottom-color: #d79caa; }
   .dg-paused-row {
     display: flex;
     align-items: center;
@@ -1408,12 +1412,12 @@ const css = `
     display: block;
     font-size: 11px;
     font-weight: 400;
-    color: #991B1B;
+    color: #5c2529;
     margin-top: 3px;
     opacity: 0.85;
   }
   .dg-btn-resume {
-    background: #15803D;
+    background: #453b60;
     color: #fff;
     border: none;
     padding: 8px 14px;
@@ -1425,14 +1429,14 @@ const css = `
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .dg-btn-resume:hover { background: #166534; }
+  .dg-btn-resume:hover { background: #2f2843; }
 
   .dg-progress {
     display: flex;
     align-items: center;
     padding: 14px 24px 10px;
     background: #fff;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e6e1;
     gap: 0;
     position: relative;
   }
@@ -1449,7 +1453,7 @@ const css = `
     transition: transform 80ms ease-out;
   }
   .dg-progress-step-clickable:hover .dg-progress-label {
-    color: #2563EB;
+    color: #453b60;
     text-decoration: underline;
   }
   .dg-progress-node {
@@ -1465,35 +1469,35 @@ const css = `
     z-index: 1;
   }
   .dg-node-done {
-    background: #10B981;
+    background: #453b60;
     color: #fff;
   }
   .dg-node-current {
-    background: #F5C518;
-    color: #3D2B00;
-    box-shadow: 0 0 0 3px rgba(245,197,24,0.25);
+    background: #e4b976;
+    color: #151515;
+    box-shadow: 0 0 0 3px rgba(228,185,118,0.35);
   }
   .dg-node-pending {
-    background: #E5E7EB;
-    color: #9CA3AF;
+    background: #e5e6e1;
+    color: #808080;
   }
   .dg-progress-label {
     margin-left: 6px;
     font-size: 12px;
-    color: #9CA3AF;
+    color: #808080;
     font-weight: 500;
     white-space: nowrap;
   }
-  .dg-label-done { color: #065F46; font-weight: 600; }
-  .dg-label-current { color: #92650A; font-weight: 700; }
+  .dg-label-done { color: #453b60; font-weight: 600; }
+  .dg-label-current { color: #65451d; font-weight: 700; }
   .dg-progress-line {
     flex: 1;
     height: 2px;
-    background: #E5E7EB;
+    background: #e5e6e1;
     margin: 0 8px;
     min-width: 20px;
   }
-  .dg-line-done { background: #10B981; }
+  .dg-line-done { background: #453b60; }
   .dg-progress-flag {
     position: absolute;
     right: 24px;
@@ -1504,13 +1508,13 @@ const css = `
     font-size: 11px;
     font-weight: 700;
   }
-  .dg-flag-pause { background: #FEE2E2; color: #991B1B; }
-  .dg-flag-abort { background: #1F2937; color: #fff; }
+  .dg-flag-pause { background: #f4e8ea; color: #5c2529; }
+  .dg-flag-abort { background: #151515; color: #fff; }
   .dg-conv-input {
     display: flex;
     gap: 8px;
     padding: 12px 16px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid #e5e6e1;
     align-items: flex-end;
     background: #fff;
   }
@@ -1545,8 +1549,8 @@ const css = `
   }
   .dg-warn {
     padding: 10px 12px;
-    background: #FEF3C7;
-    border: 1px solid #F5C518;
+    background: #f7eedd;
+    border: 1px solid #e4b976;
     border-radius: 6px;
     color: #92400E;
     font-size: 12px;
@@ -1555,7 +1559,7 @@ const css = `
   .dg-modal-wide { max-width: 800px; }
   .dg-rec-list {
     margin-top: 12px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #e5e6e1;
     border-radius: 8px;
     overflow: hidden;
   }
@@ -1571,7 +1575,7 @@ const css = `
     background: #F9FAFB;
     font-weight: 700;
     color: #6b7280;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e6e1;
   }
   .dg-rec-head-score { text-align: center; }
   .dg-rec-item:not(:last-child) { border-bottom: 1px solid #f3f4f6; }
