@@ -35,10 +35,10 @@ interface RecommendationCardsProps {
 
 // 점수 구간별 톤 (거리 70 / 차량 20 / 최신성 10 만점 합산 100)
 function ringTone(total: number): { stroke: string; label: string } {
-  if (total >= 75) return { stroke: "#453b60", label: "강력 추천" };
-  if (total >= 50) return { stroke: "#65451d", label: "추천" };
-  if (total >= 30) return { stroke: "#808080", label: "검토" };
-  return { stroke: "#cb9da2", label: "낮음" };
+  if (total >= 75) return { stroke: "var(--color-deep-violet)", label: "강력 추천" };
+  if (total >= 50) return { stroke: "var(--color-burnt-amber)", label: "추천" };
+  if (total >= 30) return { stroke: "var(--color-mist-gray)", label: "검토" };
+  return { stroke: "var(--color-dusty-rose)", label: "낮음" };
 }
 
 function ScoreRing({ total }: { total: number }) {
@@ -49,7 +49,7 @@ function ScoreRing({ total }: { total: number }) {
   return (
     <div className="relative h-[68px] w-[68px] shrink-0">
       <svg viewBox="0 0 68 68" className="h-full w-full -rotate-90">
-        <circle cx="34" cy="34" r={r} fill="none" stroke="#e5e6e1" strokeWidth="6" />
+        <circle cx="34" cy="34" r={r} fill="none" stroke="var(--color-bone)" strokeWidth="6" />
         <motion.circle
           cx="34"
           cy="34"
@@ -186,13 +186,16 @@ export function RecommendationCards({
               <div className="flex flex-1 flex-col gap-1.5">
                 <span
                   className="mb-0.5 inline-flex w-fit rounded-pill px-2 py-0.5 text-[11px] font-medium"
-                  style={{ background: `${tone.stroke}1a`, color: tone.stroke }}
+                  style={{
+                    background: `color-mix(in srgb, ${tone.stroke} 12%, transparent)`,
+                    color: tone.stroke,
+                  }}
                 >
                   {tone.label}
                 </span>
-                <Bar label="거리" value={c.score.distance} max={70} color="#65451d" />
-                <Bar label="차량" value={c.score.vehicle} max={20} color="#453b60" />
-                <Bar label="최신" value={c.score.recency} max={10} color="#7c93a0" />
+                <Bar label="거리" value={c.score.distance} max={70} color="var(--color-burnt-amber)" />
+                <Bar label="차량" value={c.score.vehicle} max={20} color="var(--color-deep-violet)" />
+                <Bar label="최신" value={c.score.recency} max={10} color="var(--color-slate-gray)" />
               </div>
             </div>
 

@@ -234,7 +234,7 @@ export function RecommendView() {
 
       <div className="rec-input-wrap">
         <details className="rec-generate" open={!recPosting}>
-          <summary>✨ 공고 자동 생성 (대충 입력하면 Claude가 다듬어줍니다)</summary>
+          <summary>공고 자동 생성 (대충 입력하면 Claude가 다듬어줍니다)</summary>
           <div className="rec-generate-body">
             <textarea
               className="rec-input"
@@ -351,7 +351,7 @@ export function RecommendView() {
 
       {recResult && (
         <div className="rec-preview-inline">
-          <h3 className="section-title">📤 발송 미리보기</h3>
+          <h3 className="section-title">발송 미리보기</h3>
           <div className="rec-preview-meta">
             SMS로 발송됩니다. 한 번 발송된 메시지는 회수할 수 없습니다.
           </div>
