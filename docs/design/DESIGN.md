@@ -5,6 +5,13 @@
 
 Huddle uses a quiet, editorial curation language: off-white canvas, large confident headlines, and three muted pastel card colors (sage, lavender, dusty rose) that function as category tiles for project listings. The palette is intentionally desaturated — no vivid neons, no high-saturation accents — so the system reads as a considered directory rather than a marketplace. Typography is set in a single custom sans (Nng) that carries the entire information hierarchy, with all-caps micro-labels and dot-prefixed status tags adding a catalog/inventory feel. Components lean pill-shaped (100px radius on links, 1000px on primary buttons) and borders are thin 1px hairlines rather than heavy shadows, keeping the surface flat and poster-like.
 
+## 살아있는 기준선 (This is a baseline, not a ceiling)
+
+이 문서는 **지켜야 할 하한선**이지 감도의 천장이 아니다.
+- **언어 *안에서* 완성도를 올리는 것**(모션·빈 상태·접근성·밀도·반응형, 21st/shadcn 이식)은 권장된다.
+- **언어 *자체*를 바꾸는 것**(예: 미세 elevation 토큰 추가, 새 액센트)은 *허용*되지만 — 컴포넌트별 임시 오버라이드가 아니라 **여기 문서 + `app/globals.css` 토큰을 정식으로 수정**하는 의도적 결정이어야 한다.
+- 막는 것은 오직 **시각 언어의 무의식적 표류(slop)**다. 운영 룰은 `.cursor/rules/40-design-system.mdc` 참조.
+
 ## Tokens — Colors
 
 | Name | Value | Token | Role |

@@ -9,6 +9,7 @@
 
 - `.cursor/rules/00-karpathy-guidelines.mdc` → 최우선 행동 룰 (충돌 시 1순위)
 - `.cursor/rules/30-domain-workflow.mdc` → 채용 도메인 불변식 (수동 상태 비덮어쓰기, 확정 뉘앙스 금지, kill switch)
+- `.cursor/rules/40-design-system.mdc` → 디자인 시스템 가드 (Huddle 토큰은 천장이 아닌 하한선 — 진화는 토큰 정식 수정으로)
 - `README.md` → 전체 흐름·상태·채널 요약
 - `docs/기능설명서.md` → 가장 포괄적인 가이드 (UI·데이터 흐름·매니저 일과)
 

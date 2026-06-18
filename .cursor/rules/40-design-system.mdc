@@ -1,0 +1,43 @@
+---
+description: 디자인 시스템 가드 — Huddle 토큰을 지키되 감도 향상·진화는 막지 않는다. UI/스타일 작업에 적용.
+globs: "{app,components}/**/*.{tsx,ts,css}"
+alwaysApply: true
+---
+
+# Design System Guard (Huddle — 지키되 진화시킨다)
+
+> SSOT: `docs/design/DESIGN.md` · 토큰/시맨틱 브릿지: `app/globals.css` · 이식 설정: `components.json`
+
+핵심 원칙: **디자인 시스템은 "올려둔 하한선"이지 "천장"이 아니다.**
+이 룰의 목적은 *감도 향상을 막는 것*이 아니라 *시각 언어의 무의식적 표류(slop)를 막는 것*이다.
+"리스타일링 비용"은 시스템이 발목 잡는 비용이 아니라 일관성을 지키는 값이다.
+
+## 1. 권장 — 언어 "안에서" 완성도 올리기 (자유롭게)
+
+다음은 막지 않는다. 오히려 적극 권장:
+- 모션·마이크로인터랙션(`framer-motion`), 로딩 스켈레톤, 빈 상태(empty state)
+- 접근성(`focus-visible`/aria), 밀도, 반응형, 키보드 내비게이션
+- 21st.dev/shadcn 컴포넌트로 기능·UX 확장
+
+## 2. 외부 컴포넌트 이식 워크플로
+
+`components.json` + `globals.css`의 시맨틱 토큰 브릿지 덕에 색·라운드는 자동으로 Huddle 팔레트로 온다. 이식 후 할 일:
+- `shadow-*` 제거 → 헤어라인(`border-bone` / `border-stone-border`)으로 (DESIGN.md Elevation: 그림자 금지, 플랫)
+- 비비드/고채도 색 금지 — 액센트는 토큰만(`deep-violet` / `burnt-amber` / `honey-gold`)
+- **컴포넌트별로 토큰을 우회(하드코딩)하지 말 것.** 우회 누적 = 불일치 = 감도 하락.
+
+## 3. 금지 vs 허용 (헷갈리면 안 되는 한 줄)
+
+| 변경 | 판정 |
+|---|---|
+| 시각 언어의 *우발적* 표류 (복붙으로 새 섀도우/비비드색 유입) | 금지 |
+| 시각 언어의 *의도적* 진화 (더 나은 결과를 위한 토큰 변경) | 허용 — §4 |
+
+## 4. 시스템을 "진화"시키는 법 (바이패스가 아니라)
+
+토큰과 반복적으로 싸우게 되고 그게 *진짜 더 나은 결과*를 막는다면 → 컴포넌트마다 오버라이드하지 말고:
+1. `docs/design/DESIGN.md`에 결정과 근거를 기록
+2. `app/globals.css` 토큰 1곳만 수정 → 전 화면 일괄 반영
+3. 운영/디자인 의도가 불확실하면 `AskQuestion`으로 먼저 확인
+
+예: 플랫 헤어라인이 오버레이(dropdown/dialog/toast)에서 근거 없이 떠 보이면 → `shadow-md`를 몰래 박지 말고 **오버레이 전용 초미세 elevation 토큰 1개**를 DESIGN.md에 정식 추가한다. 언어는 유지하되 한 단계 올린다.
