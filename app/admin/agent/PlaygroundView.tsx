@@ -351,7 +351,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
         <h3 className="pg-h">📢 공고</h3>
 
         <details className="pg-gen" open={!jobBody}>
-          <summary>✨ 메모 자동 생성</summary>
+          <summary>메모 자동 생성</summary>
           <div className="pg-gen-body">
             <textarea
               className="pg-textarea"

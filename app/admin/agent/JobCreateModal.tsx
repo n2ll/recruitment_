@@ -4,7 +4,7 @@
  * 공고 작성 모달.
  *
  * 흐름 (단일 폼, 단계 X):
- *   1. 메모 입력 → [✨ 공고 자동 생성] → Claude가 본문 다듬어 채움 + 픽업 주소 추출
+ *   1. 메모 입력 → [공고 자동 생성] → Claude가 본문 다듬어 채움 + 픽업 주소 추출
  *   2. 매니저가 본문/메타(지점·슬롯·시작일·정원·차량필요) 검토·수정
  *   3. [후보 추천 받기] → 점수 상위 N명 표시, 체크박스 선택
  *   4. [공고 저장 + 발송] → POST /api/admin/jobs → POST /api/admin/jobs/[id]/dispatch
@@ -260,7 +260,7 @@ export default function JobCreateModal({ branches, onClose, onCreated }: JobCrea
         <div className="ajm-body">
           {/* 1) 자동 생성 */}
           <details className="ajm-gen" open={!body}>
-            <summary>✨ 공고 자동 생성 (메모 던지면 Claude가 다듬어줌)</summary>
+            <summary>공고 자동 생성 (메모 던지면 Claude가 다듬어줌)</summary>
             <div className="ajm-gen-body">
               <textarea
                 className="ajm-textarea"

@@ -427,8 +427,8 @@ export function ApplicantDetailView({
         </div>
       </div>
 
-      {/* 📝 매니저 메모 — 어디서나 편집 가능. 시스템 태그(note)는 별도 컬럼. */}
-      <SectionHeader section="memo" title="📝 메모" />
+      {/* 매니저 메모 — 어디서나 편집 가능. 시스템 태그(note)는 별도 컬럼. */}
+      <SectionHeader section="memo" title="메모" />
       <div className="detail-grid">
         <div className="detail-wide">
           {isEditing("memo") ? (
@@ -450,13 +450,13 @@ export function ApplicantDetailView({
       {/* 자기소개·경력은 [+ 지원자 추가] 모달로 신규 생성 시에만 입력 (읽기 전용) */}
       {a.introduction && (
         <div className="detail-section">
-          <h4 className="detail-section-title">💬 자기소개</h4>
+          <h4 className="detail-section-title">자기소개</h4>
           <p className="detail-text">{a.introduction}</p>
         </div>
       )}
       {a.experience && (
         <div className="detail-section">
-          <h4 className="detail-section-title">📋 경력</h4>
+          <h4 className="detail-section-title">경력</h4>
           <p className="detail-text">{a.experience}</p>
         </div>
       )}
