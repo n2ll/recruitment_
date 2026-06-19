@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
-import { LoadingState, EmptyState } from "@/components/ui/states";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 
 type Category = "conversation" | "facts" | "system_message";
 
@@ -76,6 +76,7 @@ export default function PromptExamplesView({
   const themeKind = isFactsOnly ? "사실 데이터" : isCombined ? "클로드 조련 — 사실 / 운영문구 / 말투" : "퓨샷 예시 / 말투";
   const [items, setItems] = useState<PromptExample[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [tab, setTab] = useState<Category>(categories[0]);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -87,9 +88,15 @@ export default function PromptExamplesView({
     try {
       const res = await fetch("/api/admin/prompt-examples", { cache: "no-store" });
       const json = await res.json();
-      if (res.ok) setItems(Array.isArray(json.data) ? json.data : []);
+      if (res.ok) {
+        setItems(Array.isArray(json.data) ? json.data : []);
+        setError(false);
+      } else {
+        setError(true);
+      }
     } catch (e) {
       console.error("[prompt-examples list]", e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -287,6 +294,8 @@ export default function PromptExamplesView({
 
       {loading ? (
         <LoadingState label="예시 불러오는 중…" />
+      ) : error ? (
+        <ErrorState onRetry={() => fetchAll()} />
       ) : filtered.length === 0 ? (
         items.length === 0 ? (
           <EmptyState title="아직 예시가 없어요" hint="상단의 '기본 예시 가져오기'로 시작해보세요." />

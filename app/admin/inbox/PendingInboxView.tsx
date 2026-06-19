@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
-import { LoadingState, EmptyState } from "@/components/ui/states";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 
 interface PendingMessage {
   id: string;
@@ -34,6 +34,7 @@ export default function PendingInboxView() {
   const confirm = useConfirm();
   const [items, setItems] = useState<PendingMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
 
   const fetchPending = useCallback(async () => {
@@ -41,9 +42,15 @@ export default function PendingInboxView() {
     try {
       const res = await fetch("/api/admin/inbox/pending", { cache: "no-store" });
       const json = await res.json();
-      if (res.ok) setItems(Array.isArray(json.data) ? json.data : []);
+      if (res.ok) {
+        setItems(Array.isArray(json.data) ? json.data : []);
+        setError(false);
+      } else {
+        setError(true);
+      }
     } catch (e) {
       console.error("[pending inbox load]", e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -100,6 +107,8 @@ export default function PendingInboxView() {
 
       {loading ? (
         <LoadingState label="미분류 메시지 불러오는 중…" />
+      ) : error ? (
+        <ErrorState onRetry={() => fetchPending()} />
       ) : items.length === 0 ? (
         <EmptyState title="미분류 메시지가 없어요" hint="새 인입 메시지가 들어오면 여기에 표시돼요." />
       ) : (
