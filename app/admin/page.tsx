@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { getBrowserClient } from "@/lib/supabase";
+import { useIncrementalList } from "@/lib/admin/useIncrementalList";
 import AgentJobsView from "./agent/AgentJobsView";
 import PlaygroundView from "./agent/PlaygroundView";
 import DanggeunView from "./agent/DanggeunView";
@@ -14,6 +15,7 @@ import ApplicantMiniDetail from "./ApplicantMiniDetail";
 import { AppShell } from "@/components/admin/AppShell";
 import { PipelineView } from "@/components/admin/PipelineView";
 import { DashboardView } from "@/components/admin/DashboardView";
+import type { UsageDailyCost } from "@/components/admin/CostCard";
 import { RecommendView } from "@/components/admin/RecommendView";
 import { BranchAdminView } from "@/components/admin/BranchAdminView";
 import { HopeSlotsView } from "@/components/admin/HopeSlotsView";
@@ -177,6 +179,9 @@ export default function AdminPage() {
   // 전용 폰 heartbeat
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
 
+  // 대시보드 비용 카드 (usage_daily_cost)
+  const [usage, setUsage] = useState<UsageDailyCost[]>([]);
+
   // PPC 상세에서 '✏️ 편집' 버튼으로 여는 미니 모달 — 지원자 목록과 동일한 섹션 편집 UX.
   const [ppcDetailId, setPpcDetailId] = useState<number | null>(null);
 
@@ -219,6 +224,16 @@ export default function AdminPage() {
       setHeartbeats(json.data || []);
     } catch {
       console.error("Heartbeat 로딩 실패");
+    }
+  }, []);
+
+  const fetchUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/usage", { cache: "no-store" });
+      const json = await res.json();
+      setUsage(json.data || []);
+    } catch {
+      console.error("비용 로딩 실패");
     }
   }, []);
 
@@ -265,11 +280,12 @@ export default function AdminPage() {
     fetchData();
     fetchHeartbeats();
     fetchBranches();
+    fetchUsage();
     // 폴링은 Realtime 끊김 시 fallback (60초)
     const dataInterval = setInterval(() => fetchData(true), 60000);
     const hbInterval = setInterval(fetchHeartbeats, 60000);
     return () => { clearInterval(dataInterval); clearInterval(hbInterval); };
-  }, [fetchData, fetchHeartbeats, fetchBranches]);
+  }, [fetchData, fetchHeartbeats, fetchBranches, fetchUsage]);
 
   // ── Realtime 구독: applicants / device_heartbeat (messages·drafts는 ChatPanel이 소유) ──
   useEffect(() => {
@@ -389,6 +405,26 @@ export default function AdminPage() {
     .slice(0, 12)
     .map((a) => ({ id: a.id, name: a.name, branch: branchOf(a), status: a.status }));
 
+  // 배송원 컨택 리스트 — 큰 리스트는 점진 렌더링(useIncrementalList)으로 DOM 노드 수 제어
+  const contactList = data
+    .filter((a) => {
+      if (branchFilter !== "전체" && a.branch !== branchFilter) return false;
+      if (search && !a.name.includes(search) && !a.phone.includes(search)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if ((b.unread_count || 0) !== (a.unread_count || 0)) return (b.unread_count || 0) - (a.unread_count || 0);
+      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  const {
+    visible: visibleContacts,
+    hasMore: hasMoreContacts,
+    sentinelRef: contactSentinelRef,
+  } = useIncrementalList(contactList, { step: 50, resetKey: `${branchFilter}|${search}` });
+
   const selected = data.find((a) => a.id === selectedId);
 
   const navBadges: Record<string, number | undefined> = {
@@ -432,7 +468,7 @@ export default function AdminPage() {
               {loadError && data.length === 0 ? (
                 <ErrorState onRetry={() => fetchData()} />
               ) : (
-                <DashboardView stats={stats} branchStats={branchStats} dailyApplied={dailyApplied} recentActivity={recentActivity} />
+                <DashboardView stats={stats} branchStats={branchStats} dailyApplied={dailyApplied} recentActivity={recentActivity} usage={usage} />
               )}
             </div>
           ) : tab === "applicants" ? (
@@ -527,30 +563,13 @@ export default function AdminPage() {
               </div>
 
               <div className="contact-list">
-                {(() => {
-                  const contactList = data
-                    .filter((a) => {
-                      if (branchFilter !== "전체" && a.branch !== branchFilter) return false;
-                      if (search && !a.name.includes(search) && !a.phone.includes(search)) return false;
-                      return true;
-                    })
-                    .sort((a, b) => {
-                      // 안읽음 있는 사람 먼저
-                      if ((b.unread_count || 0) !== (a.unread_count || 0)) return (b.unread_count || 0) - (a.unread_count || 0);
-                      // 그 다음 최근 문자 순
-                      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-                      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-                      if (tb !== ta) return tb - ta;
-                      // 문자 없는 사람은 지원일 순
-                      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-                    });
-
-                  return loadError && data.length === 0 ? (
-                    <ErrorState onRetry={() => fetchData()} />
-                  ) : contactList.length === 0 ? (
-                    <EmptyState title="대화할 지원자가 없어요" hint="검색어나 필터를 바꿔보세요." />
-                  ) : (
-                    contactList.map((a) => (
+                {loadError && data.length === 0 ? (
+                  <ErrorState onRetry={() => fetchData()} />
+                ) : contactList.length === 0 ? (
+                  <EmptyState title="대화할 지원자가 없어요" hint="검색어나 필터를 바꿔보세요." />
+                ) : (
+                  <>
+                    {visibleContacts.map((a) => (
                       <div key={a.id} className={`contact-card ${a.unread_count > 0 ? "contact-unread" : ""}`} onClick={() => openChat(a)}>
                         <div className="contact-left">
                           <div className="contact-name-row">
@@ -568,9 +587,10 @@ export default function AdminPage() {
                           )}
                         </div>
                       </div>
-                    ))
-                  );
-                })()}
+                    ))}
+                    {hasMoreContacts && <div ref={contactSentinelRef} style={{ height: 16 }} aria-hidden />}
+                  </>
+                )}
               </div>
             </div>
           ) : null}
