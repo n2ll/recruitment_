@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
+import { useIncrementalList } from "@/lib/admin/useIncrementalList";
 import { Candidate, ModeConfig, stageBadge, statusTone } from "../danggeun-types";
 
 function formatPhone(raw: string): string {
@@ -88,6 +89,11 @@ export default function DanggeunListPane({
     });
   }, [candidates, search, branchFilter]);
 
+  const { visible: visibleCandidates, hasMore, sentinelRef } = useIncrementalList(
+    filteredCandidates,
+    { step: 40, resetKey: `${search}|${branchFilter}` }
+  );
+
   return (
     <aside className="flex-1 max-w-[480px] min-w-[320px] flex flex-col gap-2 bg-paper-white border border-bone rounded-xl p-3">
       <div className="flex gap-1.5 items-center">
@@ -127,7 +133,8 @@ export default function DanggeunListPane({
             <EmptyState title="검색 결과가 없어요" hint="검색어를 바꿔보세요." />
           )
         ) : (
-          filteredCandidates.map((c) => {
+          <>
+          {visibleCandidates.map((c) => {
             const sb = stageBadge(c.agent_stage);
             const isActive = selectedId === c.id;
             return (
@@ -189,7 +196,9 @@ export default function DanggeunListPane({
                 </div>
               </button>
             );
-          })
+          })}
+          {hasMore && <div ref={sentinelRef} className="h-4 shrink-0" aria-hidden />}
+          </>
         )}
       </div>
     </aside>
