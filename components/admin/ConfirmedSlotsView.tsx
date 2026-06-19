@@ -12,6 +12,7 @@ import {
   calcAge,
 } from "@/lib/admin/types";
 import { EmptyState } from "@/components/ui/states";
+import { ChevronUp, ChevronDown, Pencil } from "lucide-react";
 
 interface ConfirmedSlotsViewProps {
   data: Applicant[];
@@ -35,7 +36,8 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
     <div className="content">
       {!branchDetail && (
         <>
-          <h2 className="page-title">확정 슬롯 현황</h2>
+          <p className="ob-eyebrow">슬롯 운영</p>
+          <h2 className="ob-headline mt-0.5 text-[26px] text-ink-black">확정 슬롯 현황</h2>
           <p className="page-desc">
             지점별 슬롯 충족 현황입니다. 슬롯별 정원은 [지점 관리] 탭에서 편집할 수 있습니다.
             <strong>지점 행을 클릭하면 해당 지점 상세 페이지(풀스크린)</strong>가 열립니다.
@@ -180,7 +182,7 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
                       disabled={idx === 0}
                       onClick={() => swapOrder(list, idx, -1)}
                     >
-                      ▲
+                      <ChevronUp size={10} strokeWidth={2.5} />
                     </button>
                     <button
                       className="ppc-order-btn"
@@ -188,16 +190,17 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
                       disabled={idx === list.length - 1}
                       onClick={() => swapOrder(list, idx, 1)}
                     >
-                      ▼
+                      <ChevronDown size={10} strokeWidth={2.5} />
                     </button>
                   </span>
                   {a.name}
                   <button
                     className="ppc-edit-btn"
                     title="지원자 상세 편집"
+                    style={{ display: "inline-flex", alignItems: "center" }}
                     onClick={() => onOpenDetail(a.id)}
                   >
-                    ✏️
+                    <Pencil size={11} strokeWidth={2} />
                   </button>
                 </span>
               </td>
@@ -289,13 +292,13 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
                   ← 매트릭스로
                 </button>
                 <h2 className="ppc-title">
-                  📍 {branchDetail}
+                  {branchDetail}
                   <span className="ppc-cap">
                     정원 평일 오전 {morningCap} / 오후 {afternoonCap}
                   </span>
                 </h2>
                 <div className="ppc-summary">
-                  ✓ 확정 {totalConfirmed} · ⏳ 대기 {totalWaiting}
+                  확정 {totalConfirmed} · 대기 {totalWaiting}
                 </div>
               </div>
 
@@ -334,7 +337,7 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
               </div>
 
               <div className="slot-section-title">
-                ✓ 확정인력 ({confirmed.length}
+                확정인력 ({confirmed.length}
                 {filterOn && totalConfirmed !== confirmed.length && (
                   <span className="ppc-filtered-of"> / 전체 {totalConfirmed}</span>
                 )}
@@ -359,7 +362,7 @@ export function ConfirmedSlotsView({ data, branches, onPatch, onOpenDetail }: Co
               )}
 
               <div className="slot-section-title slot-section-waiting">
-                ⏳ 대기자 ({waiting.length}
+                대기자 ({waiting.length}
                 {filterOn && totalWaiting !== waiting.length && (
                   <span className="ppc-filtered-of"> / 전체 {totalWaiting}</span>
                 )}
