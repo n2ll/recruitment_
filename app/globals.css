@@ -207,6 +207,22 @@
 
 /* 스크롤바 — 라이트 톤 */
 @layer utilities {
+  .ob-marquee-track {
+    animation: ob-marquee linear infinite;
+  }
+  @keyframes ob-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ob-marquee-track {
+      animation: none;
+    }
+  }
   .ob-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--color-bone) transparent;

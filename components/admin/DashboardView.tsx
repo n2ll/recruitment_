@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { motion, type Variants } from "framer-motion";
-import { Users, Sparkles, BadgeCheck, Hourglass } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { EditorialCard, EditorialCardTitle, EditorialCardContent } from "@/components/ui/editorial-card";
 import { DisplayHeadline } from "@/components/ui/display-headline";
-import { Card } from "@/components/ui/card";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { Sparkline } from "@/components/ui/sparkline";
+import { Marquee } from "@/components/ui/marquee";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { CountUp } from "@/components/ui/count-up";
 import { cn } from "@/lib/cn";
@@ -40,9 +42,30 @@ export interface BranchStat {
   waiting: number;
 }
 
+export interface RecentActivity {
+  id: number;
+  name: string;
+  branch: string | null;
+  status: string;
+}
+
 interface DashboardViewProps {
   stats: DashStats;
   branchStats: BranchStat[];
+  /** 최근 14일 일별 지원 수 (시간순) */
+  dailyApplied?: number[];
+  /** 라이브 티커용 최근 활동 */
+  recentActivity?: RecentActivity[];
+}
+
+function DeltaPill({ value }: { value: number }) {
+  if (value <= 0) return null;
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded-pill bg-ink-black/5 px-2 py-0.5 text-[12px] font-semibold text-deep-violet">
+      <ArrowUpRight className="h-3 w-3" />
+      {value}
+    </span>
+  );
 }
 
 function StatTile({
@@ -50,27 +73,30 @@ function StatTile({
   value,
   sub,
   tone,
-  icon,
+  delta,
+  sparkline,
 }: {
   label: string;
   value: number;
   sub?: string;
   tone: "sage" | "lavender" | "rose" | "amber";
-  icon?: React.ReactNode;
+  delta?: number;
+  sparkline?: number[];
 }) {
   return (
     <motion.div variants={item} className="flex">
       <EditorialCard tone={tone} eyebrow={label} className="flex-1">
-        <div className="flex items-end justify-between">
-          <div className="ob-display text-[56px] leading-none text-ink-black tracking-tighter">
+        <div className="flex items-end justify-between gap-2">
+          <div className="ob-display text-[56px] leading-none tracking-tighter text-ink-black">
             <CountUp value={value} />
           </div>
-          {icon && (
-            <div className="mb-2 text-ink-black/40">
-              {icon}
-            </div>
-          )}
+          {delta !== undefined && <div className="mb-2"><DeltaPill value={delta} /></div>}
         </div>
+        {sparkline && sparkline.length > 1 && (
+          <div className="mt-4">
+            <Sparkline data={sparkline} width={220} height={40} stroke="var(--color-ink-black)" />
+          </div>
+        )}
         {sub && <EditorialCardContent className="mt-3 text-ink-black/60">{sub}</EditorialCardContent>}
       </EditorialCard>
     </motion.div>
@@ -84,7 +110,14 @@ const FUNNEL = [
   { key: "confirmed", label: "확정인력", bar: "bg-dusty-rose", text: "text-ink-black" },
 ] as const;
 
-export function DashboardView({ stats, branchStats }: DashboardViewProps) {
+function activityVerb(status: string): string {
+  if (status === "확정인력") return "확정됐어요";
+  if (status === "대기자") return "대기자로 등록됐어요";
+  if (status === "스크리닝 완료") return "스크리닝을 마쳤어요";
+  return "지원했어요";
+}
+
+export function DashboardView({ stats, branchStats, dailyApplied, recentActivity }: DashboardViewProps) {
   const funnelMax = Math.max(1, ...FUNNEL.map((f) => stats[f.key]));
   const maxBranchTotal = Math.max(1, ...branchStats.map((b) => b.total));
 
@@ -101,31 +134,42 @@ export function DashboardView({ stats, branchStats }: DashboardViewProps) {
         </DisplayHeadline>
       </motion.div>
 
+      {recentActivity && recentActivity.length > 0 && (
+        <motion.div variants={item}>
+          <div className="flex items-center gap-4 rounded-pill border border-bone bg-bone/30 py-2.5 pl-4">
+            <span className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-slate-gray">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-deep-violet opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-deep-violet" />
+              </span>
+              LIVE
+            </span>
+            <div className="min-w-0 flex-1">
+              <Marquee speed={36}>
+                {recentActivity.map((a) => (
+                  <span key={a.id} className="text-[13px] text-slate-gray">
+                    <span className="font-medium text-ink-black">{a.name}</span>
+                    {a.branch ? <span className="text-mist-gray"> · {a.branch}</span> : null} {activityVerb(a.status)}
+                  </span>
+                ))}
+              </Marquee>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <motion.div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4" variants={container}>
         <StatTile
           label="전체 지원자"
           value={stats.total}
-          sub={`오늘 +${stats.today}명 유입`}
+          sub={`최근 14일 유입 추세`}
           tone="sage"
+          delta={stats.today}
+          sparkline={dailyApplied}
         />
-        <StatTile
-          label="대기자"
-          value={stats.waiting}
-          sub="배치 대기 중"
-          tone="amber"
-        />
-        <StatTile
-          label="스크리닝 완료"
-          value={stats.screeningDone}
-          sub="면접/확정 대기"
-          tone="lavender"
-        />
-        <StatTile
-          label="확정인력"
-          value={stats.confirmed}
-          sub="매니저 확정 완료"
-          tone="rose"
-        />
+        <StatTile label="대기자" value={stats.waiting} sub="배치 대기 중" tone="amber" />
+        <StatTile label="스크리닝 완료" value={stats.screeningDone} sub="면접/확정 대기" tone="lavender" />
+        <StatTile label="확정인력" value={stats.confirmed} sub="매니저 확정 완료" tone="rose" />
       </motion.div>
 
       <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
@@ -135,7 +179,7 @@ export function DashboardView({ stats, branchStats }: DashboardViewProps) {
             <EditorialCardContent className="mb-8">
               유입부터 스크리닝, 최종 확정까지의 전환율을 보여줍니다.
             </EditorialCardContent>
-            
+
             <div className="flex flex-col gap-4">
               {FUNNEL.map((f, i) => {
                 const value = stats[f.key];
@@ -163,9 +207,8 @@ export function DashboardView({ stats, branchStats }: DashboardViewProps) {
         <motion.div variants={item} className="lg:col-span-7">
           <div className="flex flex-col gap-4">
             <div className="px-2">
-              <span className="ob-eyebrow before:mr-2 before:content-['•']">지점별 현황</span>
+              <Eyebrow>지점별 현황</Eyebrow>
             </div>
-            {/* 밀집 뷰이므로 기존 Card 유지 혹은 border만 있는 영역 */}
             <div className="overflow-hidden rounded-list border border-bone bg-paper-white">
               <Table>
                 <THead>
@@ -194,7 +237,7 @@ export function DashboardView({ stats, branchStats }: DashboardViewProps) {
                           </div>
                         </div>
                       </TD>
-                      <TD className="py-4 text-right font-medium text-[15px]">{b.total}</TD>
+                      <TD className="py-4 text-right text-[15px] font-medium">{b.total}</TD>
                       <TD className="py-4 text-right text-[15px] text-slate-gray">{b.pre || "0"}</TD>
                       <TD className="py-4 text-right text-[15px]">
                         {b.inProg > 0 ? <span className="text-slate-gray">{b.inProg}</span> : <span className="text-mist-gray">0</span>}

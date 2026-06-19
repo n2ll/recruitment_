@@ -369,6 +369,26 @@ export default function AdminPage() {
     };
   });
 
+  // 최근 14일 일별 지원 수 (대시보드 스파크라인)
+  const dailyApplied = (() => {
+    const days = 14;
+    const buckets = new Array(days).fill(0) as number[];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    data.forEach((a) => {
+      const t = new Date(a.created_at).getTime();
+      const dayDiff = Math.floor((startOfToday - new Date(new Date(t).getFullYear(), new Date(t).getMonth(), new Date(t).getDate()).getTime()) / 86400000);
+      if (dayDiff >= 0 && dayDiff < days) buckets[days - 1 - dayDiff] += 1;
+    });
+    return buckets;
+  })();
+
+  // 라이브 티커용 최근 활동 (created_at 최신순 12명)
+  const recentActivity = [...data]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 12)
+    .map((a) => ({ id: a.id, name: a.name, branch: branchOf(a), status: a.status }));
+
   const selected = data.find((a) => a.id === selectedId);
 
   const navBadges: Record<string, number | undefined> = {
@@ -412,7 +432,7 @@ export default function AdminPage() {
               {loadError && data.length === 0 ? (
                 <ErrorState onRetry={() => fetchData()} />
               ) : (
-                <DashboardView stats={stats} branchStats={branchStats} />
+                <DashboardView stats={stats} branchStats={branchStats} dailyApplied={dailyApplied} recentActivity={recentActivity} />
               )}
             </div>
           ) : tab === "applicants" ? (
