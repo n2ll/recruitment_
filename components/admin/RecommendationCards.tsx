@@ -135,7 +135,7 @@ export function RecommendationCards({
               }
             }}
             className={cn(
-              "relative cursor-pointer rounded-card border bg-paper-white p-4 transition-colors",
+              "relative cursor-pointer rounded-list border bg-paper-white p-5 transition-colors",
               selected
                 ? "border-deep-violet bg-lavender-soft/40"
                 : "border-bone hover:border-deep-violet/40"

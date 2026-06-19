@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { EditorialCard, EditorialCardTitle, EditorialCardContent } from "@/components/ui/editorial-card";
 import { DisplayHeadline } from "@/components/ui/display-headline";
@@ -10,17 +10,8 @@ import { Sparkline } from "@/components/ui/sparkline";
 import { Marquee } from "@/components/ui/marquee";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { CountUp } from "@/components/ui/count-up";
+import { fadeUp as item, staggerContainer as container } from "@/lib/admin/motion";
 import { cn } from "@/lib/cn";
-
-const container: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
-};
-
-const item: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
 
 export interface DashStats {
   total: number;

@@ -238,6 +238,16 @@ The design system uses two distinct elevation strategies based on the surface po
 1. **쇼케이스 표면 (Showcase Surfaces):** 대시보드 타일, 떠 있는 카드, 토스트 메시지 등에는 `--shadow-floating`을 사용하여 캔버스에서 띄우는 입체감을 부여합니다.
 2. **밀집 운영 표면 (Dense Ops Surfaces):** Box-shadow를 철저히 배제하고, 배경색 대비와 1px Hairline 보더(#333333, #e5e6e1)만으로 계층을 구분합니다. 플랫한 에디토리얼 스타일을 유지합니다.
 
+## Motion
+
+모션은 에디토리얼 톤을 해치지 않게 **절제**한다. 공용 프리셋은 `lib/admin/motion.ts`에 모은다 (컴포넌트별 임시 variants 난립 금지).
+
+- **Entrance(등장)**: `fadeUp`(y 15px·0.4s·easeOut) + `staggerContainer`(자식 0.08s 간격). 작은 요소는 `fadeUpSm`(y 8px·0.3s).
+- **Bar/Ring 채우기**: width/strokeDashoffset를 0→목표로 0.6~0.7s easeOut.
+- **Count-up**: 통계 숫자는 `CountUp`으로 증가 연출.
+- **Live ticker**: `Marquee`(linear infinite, hover 시 정지, `prefers-reduced-motion` 시 정지).
+- **금지**: 과한 스프링/바운스, 0.5s 넘는 느린 전환, 무한 반복(티커 외), 깜빡임. 접근성을 위해 무한 모션은 `prefers-reduced-motion`을 반드시 존중한다.
+
 ## Imagery
 
 Imagery is minimal and functional: circular avatar photos (40–56px, 1px white border) used inline within text and in testimonial cards. No hero photography, no product screenshots, no decorative illustration. The visual weight comes from the pastel card system itself — the cards act as the imagery, each one a colored tile showcasing a real project. Icons are absent or extremely minimal (small bullet/dot glyphs only).
