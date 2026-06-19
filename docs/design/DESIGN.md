@@ -12,6 +12,18 @@ Huddle uses a quiet, editorial curation language: off-white canvas, large confid
 - **언어 *자체*를 바꾸는 것**(예: 미세 elevation 토큰 추가, 새 액센트)은 *허용*되지만 — 컴포넌트별 임시 오버라이드가 아니라 **여기 문서 + `app/globals.css` 토큰을 정식으로 수정**하는 의도적 결정이어야 한다.
 - 막는 것은 오직 **시각 언어의 무의식적 표류(slop)**다. 운영 룰은 `.cursor/rules/40-design-system.mdc` 참조.
 
+## 표면별 디자인 적용 정책 (Surface Policies)
+
+현재 디자인 시스템은 Huddle의 정체성을 100% 반영하기 위해 진화했습니다. 단, 화면의 목적에 따라 적용 강도를 달리합니다.
+
+- **쇼케이스 표면 (대시보드, 지원폼, AI 추천, 빈 상태, 히어로 헤더 등):** 
+  - **풀 Huddle 언어 적용**: 초대형 디스플레이 헤드라인(44~69px, 가벼운 웨이트), 전면 파스텔 색블록 배경 타일(24~40px의 거대 라운드), 대형 1000px Pill 버튼, 떠 있는 카드용 Soft Shadow(`--shadow-floating`) 허용.
+  - 목적: 에디토리얼, 포스터와 같은 강렬한 "Wow" 팩터 전달.
+
+- **밀집 운영 표면 (칸반, 채팅, 파이프라인 리스트 등):**
+  - **절제 변형 적용**: 거대한 색상 타일 사용은 지양하고, Huddle의 토큰(선, 타이포그래피 위계, 여백, Pill 태그 등)만 차용하여 가독성 위주로 구성.
+  - 목적: 빽빽한 데이터 확인 및 다수 조작이 필요한 곳에서 눈의 피로도 저하 및 사용성(Usability) 보장. (이곳에서는 `shadow-floating` 및 전면 색블록 사용 금지)
+
 ## Tokens — Colors
 
 | Name | Value | Token | Role |
@@ -222,7 +234,9 @@ Three overlapping circular avatars (40px each, -12px overlap), 1px white border 
 
 ## Elevation
 
-The design system intentionally avoids box-shadows. All elevation is achieved through background color contrast and 1px hairline borders (#333333, #e5e6e1). Cards on the white canvas rely on the pastel background fill (sage, lavender, rose) to create visual separation. This flat treatment reinforces the editorial/poster aesthetic and prevents the interface from feeling like a generic SaaS dashboard.
+The design system uses two distinct elevation strategies based on the surface policy:
+1. **쇼케이스 표면 (Showcase Surfaces):** 대시보드 타일, 떠 있는 카드, 토스트 메시지 등에는 `--shadow-floating`을 사용하여 캔버스에서 띄우는 입체감을 부여합니다.
+2. **밀집 운영 표면 (Dense Ops Surfaces):** Box-shadow를 철저히 배제하고, 배경색 대비와 1px Hairline 보더(#333333, #e5e6e1)만으로 계층을 구분합니다. 플랫한 에디토리얼 스타일을 유지합니다.
 
 ## Imagery
 

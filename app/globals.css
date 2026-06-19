@@ -63,13 +63,24 @@
   --text-display: 69px;
   --text-display--line-height: 1.1;
 
-  /* Border radius — 의미 위계 (badge 4 / card 8 / list 24 / large 40 / pill 100 / 핀 1000) */
+  /* Border radius — 의미 위계 */
   --radius-badge: 4px;
-  --radius-card: 8px;
+  --radius-card: 8px; /* 기존 밀집용 */
   --radius-list: 24px;
+  --radius-block: 24px; /* 신규: Huddle 색블록 카드용 거대 라운드 */
   --radius-large: 40px;
+  --radius-hero: 40px; /* 신규: Huddle 히어로/쇼케이스용 거대 라운드 */
   --radius-pill: 100px;
   --radius-pin: 1000px;
+
+  /* 표면색 (Huddle 전면 색블록 배경용) */
+  --color-surface-sage: var(--color-pale-sage);
+  --color-surface-lavender: var(--color-lavender-mist);
+  --color-surface-rose: var(--color-dusty-rose);
+  --color-surface-amber: var(--color-amber-soft);
+
+  /* 쇼케이스 전용 Shadow (밀집 운영 카드에는 사용 금지) */
+  --shadow-floating: 0 12px 32px -8px rgba(21, 21, 21, 0.08), 0 4px 12px -4px rgba(21, 21, 21, 0.04);
 }
 
 /*
@@ -104,11 +115,19 @@
 
 /* 디스플레이 헤드라인 — 라이트 웨이트(에디토리얼 시그니처), bold 금지 */
 @layer components {
-  .ob-display {
+  .ob-display-lg {
     font-family: var(--font-display);
-    font-weight: 350;
+    font-size: clamp(48px, 5vw, 69px); /* 69px급 반응형 */
+    font-weight: 300;
     letter-spacing: -0.02em;
     line-height: 1.1;
+  }
+  .ob-display {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 3.5vw, 44px); /* 44px급 반응형 */
+    font-weight: 350;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
   }
   .ob-headline {
     font-family: var(--font-display);

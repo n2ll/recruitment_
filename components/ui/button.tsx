@@ -28,6 +28,7 @@ const buttonVariants = cva(
         sm: "h-8 px-3 text-[13px]",
         md: "h-10 px-5 text-[14px]",
         lg: "h-12 px-6 text-[15px]",
+        hero: "h-14 px-8 text-[16px] font-semibold", /* 신규: Huddle 대형 CTA용 */
         icon: "h-9 w-9 p-0 rounded-pill",
       },
     },
