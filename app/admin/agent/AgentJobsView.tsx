@@ -15,7 +15,7 @@ import { getBrowserClient } from "@/lib/supabase";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { usePrompt } from "@/components/ui/prompt";
-import { LoadingState, EmptyState } from "@/components/ui/states";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import JobCreateModal from "./JobCreateModal";
 import { sentByLabel } from "./sent-by-label";
 import {
@@ -52,6 +52,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
   // ── 공고 목록 ───────────────────────────────────────────
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
@@ -59,11 +60,13 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
   // ── 선택된 공고의 후보 ─────────────────────────────────
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [candLoading, setCandLoading] = useState(false);
+  const [candError, setCandError] = useState(false);
 
   // ── 슬라이드 패널 ─────────────────────────────────────
   const [panelCid, setPanelCid] = useState<number | null>(null);
   const [panelMessages, setPanelMessages] = useState<ChatMessage[]>([]);
   const [panelMsgsLoading, setPanelMsgsLoading] = useState(false);
+  const [panelMsgsError, setPanelMsgsError] = useState(false);
   const [panelMsgInput, setPanelMsgInput] = useState("");
   const [panelMsgSending, setPanelMsgSending] = useState(false);
   const [panelActionBusy, setPanelActionBusy] = useState(false);
@@ -79,6 +82,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
   // ── 데이터 로드 ────────────────────────────────────────
   const loadJobs = useCallback(async () => {
+    setJobsError(false);
     try {
       const res = await fetch("/api/admin/jobs", { cache: "no-store" });
       const json = await res.json();
@@ -92,6 +96,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       }
     } catch (e) {
       console.error("[jobs load]", e);
+      setJobsError(true);
     } finally {
       setJobsLoading(false);
     }
@@ -99,6 +104,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
   const loadCandidates = useCallback(async (jobId: number) => {
     setCandLoading(true);
+    setCandError(false);
     try {
       const res = await fetch(`/api/admin/jobs/${jobId}/candidates`, { cache: "no-store" });
       const json = await res.json();
@@ -106,6 +112,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       setCandidates(json.candidates ?? []);
     } catch (e) {
       console.error("[candidates load]", e);
+      setCandError(true);
     } finally {
       setCandLoading(false);
     }
@@ -113,6 +120,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
   const loadPanelMessages = useCallback(async (applicantId: number, jobId: number) => {
     setPanelMsgsLoading(true);
+    setPanelMsgsError(false);
     try {
       const res = await fetch(
         `/api/admin/messages/${applicantId}?job_id=${jobId}`,
@@ -123,6 +131,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       setPanelMessages(json.messages ?? []);
     } catch (e) {
       console.error("[panel messages]", e);
+      setPanelMsgsError(true);
     } finally {
       setPanelMsgsLoading(false);
     }
@@ -291,6 +300,12 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         <div className="ajv-chips">
           {jobsLoading ? (
             <span className="ajv-chip-empty">로딩 중...</span>
+          ) : jobsError ? (
+            <ErrorState
+              title="공고를 불러오지 못했어요"
+              onRetry={() => loadJobs()}
+              className="py-2"
+            />
           ) : visibleJobs.length === 0 ? (
             <span className="ajv-chip-empty">
               {showClosed ? "마감된 공고가 없습니다." : "활성 공고가 없습니다. [+ 새 공고]를 눌러 시작하세요."}
@@ -400,6 +415,8 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
                 <tbody>
                   {candLoading ? (
                     <tr><td colSpan={8} className="ajv-loading">로딩 중...</td></tr>
+                  ) : candError ? (
+                    <tr><td colSpan={8}><ErrorState title="후보를 불러오지 못했어요" onRetry={() => selectedJobId && loadCandidates(selectedJobId)} /></td></tr>
                   ) : candidates.length === 0 ? (
                     <tr><td colSpan={8} className="ajv-loading">후보자 없음</td></tr>
                   ) : (
@@ -469,7 +486,15 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
             <Checklist candidate={panelCandidate} />
 
-            <ChatHistory messages={panelMessages} loading={panelMsgsLoading} />
+            <ChatHistory
+              messages={panelMessages}
+              loading={panelMsgsLoading}
+              error={panelMsgsError}
+              onRetry={() => {
+                if (selectedJobId)
+                  loadPanelMessages(panelCandidate.applicant_id, selectedJobId);
+              }}
+            />
 
             <ManagerActions
               candidate={panelCandidate}
@@ -480,12 +505,12 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
             <div className="ajv-panel-input-wrap">
               <textarea
                 className="ajv-panel-input"
-                placeholder="매니저 직접 메시지... (Enter 발송)"
+                placeholder="매니저 답장 — Enter는 줄바꿈, [발송]으로 보내기 (⌘/Ctrl+Enter 발송)"
                 rows={2}
                 value={panelMsgInput}
                 onChange={(e) => setPanelMsgInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     sendManagerMessage();
                   }
@@ -913,7 +938,17 @@ function Checklist({ candidate }: { candidate: CandidateRow }) {
   );
 }
 
-function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: boolean }) {
+function ChatHistory({
+  messages,
+  loading,
+  error,
+  onRetry,
+}: {
+  messages: ChatMessage[];
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="ch">
       <h4>💬 대화 내역</h4>
@@ -923,6 +958,8 @@ function ChatHistory({ messages, loading }: { messages: ChatMessage[]; loading: 
       >
         {loading ? (
           <LoadingState label="대화 불러오는 중…" />
+        ) : error ? (
+          <ErrorState title="대화를 불러오지 못했어요" onRetry={onRetry} />
         ) : messages.length === 0 ? (
           <EmptyState title="아직 대화가 없어요" />
         ) : (
