@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/states";
+import { Button } from "@/components/ui/button";
 import {
   AgentState,
   ONBOARDING_KEYS,
@@ -345,71 +346,72 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="pg">
+    <div className="flex gap-0 h-[calc(100vh-33px)] bg-bone/30 text-[13px] text-ink-black">
       {/* 좌: 시나리오 설정 */}
-      <section className="pg-left">
-        <h3 className="pg-h">📢 공고</h3>
+      <section className="w-[440px] shrink-0 bg-paper-white border-r border-bone py-[18px] px-[20px] overflow-y-auto">
+        <h3 className="text-[13px] font-bold mt-0 mb-2">📢 공고</h3>
 
-        <details className="pg-gen" open={!jobBody}>
-          <summary>메모 자동 생성</summary>
-          <div className="pg-gen-body">
+        <details className="bg-sand border border-honey-gold rounded-lg py-2.5 px-3 mb-2.5" open={!jobBody}>
+          <summary className="cursor-pointer text-[12px] font-semibold text-burnt-amber">메모 자동 생성</summary>
+          <div className="mt-2 flex flex-col gap-1.5">
             <textarea
-              className="pg-textarea"
+              className="w-full py-[7px] px-[10px] border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none focus:border-honey-gold resize-y min-h-[50px] leading-[1.55]"
               placeholder="예) 강북미아 토일 장보기 자차, 시급 1.5~2만"
               rows={2}
               value={rough}
               onChange={(e) => setRough(e.target.value)}
             />
-            <button className="pg-btn-secondary" onClick={generateBody} disabled={generating}>
+            <Button variant="outline" size="sm" onClick={generateBody} disabled={generating}>
               {generating ? "생성 중..." : "본문 자동 생성"}
-            </button>
+            </Button>
             {generateMissing.length > 0 && (
-              <div className="pg-warn">
+              <div className="text-[11px] text-burnt-amber">
                 ⚠️ 빠진 항목: {generateMissing.join(", ")}
               </div>
             )}
           </div>
         </details>
 
-        <label className="pg-label">제목</label>
-        <input className="pg-input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+        <label className="block text-[11px] font-semibold text-graphite mt-2 mb-1">제목</label>
+        <input className="w-full py-[7px] px-[10px] border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none focus:border-honey-gold" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
 
-        <label className="pg-label">본문 (SMS로 보내질 텍스트)</label>
+        <label className="block text-[11px] font-semibold text-graphite mt-2 mb-1">본문 (SMS로 보내질 텍스트)</label>
         <textarea
-          className="pg-textarea"
+          className="w-full py-[7px] px-[10px] border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none focus:border-honey-gold resize-y min-h-[50px] leading-[1.55]"
           rows={8}
           value={jobBody}
           onChange={(e) => setJobBody(e.target.value)}
           placeholder="공고 본문..."
         />
 
-        <div className="pg-meta-grid">
-          <label><span>지점</span>
-            <select value={jobBranch} onChange={(e) => setJobBranch(e.target.value)}>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2 mb-1">
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">지점</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={jobBranch} onChange={(e) => setJobBranch(e.target.value)}>
               <option value="">선택 안함</option>
               {branches.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           </label>
-          <label><span>슬롯</span>
-            <select value={jobSlot} onChange={(e) => setJobSlot(e.target.value)}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">슬롯</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={jobSlot} onChange={(e) => setJobSlot(e.target.value)}>
               <option value="">선택 안함</option>
               {SLOTS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
-          <label><span>시작일</span>
-            <input type="date" value={jobStartDate} onChange={(e) => setJobStartDate(e.target.value)} />
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">시작일</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" type="date" value={jobStartDate} onChange={(e) => setJobStartDate(e.target.value)} />
           </label>
-          <label><span>차량</span>
-            <select value={jobVehicle ? "1" : "0"} onChange={(e) => setJobVehicle(e.target.value === "1")}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">차량</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={jobVehicle ? "1" : "0"} onChange={(e) => setJobVehicle(e.target.value === "1")}>
               <option value="1">필요</option>
               <option value="0">불필요</option>
             </select>
           </label>
-          <label className="pg-meta-wide"><span>픽업 주소</span>
-            <input value={jobPickup} onChange={(e) => setJobPickup(e.target.value)} placeholder="예) 서울 강북구 도봉로 34" />
+          <label className="col-span-2 flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">픽업 주소</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={jobPickup} onChange={(e) => setJobPickup(e.target.value)} placeholder="예) 서울 강북구 도봉로 34" />
           </label>
-          <label className="pg-meta-wide"><span>현장 매니저 (만남장소 안내·확정 알림에 사용)</span>
+          <label className="col-span-2 flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">현장 매니저 (만남장소 안내·확정 알림에 사용)</span>
             <select
+              className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none"
               value={jobSiteManagerId ?? ""}
               onChange={(e) => setJobSiteManagerId(e.target.value ? Number(e.target.value) : null)}
             >
@@ -424,80 +426,80 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
         </div>
 
         {/* 추천 (선택) */}
-        <div className="pg-rec">
-          <button className="pg-btn-secondary" onClick={fetchRecommendations} disabled={recLoading || !jobBody.trim()}>
+        <div className="mt-2.5">
+          <Button variant="outline" size="sm" onClick={fetchRecommendations} disabled={recLoading || !jobBody.trim()}>
             {recLoading ? "추천 중..." : "후보 추천 받기 (실제 풀)"}
-          </button>
+          </Button>
           {candidates.length > 0 && (
-            <div className="pg-rec-list">
-              <div className="pg-rec-h">{candidates.length}명 추천 — 클릭 시 위 지원자 정보로 임포트</div>
+            <div className="mt-2 flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+              <div className="text-[11px] text-graphite py-1">{candidates.length}명 추천 — 클릭 시 위 지원자 정보로 임포트</div>
               {candidates.slice(0, 5).map((c) => (
                 <button
                   key={`${c.source}-${c.id}`}
-                  className="pg-rec-row"
+                  className="flex items-center gap-2 py-1.5 px-2.5 bg-stone-50 border border-bone rounded-lg font-inherit text-[11px] cursor-pointer text-left hover:bg-sand hover:border-honey-gold"
                   onClick={() => importCandidate(c)}
                 >
                   <span>#{c.score.total}</span>
                   <strong>{c.name}</strong>
-                  <span className="pg-meta-text">{c.phone}</span>
-                  <span className="pg-meta-text">{c.score.distanceKm.toFixed(1)}km</span>
+                  <span className="text-stone-400">{c.phone}</span>
+                  <span className="text-stone-400">{c.score.distanceKm.toFixed(1)}km</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <h3 className="pg-h">🧑 지원자 (빙의 대상)</h3>
-        <div className="pg-meta-grid">
-          <label><span>이름</span>
-            <input value={appName} onChange={(e) => setAppName(e.target.value)} />
+        <h3 className="text-[13px] font-bold mt-[14px] mb-2">🧑 지원자 (빙의 대상)</h3>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2 mb-1">
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">이름</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appName} onChange={(e) => setAppName(e.target.value)} />
           </label>
-          <label><span>전화</span>
-            <input value={appPhone} onChange={(e) => setAppPhone(e.target.value)} />
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">전화</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appPhone} onChange={(e) => setAppPhone(e.target.value)} />
           </label>
-          <label><span>1지망 지점</span>
-            <select value={appBranch1} onChange={(e) => setAppBranch1(e.target.value)}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">1지망 지점</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appBranch1} onChange={(e) => setAppBranch1(e.target.value)}>
               <option value="">자동(공고 지점)</option>
               {branches.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           </label>
-          <label><span>희망 시간</span>
-            <input value={appWorkHours} onChange={(e) => setAppWorkHours(e.target.value)} />
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">희망 시간</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appWorkHours} onChange={(e) => setAppWorkHours(e.target.value)} />
           </label>
-          <label><span>차량(폼)</span>
-            <select value={appOwnVehicle} onChange={(e) => setAppOwnVehicle(e.target.value)}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">차량(폼)</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appOwnVehicle} onChange={(e) => setAppOwnVehicle(e.target.value)}>
               <option value="있음">있음</option>
               <option value="없음">없음</option>
             </select>
           </label>
-          <label><span>면허(폼)</span>
-            <select value={appLicense} onChange={(e) => setAppLicense(e.target.value)}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">면허(폼)</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appLicense} onChange={(e) => setAppLicense(e.target.value)}>
               <option value="1종 보통">1종 보통</option>
               <option value="2종 보통">2종 보통</option>
               <option value="1종 대형">1종 대형</option>
               <option value="없음">없음</option>
             </select>
           </label>
-          <label><span>본인명의(폼)</span>
-            <select value={appSelfOwnership} onChange={(e) => setAppSelfOwnership(e.target.value)}>
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">본인명의(폼)</span>
+            <select className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appSelfOwnership} onChange={(e) => setAppSelfOwnership(e.target.value)}>
               <option value="문제 없음">문제 없음</option>
               <option value="문제 있음">문제 있음</option>
             </select>
           </label>
-          <label><span>시작가능일</span>
-            <input type="date" value={appAvailableDate} onChange={(e) => setAppAvailableDate(e.target.value)} />
+          <label className="flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">시작가능일</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" type="date" value={appAvailableDate} onChange={(e) => setAppAvailableDate(e.target.value)} />
           </label>
-          <label className="pg-meta-wide"><span>거주지</span>
-            <input value={appLocation} onChange={(e) => setAppLocation(e.target.value)} />
+          <label className="col-span-2 flex flex-col gap-[3px] text-[11px]"><span className="text-graphite font-semibold">거주지</span>
+            <input className="py-1.5 px-2 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none" value={appLocation} onChange={(e) => setAppLocation(e.target.value)} />
           </label>
         </div>
 
-        <h3 className="pg-h">⚙️ 시뮬 단계</h3>
-        <div className="pg-stage-row">
+        <h3 className="text-[13px] font-bold mt-[14px] mb-2">⚙️ 시뮬 단계</h3>
+        <div className="flex gap-1.5 mb-2.5">
           {(["exploration", "screening", "onboarding", "active"] as SimStage[]).map((s) => (
             <button
               key={s}
-              className={`pg-stage-btn ${stage === s ? "pg-stage-on" : ""}`}
+              className={`py-1.5 px-3.5 border-[1.5px] border-bone rounded-lg font-inherit text-[12px] font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${stage === s ? "bg-ink-black text-paper-white border-ink-black" : "bg-paper-white"}`}
               onClick={() => setStage(s)}
               disabled={conversation.length > 0}
               title={conversation.length > 0 ? "대화 시작 후엔 자동 전이만 가능. 초기화하면 변경 가능." : ""}
@@ -507,32 +509,32 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
           ))}
         </div>
 
-        <button className="pg-btn-warn" onClick={resetSim} disabled={conversation.length === 0}>
+        <Button variant="danger" size="sm" onClick={resetSim} disabled={conversation.length === 0}>
           🔄 시뮬 초기화
-        </button>
+        </Button>
       </section>
 
       {/* 우: 채팅 시뮬 */}
-      <section className="pg-right">
-        <div className="pg-r-h">
-          <span className="pg-stage-badge" style={{ background: stageBadgeColor }}>
+      <section className="flex-1 flex flex-col py-[18px] px-[24px] overflow-hidden bg-paper-white">
+        <div className="flex items-center gap-2.5 mb-3">
+          <span className="py-[3px] px-2.5 rounded-lg text-paper-white text-[11px] font-bold" style={{ background: stageBadgeColor }}>
             {stageBadge}
           </span>
           {progress.total > 0 && (
-            <span className="pg-progress">
+            <span className="text-[12px] text-graphite font-semibold">
               체크리스트 {progress.done}/{progress.total}
             </span>
           )}
-          <span className="pg-r-h-info">실제 발송 X · DB 저장 X</span>
+          <span className="ml-auto text-[11px] text-stone-400 bg-sand py-[3px] px-2 rounded-md">실제 발송 X · DB 저장 X</span>
         </div>
 
         {/* 체크리스트 시각화 */}
         {progress.total > 0 && (
-          <div className="pg-cl">
+          <div className="flex flex-wrap gap-1 p-2.5 bg-paper-white border border-bone rounded-lg mb-3">
             {progress.keys.map((k) => (
               <span
                 key={k}
-                className={`pg-cl-item ${progress.cl[k] ? "pg-cl-on" : ""}`}
+                className={`text-[11px] py-[3px] px-2 rounded-md ${progress.cl[k] ? "bg-lavender-soft text-deep-violet font-semibold" : "bg-stone-100 text-graphite"}`}
               >
                 {progress.cl[k] ? "✓" : "·"} {k.replace(/_/g, " ")}
               </span>
@@ -542,7 +544,7 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
 
         {/* 채팅 영역 */}
         <div
-          className="pg-chat"
+          className="flex-1 bg-paper-white border border-bone rounded-xl p-3.5 overflow-y-auto flex flex-col gap-2.5"
           ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
         >
           {conversation.length === 0 ? (
@@ -552,27 +554,27 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
             />
           ) : (
             conversation.map((t, idx) => (
-              <div key={idx} className={`pg-row ${t.direction === "inbound" ? "pg-l" : "pg-r"}`}>
-                <div className="pg-bubble-wrap">
-                  <div className="pg-role">
+              <div key={idx} className={`flex ${t.direction === "inbound" ? "justify-start" : "justify-end"}`}>
+                <div className="max-w-[80%]">
+                  <div className="text-[10px] text-stone-400 font-semibold mb-[3px]">
                     {t.direction === "inbound" ? "🙋 지원자(빙의)" : "🤖 에이전트"}
                   </div>
-                  <div className={`pg-bubble ${t.direction === "outbound" ? "pg-out" : "pg-in"}`}>
+                  <div className={`py-2 px-3 rounded-xl text-[12px] leading-[1.6] whitespace-pre-wrap ${t.direction === "outbound" ? "bg-lavender-soft text-ink-black" : "bg-stone-100 text-ink-black"}`}>
                     {t.body}
                   </div>
                   {t.reasoning && (
-                    <div className="pg-reason">판단: {t.reasoning}</div>
+                    <div className="text-[11px] text-graphite mt-1 italic">판단: {t.reasoning}</div>
                   )}
                   {t.transition && (
-                    <div className={`pg-transition ${t.transition.startsWith("→") ? "pg-tr-adv" : t.transition.startsWith("⛔") ? "pg-tr-abort" : "pg-tr-pause"}`}>
+                    <div className={`mt-1 py-[3px] px-2 rounded-md text-[11px] font-bold inline-block ${t.transition.startsWith("→") ? "bg-lavender-soft text-deep-violet" : t.transition.startsWith("⛔") ? "bg-rose-soft text-burgundy" : "bg-sand text-burnt-amber"}`}>
                       {t.transition}
                     </div>
                   )}
                   {t.auto_preview && t.auto_preview.length > 0 && (
-                    <details className="pg-auto">
-                      <summary>📨 자동 발송될 메시지 미리보기 ({t.auto_preview.length}건)</summary>
+                    <details className="mt-1.5 bg-stone-50 rounded-md py-1.5 px-2.5">
+                      <summary className="cursor-pointer text-[11px] text-deep-violet font-semibold">📨 자동 발송될 메시지 미리보기 ({t.auto_preview.length}건)</summary>
                       {t.auto_preview.map((msg, i) => (
-                        <div key={i} className="pg-auto-msg">{msg}</div>
+                        <div key={i} className="text-[11px] bg-paper-white py-2 px-2.5 rounded-md mt-1.5 border border-bone whitespace-pre-wrap leading-[1.5]">{msg}</div>
                       ))}
                     </details>
                   )}
@@ -581,20 +583,20 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
             ))
           )}
           {sending && (
-            <div className="pg-row pg-r">
-              <div className="pg-bubble-wrap">
-                <div className="pg-role">🤖 에이전트</div>
-                <div className="pg-bubble pg-out pg-typing">⏳ Claude 호출 중...</div>
+            <div className="flex justify-end">
+              <div className="max-w-[80%]">
+                <div className="text-[10px] text-stone-400 font-semibold mb-[3px]">🤖 에이전트</div>
+                <div className="py-2 px-3 rounded-xl text-[12px] leading-[1.6] whitespace-pre-wrap bg-lavender-soft text-stone-400">⏳ Claude 호출 중...</div>
               </div>
             </div>
           )}
         </div>
 
-        {error && <div className="pg-error">⚠️ {error}</div>}
+        {error && <div className="mt-2 py-2 px-3 bg-rose-soft text-burgundy rounded-lg text-[12px]">⚠️ {error}</div>}
 
-        <div className="pg-input-row">
+        <div className="mt-3 flex gap-2 items-end">
           <textarea
-            className="pg-textarea"
+            className="flex-1 w-full py-[7px] px-[10px] border-[1.5px] border-bone rounded-lg font-inherit text-[12px] bg-paper-white outline-none focus:border-honey-gold resize-y min-h-[50px] leading-[1.55]"
             rows={2}
             placeholder="지원자처럼 답장 입력 (Enter 전송, Shift+Enter 줄바꿈)"
             value={input}
@@ -607,304 +609,16 @@ export default function PlaygroundView({ branches }: PlaygroundViewProps) {
             }}
             disabled={sending}
           />
-          <div className="pg-input-actions">
-            <button className="pg-btn-secondary" onClick={undoLast} disabled={sending || conversation.length === 0}>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" onClick={undoLast} disabled={sending || conversation.length === 0}>
               ↶ 되돌리기
-            </button>
-            <button className="pg-btn-primary" onClick={sendInbound} disabled={sending || !input.trim() || !jobBody.trim()}>
+            </Button>
+            <Button variant="primary" size="sm" onClick={sendInbound} disabled={sending || !input.trim() || !jobBody.trim()}>
               {sending ? "..." : "전송"}
-            </button>
+            </Button>
           </div>
         </div>
       </section>
-
-      <style jsx>{`
-        .pg {
-          display: flex;
-          gap: 0;
-          height: calc(100vh - 33px);    /* phone-bar(약 33px) 제외 */
-          background: #f5f5f0;
-          font-size: 13px;
-          color: #1a1a1a;
-        }
-
-        .pg-left {
-          width: 440px;
-          flex-shrink: 0;
-          background: #fff;
-          border-right: 1px solid #e8e8e0;
-          padding: 18px 20px;
-          overflow-y: auto;
-        }
-        .pg-right {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          padding: 18px 24px;
-          overflow: hidden;
-        }
-
-        .pg-h {
-          font-size: 13px;
-          font-weight: 700;
-          margin: 14px 0 8px;
-        }
-        .pg-h:first-of-type { margin-top: 0; }
-        .pg-label {
-          display: block;
-          font-size: 11px;
-          font-weight: 600;
-          color: #6b7280;
-          margin: 8px 0 4px;
-        }
-        .pg-input, .pg-textarea {
-          width: 100%;
-          padding: 7px 10px;
-          border: 1.5px solid #e8e8e0;
-          border-radius: 8px;
-          font-family: inherit;
-          font-size: 12px;
-          background: #fff;
-          outline: none;
-        }
-        .pg-input:focus, .pg-textarea:focus { border-color: #e4b976; }
-        .pg-textarea { resize: vertical; min-height: 50px; line-height: 1.55; }
-
-        .pg-gen {
-          background: #f7eedd;
-          border: 1px solid #e4b976;
-          border-radius: 8px;
-          padding: 10px 12px;
-          margin-bottom: 10px;
-        }
-        .pg-gen summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #65451d; }
-        .pg-gen-body { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-        .pg-warn { font-size: 11px; color: #65451d; }
-
-        .pg-meta-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px 12px;
-          margin: 8px 0 4px;
-        }
-        .pg-meta-grid label {
-          display: flex; flex-direction: column; gap: 3px;
-          font-size: 11px;
-        }
-        .pg-meta-grid label > span { color: #6b7280; font-weight: 600; }
-        .pg-meta-grid input, .pg-meta-grid select {
-          padding: 6px 9px;
-          border: 1.5px solid #e8e8e0;
-          border-radius: 7px;
-          font-family: inherit;
-          font-size: 12px;
-          background: #fff;
-          outline: none;
-        }
-        .pg-meta-wide { grid-column: span 2; }
-
-        .pg-rec { margin-top: 10px; }
-        .pg-rec-list {
-          margin-top: 8px;
-          display: flex; flex-direction: column; gap: 4px;
-          max-height: 200px;
-          overflow-y: auto;
-        }
-        .pg-rec-h { font-size: 11px; color: #6b7280; padding: 4px 0; }
-        .pg-rec-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 10px;
-          background: #f9fafb;
-          border: 1px solid #e8e8e0;
-          border-radius: 7px;
-          font-family: inherit;
-          font-size: 11px;
-          cursor: pointer;
-          text-align: left;
-        }
-        .pg-rec-row:hover { background: #f7eedd; border-color: #e4b976; }
-        .pg-meta-text { color: #9ca3af; }
-
-        .pg-stage-row { display: flex; gap: 6px; margin-bottom: 10px; }
-        .pg-stage-btn {
-          padding: 7px 14px;
-          border: 1.5px solid #e8e8e0;
-          background: #fff;
-          border-radius: 8px;
-          font-family: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        .pg-stage-on {
-          background: #1a1a1a !important;
-          color: #fff !important;
-          border-color: #1a1a1a !important;
-        }
-        .pg-stage-btn:disabled {
-          opacity: 0.5; cursor: not-allowed;
-        }
-
-        .pg-btn-primary, .pg-btn-secondary, .pg-btn-warn {
-          padding: 8px 14px;
-          border-radius: 8px;
-          font-family: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          border: 1.5px solid;
-        }
-        .pg-btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-        .pg-btn-primary:disabled { background: #9ca3af; border-color: #9ca3af; cursor: not-allowed; }
-        .pg-btn-secondary { background: #fff; color: #1a1a1a; border-color: #e8e8e0; }
-        .pg-btn-warn {
-          background: #fff;
-          color: #65451d;
-          border-color: #e4b976;
-        }
-        .pg-btn-warn:disabled { color: #9ca3af; border-color: #e8e8e0; cursor: not-allowed; }
-
-        /* 우측 채팅 */
-        .pg-r-h {
-          display: flex; align-items: center; gap: 10px;
-          margin-bottom: 12px;
-        }
-        .pg-stage-badge {
-          padding: 3px 10px; border-radius: 8px;
-          color: #fff; font-size: 11px; font-weight: 700;
-        }
-        .pg-progress {
-          font-size: 12px; color: #4b5563; font-weight: 600;
-        }
-        .pg-r-h-info {
-          margin-left: auto;
-          font-size: 11px;
-          color: #9ca3af;
-          background: #f7eedd;
-          padding: 3px 8px;
-          border-radius: 6px;
-        }
-
-        .pg-cl {
-          display: flex; flex-wrap: wrap; gap: 4px;
-          padding: 10px;
-          background: #fff;
-          border: 1px solid #e8e8e0;
-          border-radius: 8px;
-          margin-bottom: 12px;
-        }
-        .pg-cl-item {
-          font-size: 11px;
-          padding: 3px 8px;
-          background: #f3f4f6;
-          color: #6b7280;
-          border-radius: 6px;
-        }
-        .pg-cl-on {
-          background: #efecf4 !important;
-          color: #453b60 !important;
-          font-weight: 600;
-        }
-
-        .pg-chat {
-          flex: 1;
-          background: #fff;
-          border: 1px solid #e8e8e0;
-          border-radius: 10px;
-          padding: 14px;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .pg-empty {
-          padding: 60px 20px;
-          text-align: center;
-          color: #9ca3af;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-        .pg-row { display: flex; }
-        .pg-l { justify-content: flex-start; }
-        .pg-r { justify-content: flex-end; }
-        .pg-bubble-wrap { max-width: 80%; }
-        .pg-role {
-          font-size: 10px;
-          color: #9ca3af;
-          font-weight: 600;
-          margin-bottom: 3px;
-        }
-        .pg-bubble {
-          padding: 8px 12px;
-          border-radius: 10px;
-          font-size: 12px;
-          line-height: 1.6;
-          white-space: pre-wrap;
-        }
-        .pg-in { background: #f3f4f6; color: #1a1a1a; }
-        .pg-out { background: #efecf4; color: #1a1a1a; }
-        .pg-typing { color: #9ca3af; }
-
-        .pg-reason {
-          font-size: 11px;
-          color: #6b7280;
-          margin-top: 4px;
-          font-style: italic;
-        }
-        .pg-transition {
-          margin-top: 4px;
-          padding: 3px 8px;
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: 700;
-          display: inline-block;
-        }
-        .pg-tr-adv { background: #efecf4; color: #453b60; }
-        .pg-tr-pause { background: #f7eedd; color: #65451d; }
-        .pg-tr-abort { background: #f4e8ea; color: #5c2529; }
-
-        .pg-auto {
-          margin-top: 6px;
-          background: #f9fafb;
-          border-radius: 6px;
-          padding: 6px 10px;
-        }
-        .pg-auto summary {
-          cursor: pointer;
-          font-size: 11px;
-          color: #453b60;
-          font-weight: 600;
-        }
-        .pg-auto-msg {
-          font-size: 11px;
-          background: #fff;
-          padding: 8px 10px;
-          border-radius: 6px;
-          margin-top: 6px;
-          border: 1px solid #e8e8e0;
-          white-space: pre-wrap;
-          line-height: 1.5;
-        }
-
-        .pg-error {
-          margin-top: 8px;
-          padding: 8px 12px;
-          background: #f4e8ea;
-          color: #5c2529;
-          border-radius: 8px;
-          font-size: 12px;
-        }
-
-        .pg-input-row {
-          margin-top: 12px;
-          display: flex; gap: 8px;
-          align-items: flex-end;
-        }
-        .pg-input-row .pg-textarea { flex: 1; }
-        .pg-input-actions { display: flex; gap: 6px; }
-      `}</style>
     </div>
   );
 }

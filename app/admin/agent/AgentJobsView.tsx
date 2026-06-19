@@ -275,31 +275,31 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
   const visibleJobs = showClosed ? closedJobs : activeJobs;
 
   return (
-    <div className="ajv">
+    <div className="flex flex-col h-[calc(100vh-33px)] bg-bone/30 text-[13px] text-ink-black">
       {/* 상단 공고 셀렉터 (가로 칩) */}
-      <header className="ajv-top">
-        <button className="ajv-create-btn" onClick={() => setShowCreate(true)}>
+      <header className="bg-paper-white border-b border-bone px-6 py-3 flex items-center gap-3.5 shrink-0">
+        <button className="px-3.5 py-2 bg-honey-gold text-ink-black border-none rounded-pill text-xs font-semibold cursor-pointer shrink-0 transition-colors hover:brightness-95" onClick={() => setShowCreate(true)}>
           + 새 공고
         </button>
 
-        <div className="ajv-top-toggle">
+        <div className="flex bg-bone/30 rounded-pill p-0.5 shrink-0">
           <button
-            className={`ajv-tt-btn ${!showClosed ? "ajv-tt-on" : ""}`}
+            className={`px-3 py-1.5 bg-transparent border-none rounded-pill text-[11px] font-semibold cursor-pointer transition-colors ${!showClosed ? "bg-paper-white text-ink-black border border-bone" : "text-slate-gray"}`}
             onClick={() => setShowClosed(false)}
           >
             활성 {activeJobs.length}
           </button>
           <button
-            className={`ajv-tt-btn ${showClosed ? "ajv-tt-on" : ""}`}
+            className={`px-3 py-1.5 bg-transparent border-none rounded-pill text-[11px] font-semibold cursor-pointer transition-colors ${showClosed ? "bg-paper-white text-ink-black border border-bone" : "text-slate-gray"}`}
             onClick={() => setShowClosed(true)}
           >
             마감 {closedJobs.length}
           </button>
         </div>
 
-        <div className="ajv-chips">
+        <div className="flex-1 flex gap-1.5 overflow-x-auto py-0.5">
           {jobsLoading ? (
-            <span className="ajv-chip-empty">로딩 중...</span>
+            <span className="text-xs text-mist-gray px-2 py-1.5">로딩 중...</span>
           ) : jobsError ? (
             <ErrorState
               title="공고를 불러오지 못했어요"
@@ -307,7 +307,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
               className="py-2"
             />
           ) : visibleJobs.length === 0 ? (
-            <span className="ajv-chip-empty">
+            <span className="text-xs text-mist-gray px-2 py-1.5">
               {showClosed ? "마감된 공고가 없습니다." : "활성 공고가 없습니다. [+ 새 공고]를 눌러 시작하세요."}
             </span>
           ) : (
@@ -324,8 +324,8 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
       </header>
 
       {/* 메인 + 슬라이드 패널 (가로 분할) */}
-      <div className="ajv-body">
-      <section className="ajv-main">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <section className="flex-1 px-7 py-6 overflow-y-auto">
         {!selectedJob ? (
           <EmptyState
             title="공고를 선택해주세요"
@@ -334,23 +334,23 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         ) : (
           <>
             {/* 공고 헤더 */}
-            <div className="ajv-job-header">
-              <div className="ajv-job-h-l">
-                <h2>{selectedJob.title}</h2>
-                <div className="ajv-job-meta">
+            <div className="flex justify-between items-start mb-5 pb-4 border-b border-bone">
+              <div className="flex flex-col">
+                <h2 className="text-[18px] font-bold">{selectedJob.title}</h2>
+                <div className="mt-1.5 text-xs text-slate-gray flex gap-1.5 flex-wrap items-center">
                   {selectedJob.branch && <span>{selectedJob.branch}</span>}
                   {selectedJob.slot && <span>· {selectedJob.slot}</span>}
                   {selectedJob.start_date && <span>· {selectedJob.start_date} 시작</span>}
                   <span>· 정원 {selectedJob.capacity}명</span>
                   <span>· {selectedJob.vehicle_required ? "🚗 자차" : "도보 가능"}</span>
                   {selectedJob.status !== "active" && (
-                    <span className="ajv-status-badge ajv-st-closed">마감됨</span>
+                    <span className="px-2 py-0.5 rounded-pill text-[11px] font-bold bg-bone text-slate-gray">마감됨</span>
                   )}
                 </div>
               </div>
-              <div className="ajv-job-h-r">
+              <div>
                 {selectedJob.status === "active" && (
-                  <button className="ajv-btn-secondary" onClick={closeJob}>
+                  <button className="px-3.5 py-2 rounded-pill text-xs font-semibold cursor-pointer border-[1.5px] bg-paper-white text-ink-black border-bone transition-colors hover:bg-bone/30 disabled:text-mist-gray disabled:cursor-not-allowed" onClick={closeJob}>
                     공고 마감
                   </button>
                 )}
@@ -358,33 +358,33 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
             </div>
 
             {/* 칸반 */}
-            <div className="ajv-kanban">
+            <div className="grid grid-cols-6 gap-2.5 mb-6">
               {STAGE_ORDER.map((stage) => {
                 const list = candByStage[stage] ?? [];
                 const label = STAGE_LABEL[stage] ?? stage;
                 const color = STAGE_COLOR[stage] ?? "#6b7280";
                 return (
-                  <div key={stage} className="ajv-kan-col">
-                    <div className="ajv-kan-h" style={{ borderColor: color }}>
-                      <span className="ajv-kan-dot" style={{ background: color }} />
-                      {label} <span className="ajv-kan-count">{list.length}</span>
+                  <div key={stage} className="bg-paper-white rounded-card border border-bone overflow-hidden flex flex-col">
+                    <div className="px-3 py-2.5 font-bold text-xs border-b-2 flex items-center gap-1.5" style={{ borderColor: color }}>
+                      <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
+                      {label} <span className="ml-auto bg-bone/30 px-2 py-[1px] rounded-pill text-[11px]">{list.length}</span>
                     </div>
-                    <div className="ajv-kan-cards">
+                    <div className="p-2 flex flex-col gap-1.5 min-h-[120px] max-h-[280px] overflow-y-auto">
                       {list.length === 0 ? (
-                        <div className="ajv-kan-empty">—</div>
+                        <div className="text-bone text-xs text-center p-3">—</div>
                       ) : (
                         list.map((c) => (
                           <div
                             key={c.id}
-                            className={`ajv-kan-card ${c.id === panelCid ? "ajv-kan-active" : ""}`}
+                            className={`px-2.5 py-2 rounded-card cursor-pointer border-[1.5px] transition-all hover:bg-bone/30 ${c.id === panelCid ? "bg-amber-soft border-honey-gold" : "bg-bone/10 border-transparent"}`}
                             onClick={() => setPanelCid(c.id)}
                           >
-                            <div className="ajv-kan-card-name">
+                            <div className="font-semibold text-xs mb-1">
                               {c.applicants.name ?? "(이름 없음)"}
                             </div>
-                            <div className="ajv-kan-card-meta">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-gray">
                               {c.applicants.unread_count > 0 && (
-                                <span className="ajv-unread">{c.applicants.unread_count}</span>
+                                <span className="bg-burgundy text-paper-white text-[10px] font-bold px-1.5 py-[1px] rounded-pill">{c.applicants.unread_count}</span>
                               )}
                               <ProgressBadge candidate={c} />
                             </div>
@@ -398,58 +398,58 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
             </div>
 
             {/* 후보자 표 */}
-            <div className="ajv-table-wrap">
-              <table className="ajv-table">
+            <div className="bg-paper-white rounded-card border border-bone overflow-hidden">
+              <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr>
-                    <th>이름</th>
-                    <th>전화</th>
-                    <th>단계</th>
-                    <th>진행</th>
-                    <th>발송</th>
-                    <th>첫응답</th>
-                    <th>마지막대화</th>
-                    <th>지점/슬롯</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">이름</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">전화</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">단계</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">진행</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">발송</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">첫응답</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">마지막대화</th>
+                    <th className="bg-bone/30 px-3 py-2.5 text-left font-bold text-slate-gray border-b border-bone">지점/슬롯</th>
                   </tr>
                 </thead>
                 <tbody>
                   {candLoading ? (
-                    <tr><td colSpan={8} className="ajv-loading">로딩 중...</td></tr>
+                    <tr><td colSpan={8} className="text-center p-7 text-mist-gray">로딩 중...</td></tr>
                   ) : candError ? (
-                    <tr><td colSpan={8}><ErrorState title="후보를 불러오지 못했어요" onRetry={() => selectedJobId && loadCandidates(selectedJobId)} /></td></tr>
+                    <tr><td colSpan={8} className="px-3 py-2.5 border-b border-bone/30"><ErrorState title="후보를 불러오지 못했어요" onRetry={() => selectedJobId && loadCandidates(selectedJobId)} /></td></tr>
                   ) : candidates.length === 0 ? (
-                    <tr><td colSpan={8} className="ajv-loading">후보자 없음</td></tr>
+                    <tr><td colSpan={8} className="text-center p-7 text-mist-gray">후보자 없음</td></tr>
                   ) : (
                     candidates.map((c) => {
                       const stageKey = c.agent_stage ?? "sent";
                       return (
                         <tr
                           key={c.id}
-                          className={`ajv-tr ${c.id === panelCid ? "ajv-tr-active" : ""}`}
+                          className={`cursor-pointer transition-colors hover:bg-bone/30 ${c.id === panelCid ? "bg-amber-soft" : ""}`}
                           onClick={() => setPanelCid(c.id)}
                         >
-                          <td className="ajv-bold">
+                          <td className="font-bold px-3 py-2.5 border-b border-bone/30">
                             {c.applicants.name ?? "(이름 없음)"}
                             {c.applicants.unread_count > 0 && (
-                              <span className="ajv-unread" style={{ marginLeft: 6 }}>
+                              <span className="bg-burgundy text-paper-white text-[10px] font-bold px-1.5 py-[1px] rounded-pill ml-1.5">
                                 {c.applicants.unread_count}
                               </span>
                             )}
                           </td>
-                          <td>{c.applicants.phone}</td>
-                          <td>
+                          <td className="px-3 py-2.5 border-b border-bone/30">{c.applicants.phone}</td>
+                          <td className="px-3 py-2.5 border-b border-bone/30">
                             <span
-                              className="ajv-stage-badge"
+                              className="px-2 py-0.5 rounded-pill text-paper-white text-[11px] font-semibold"
                               style={{ background: STAGE_COLOR[stageKey] }}
                             >
                               {STAGE_LABEL[stageKey] ?? stageKey}
                             </span>
                           </td>
-                          <td><ProgressBadge candidate={c} /></td>
-                          <td>{c.sent_at ? formatTime(c.sent_at) : "-"}</td>
-                          <td>{c.responded_at ? formatTime(c.responded_at) : "-"}</td>
-                          <td>{c.applicants.last_message_at ? formatTime(c.applicants.last_message_at) : "-"}</td>
-                          <td className="ajv-meta-text">
+                          <td className="px-3 py-2.5 border-b border-bone/30"><ProgressBadge candidate={c} /></td>
+                          <td className="px-3 py-2.5 border-b border-bone/30">{c.sent_at ? formatTime(c.sent_at) : "-"}</td>
+                          <td className="px-3 py-2.5 border-b border-bone/30">{c.responded_at ? formatTime(c.responded_at) : "-"}</td>
+                          <td className="px-3 py-2.5 border-b border-bone/30">{c.applicants.last_message_at ? formatTime(c.applicants.last_message_at) : "-"}</td>
+                          <td className="text-slate-gray text-[11px] px-3 py-2.5 border-b border-bone/30">
                             {c.applicants.branch1 ?? "-"}
                             {c.applicants.work_hours && ` · ${c.applicants.work_hours}`}
                           </td>
@@ -466,22 +466,22 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
 
       {/* 슬라이드 패널 */}
       {panelCandidate && (
-        <aside className="ajv-panel">
-          <div className="ajv-panel-h">
+        <aside className="w-[380px] shrink-0 bg-paper-white border-l border-bone flex flex-col">
+          <div className="px-4.5 py-3.5 border-b border-bone flex justify-between items-start">
             <div>
-              <h3>{panelCandidate.applicants.name ?? "(이름 없음)"}</h3>
-              <div className="ajv-panel-sub">
+              <h3 className="text-[15px] font-bold">{panelCandidate.applicants.name ?? "(이름 없음)"}</h3>
+              <div className="text-[11px] text-slate-gray mt-1 flex gap-1.5 items-center">
                 {panelCandidate.applicants.phone} ·{" "}
-                <span className="ajv-stage-badge"
+                <span className="px-2 py-0.5 rounded-pill text-paper-white text-[11px] font-semibold"
                   style={{ background: STAGE_COLOR[panelCandidate.agent_stage ?? "sent"] }}>
                   {STAGE_LABEL[panelCandidate.agent_stage ?? "sent"] ?? panelCandidate.agent_stage}
                 </span>
               </div>
             </div>
-            <button className="ajv-panel-close" onClick={() => setPanelCid(null)}>✕</button>
+            <button className="bg-transparent border-none cursor-pointer text-base text-slate-gray hover:text-graphite" onClick={() => setPanelCid(null)}>✕</button>
           </div>
 
-          <div className="ajv-panel-body">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <ApplicantInfo applicant={panelCandidate.applicants} />
 
             <Checklist candidate={panelCandidate} />
@@ -502,9 +502,9 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
               onPatch={(b) => patchCandidate(panelCandidate.id, b)}
             />
 
-            <div className="ajv-panel-input-wrap">
+            <div className="flex gap-1.5 items-stretch pt-3 border-t border-bone">
               <textarea
-                className="ajv-panel-input"
+                className="flex-1 font-inherit text-xs px-2.5 py-2 border-[1.5px] border-bone rounded-card resize-none outline-none focus:border-honey-gold"
                 placeholder="매니저 답장 — Enter는 줄바꿈, [발송]으로 보내기 (⌘/Ctrl+Enter 발송)"
                 rows={2}
                 value={panelMsgInput}
@@ -518,7 +518,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
                 disabled={panelMsgSending}
               />
               <button
-                className="ajv-btn-primary"
+                className="px-3.5 py-2 rounded-pill text-xs font-semibold cursor-pointer border-[1.5px] bg-honey-gold text-ink-black border-honey-gold hover:brightness-95 disabled:bg-bone disabled:text-mist-gray disabled:border-bone disabled:cursor-not-allowed"
                 onClick={sendManagerMessage}
                 disabled={panelMsgSending || !panelMsgInput.trim()}
               >
@@ -543,256 +543,7 @@ export default function AgentJobsView({ branches }: AgentJobsViewProps) {
         />
       )}
 
-      <style jsx>{`
-        .ajv {
-          display: flex;
-          flex-direction: column;
-          height: calc(100vh - 33px);    /* phone-bar(약 33px) 제외 */
-          background: #f5f5f0;
-          font-size: 13px;
-          color: #1a1a1a;
-        }
-
-        /* 상단 셀렉터 */
-        .ajv-top {
-          background: #fff;
-          border-bottom: 1px solid #e8e8e0;
-          padding: 12px 24px;
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          flex-shrink: 0;
-        }
-        .ajv-create-btn {
-          padding: 8px 14px;
-          background: #e4b976;
-          color: #151515;
-          border: none;
-          border-radius: 8px;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          flex-shrink: 0;
-          transition: background 0.15s;
-        }
-        .ajv-create-btn:hover { background: #d2a55f; }
-        .ajv-top-toggle {
-          display: flex;
-          background: #f3f4f6;
-          border-radius: 8px;
-          padding: 2px;
-          flex-shrink: 0;
-        }
-        .ajv-tt-btn {
-          padding: 6px 12px;
-          background: none;
-          border: none;
-          border-radius: 6px;
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 600;
-          color: #6b7280;
-          cursor: pointer;
-        }
-        .ajv-tt-on {
-          background: #fff;
-          color: #1a1a1a;
-          border: 1px solid #e8e8e0;
-        }
-        .ajv-chips {
-          flex: 1;
-          display: flex;
-          gap: 6px;
-          overflow-x: auto;
-          padding: 2px 0;
-        }
-        .ajv-chip-empty {
-          font-size: 12px;
-          color: #9ca3af;
-          padding: 6px 8px;
-        }
-
-        /* 메인 + 패널 가로 컨테이너 */
-        .ajv-body {
-          flex: 1;
-          display: flex;
-          min-height: 0;
-          overflow: hidden;
-        }
-
-        /* 메인 */
-        .ajv-main {
-          flex: 1;
-          padding: 24px 28px;
-          overflow-y: auto;
-        }
-        .ajv-empty {
-          padding: 80px;
-          text-align: center;
-          color: #9ca3af;
-          font-size: 14px;
-        }
-        .ajv-job-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 20px;
-          padding-bottom: 16px;
-          border-bottom: 1px solid #e8e8e0;
-        }
-        .ajv-job-header h2 { font-size: 18px; font-weight: 700; }
-        .ajv-job-meta {
-          margin-top: 6px;
-          font-size: 12px;
-          color: #6b7280;
-          display: flex; gap: 6px; flex-wrap: wrap;
-        }
-        .ajv-status-badge { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-        .ajv-st-closed { background: #e5e6e1; color: #4b5563; }
-
-        /* 칸반 */
-        .ajv-kanban {
-          display: grid;
-          grid-template-columns: repeat(6, 1fr);
-          gap: 10px;
-          margin-bottom: 24px;
-        }
-        .ajv-kan-col {
-          background: #fff;
-          border-radius: 10px;
-          border: 1px solid #e8e8e0;
-          overflow: hidden;
-        }
-        .ajv-kan-h {
-          padding: 10px 12px;
-          font-weight: 700;
-          font-size: 12px;
-          border-bottom: 2px solid;
-          display: flex; align-items: center; gap: 6px;
-        }
-        .ajv-kan-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        .ajv-kan-count {
-          margin-left: auto;
-          background: #f3f4f6;
-          padding: 1px 8px;
-          border-radius: 8px;
-          font-size: 11px;
-        }
-        .ajv-kan-cards {
-          padding: 8px;
-          display: flex; flex-direction: column; gap: 6px;
-          min-height: 120px;
-          max-height: 280px;
-          overflow-y: auto;
-        }
-        .ajv-kan-empty { color: #d1d5db; font-size: 12px; text-align: center; padding: 12px; }
-        .ajv-kan-card {
-          background: #f9fafb;
-          padding: 8px 10px;
-          border-radius: 6px;
-          cursor: pointer;
-          border: 1.5px solid transparent;
-          transition: all 0.1s;
-        }
-        .ajv-kan-card:hover { background: #f3f4f6; }
-        .ajv-kan-active {
-          border-color: #e4b976 !important;
-          background: #f7eedd !important;
-        }
-        .ajv-kan-card-name { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
-        .ajv-kan-card-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b7280; }
-
-        /* 표 */
-        .ajv-table-wrap {
-          background: #fff;
-          border-radius: 10px;
-          border: 1px solid #e8e8e0;
-          overflow: hidden;
-        }
-        .ajv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .ajv-table th {
-          background: #f9fafb;
-          padding: 10px 12px;
-          text-align: left;
-          font-weight: 700;
-          color: #4b5563;
-          border-bottom: 1px solid #e8e8e0;
-        }
-        .ajv-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
-        .ajv-tr { cursor: pointer; }
-        .ajv-tr:hover { background: #f9fafb; }
-        .ajv-tr-active { background: #f7eedd; }
-        .ajv-bold { font-weight: 700; }
-        .ajv-meta-text { color: #6b7280; font-size: 11px; }
-        .ajv-loading { text-align: center; padding: 30px; color: #9ca3af; }
-        .ajv-stage-badge {
-          padding: 2px 8px; border-radius: 6px;
-          color: #fff; font-size: 11px; font-weight: 600;
-        }
-        .ajv-unread {
-          background: #5c2529; color: #fff;
-          font-size: 10px; font-weight: 700;
-          padding: 1px 6px; border-radius: 8px;
-        }
-
-        /* 슬라이드 패널 */
-        .ajv-panel {
-          width: 380px;
-          flex-shrink: 0;
-          background: #fff;
-          border-left: 1px solid #e8e8e0;
-          display: flex;
-          flex-direction: column;
-        }
-        .ajv-panel-h {
-          padding: 14px 18px;
-          border-bottom: 1px solid #e8e8e0;
-          display: flex; justify-content: space-between; align-items: flex-start;
-        }
-        .ajv-panel-h h3 { font-size: 15px; font-weight: 700; }
-        .ajv-panel-sub { font-size: 11px; color: #6b7280; margin-top: 4px; display: flex; gap: 6px; align-items: center; }
-        .ajv-panel-close {
-          background: none; border: none; cursor: pointer;
-          font-size: 16px; color: #6b7280;
-        }
-        .ajv-panel-body {
-          flex: 1;
-          overflow-y: auto;
-          padding: 16px;
-          display: flex; flex-direction: column; gap: 16px;
-        }
-
-        .ajv-panel-input-wrap {
-          display: flex; gap: 6px; align-items: stretch;
-          padding-top: 12px;
-          border-top: 1px solid #e8e8e0;
-        }
-        .ajv-panel-input {
-          flex: 1;
-          font-family: inherit; font-size: 12px;
-          padding: 8px 10px;
-          border: 1.5px solid #e8e8e0;
-          border-radius: 8px;
-          resize: none; outline: none;
-        }
-        .ajv-panel-input:focus { border-color: #e4b976; }
-
-        /* 공통 버튼 */
-        .ajv-btn-primary, .ajv-btn-secondary {
-          padding: 8px 14px;
-          border-radius: 8px;
-          font-family: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          border: 1.5px solid;
-        }
-        .ajv-btn-primary { background: #e4b976; color: #151515; border-color: #e4b976; }
-        .ajv-btn-primary:hover { background: #d2a55f; border-color: #d2a55f; }
-        .ajv-btn-primary:disabled { background: #ECECEC; color: #B0B0B0; border-color: #ECECEC; cursor: not-allowed; }
-        .ajv-btn-secondary { background: #fff; color: #1a1a1a; border-color: #e8e8e0; }
-        .ajv-btn-secondary:disabled { color: #9ca3af; cursor: not-allowed; }
-      `}</style>
+      
     </div>
   );
 }
@@ -811,46 +562,12 @@ function JobChip({
   const total = job.counts ? Object.values(job.counts).reduce((a, b) => a + b, 0) : 0;
   const active = job.counts?.active ?? 0;
   return (
-    <button className={`jc ${selected ? "jc-active" : ""}`} onClick={onClick}>
-      <span className="jc-title">{job.title}</span>
-      <span className="jc-meta">
+    <button className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill border-[1.5px] font-inherit cursor-pointer whitespace-nowrap shrink-0 transition-all ${selected ? "bg-amber-soft border-honey-gold" : "bg-paper-white border-bone hover:bg-bone/30"}`} onClick={onClick}>
+      <span className="text-xs font-semibold text-ink-black max-w-[220px] overflow-hidden text-ellipsis">{job.title}</span>
+      <span className="text-[11px] text-mist-gray pl-1.5 border-l border-bone">
         {active}/{job.capacity}확정 · {total}진행
       </span>
-      <style jsx>{`
-        .jc {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 8px;
-          background: #fff;
-          border: 1.5px solid #e8e8e0;
-          font-family: inherit;
-          cursor: pointer;
-          white-space: nowrap;
-          flex-shrink: 0;
-          transition: all 0.1s;
-        }
-        .jc:hover { background: #f9fafb; }
-        .jc-active {
-          background: #f7eedd !important;
-          border-color: #e4b976 !important;
-        }
-        .jc-title {
-          font-size: 12px;
-          font-weight: 600;
-          color: #1a1a1a;
-          max-width: 220px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .jc-meta {
-          font-size: 11px;
-          color: #9ca3af;
-          padding-left: 6px;
-          border-left: 1px solid #e8e8e0;
-        }
-      `}</style>
+      
     </button>
   );
 }
@@ -860,19 +577,13 @@ function ProgressBadge({ candidate }: { candidate: CandidateRow }) {
   if (stage === "screening") {
     const cl = candidate.agent_state?.screening ?? {};
     const done = SCREENING_KEYS.filter((k) => (cl as Record<string, boolean>)[k] === true).length;
-    return <span className="pb">{done}/{SCREENING_KEYS.length}</span>;
+    return <span className="inline-block px-1.5 py-[1px] rounded-pill bg-bone/30 text-[10px] text-slate-gray">{done}/{SCREENING_KEYS.length}</span>;
   }
   if (stage === "onboarding") {
     const cl = candidate.agent_state?.onboarding ?? {};
     const done = ONBOARDING_KEYS.filter((k) => (cl as Record<string, boolean>)[k] === true).length;
     return (
-      <>
-        <span className="pb">{done}/{ONBOARDING_KEYS.length}</span>
-        <style jsx>{`.pb {
-          display: inline-block; padding: 1px 6px; border-radius: 6px;
-          background: #f3f4f6; font-size: 10px; color: #4b5563;
-        }`}</style>
-      </>
+      <span className="inline-block px-1.5 py-[1px] rounded-pill bg-bone/30 text-[10px] text-slate-gray">{done}/{ONBOARDING_KEYS.length}</span>
     );
   }
   return <span style={{ color: "#9ca3af" }}>—</span>;
@@ -880,26 +591,19 @@ function ProgressBadge({ candidate }: { candidate: CandidateRow }) {
 
 function ApplicantInfo({ applicant }: { applicant: ApplicantSummary }) {
   return (
-    <div className="ai">
-      <h4>지원자 정보</h4>
-      <div className="ai-grid">
-        <div><span className="ai-l">전화</span>{applicant.phone}</div>
-        <div><span className="ai-l">희망 지점</span>{applicant.branch1 ?? "-"}{applicant.branch2 ? ` / ${applicant.branch2}` : ""}</div>
-        <div><span className="ai-l">희망 시간</span>{applicant.work_hours ?? "-"}</div>
-        <div><span className="ai-l">시작가능일</span>{applicant.available_date ?? "-"}</div>
-        <div><span className="ai-l">자차</span>{applicant.own_vehicle ?? "-"}</div>
-        <div><span className="ai-l">차종</span>{applicant.vehicle_type ?? "-"}</div>
-        <div><span className="ai-l">면허</span>{applicant.license_type ?? "-"}</div>
-        <div><span className="ai-l">거주지</span>{applicant.location ?? "-"}</div>
+    <div className="flex flex-col">
+      <h4 className="text-xs font-bold mb-2">지원자 정보</h4>
+      <div className="grid grid-cols-1 gap-1 text-xs">
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">전화</span>{applicant.phone}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">희망 지점</span>{applicant.branch1 ?? "-"}{applicant.branch2 ? ` / ${applicant.branch2}` : ""}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">희망 시간</span>{applicant.work_hours ?? "-"}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">시작가능일</span>{applicant.available_date ?? "-"}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">자차</span>{applicant.own_vehicle ?? "-"}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">차종</span>{applicant.vehicle_type ?? "-"}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">면허</span>{applicant.license_type ?? "-"}</div>
+        <div><span className="inline-block min-w-[70px] text-mist-gray text-[11px] font-semibold">거주지</span>{applicant.location ?? "-"}</div>
       </div>
-      <style jsx>{`
-        .ai h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-        .ai-grid { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 12px; }
-        .ai-l {
-          display: inline-block; min-width: 70px;
-          color: #9ca3af; font-size: 11px; font-weight: 600;
-        }
-      `}</style>
+      
     </div>
   );
 }
@@ -913,27 +617,19 @@ function Checklist({ candidate }: { candidate: CandidateRow }) {
       ? candidate.agent_state?.screening
       : candidate.agent_state?.onboarding) ?? {};
   return (
-    <div className="cl">
-      <h4>✅ {stage === "screening" ? "스크리닝" : "온보딩"} 체크리스트</h4>
-      <ul>
+    <div className="flex flex-col">
+      <h4 className="text-xs font-bold mb-2">✅ {stage === "screening" ? "스크리닝" : "온보딩"} 체크리스트</h4>
+      <ul className="list-none p-0 m-0">
         {keys.map((k) => {
           const v = (cl as Record<string, boolean>)[k] === true;
           return (
-            <li key={k} className={v ? "cl-on" : ""}>
-              <span className="cl-mark">{v ? "✓" : "☐"}</span> {k.replace(/_/g, " ")}
+            <li key={k} className={`py-1 text-xs ${v ? "text-deep-violet font-semibold" : "text-slate-gray"}`}>
+              <span className="inline-block w-[18px]">{v ? "✓" : "☐"}</span> {k.replace(/_/g, " ")}
             </li>
           );
         })}
       </ul>
-      <style jsx>{`
-        .cl h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-        .cl ul { list-style: none; padding: 0; }
-        .cl li {
-          padding: 4px 0; font-size: 12px; color: #6b7280;
-        }
-        .cl-on { color: #453b60; font-weight: 600; }
-        .cl-mark { display: inline-block; width: 18px; }
-      `}</style>
+      
     </div>
   );
 }
@@ -950,10 +646,10 @@ function ChatHistory({
   onRetry: () => void;
 }) {
   return (
-    <div className="ch">
-      <h4>💬 대화 내역</h4>
+    <div className="flex flex-col">
+      <h4 className="text-xs font-bold mb-2">💬 대화 내역</h4>
       <div
-        className="ch-list"
+        className="bg-bone/10 rounded-card p-2.5 max-h-[280px] overflow-y-auto flex flex-col gap-1.5"
         ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
       >
         {loading ? (
@@ -964,11 +660,11 @@ function ChatHistory({
           <EmptyState title="아직 대화가 없어요" />
         ) : (
           messages.map((m) => (
-            <div key={m.id} className={`ch-row ${m.direction === "outbound" ? "ch-r" : "ch-l"}`}>
-              <div className={`ch-bub ${m.direction === "outbound" ? "ch-out" : "ch-in"}`}>
-                <p>{m.body}</p>
-                {m.reasoning && <div className="ch-reason">🤖 {m.reasoning}</div>}
-                <div className="ch-time">
+            <div key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[80%] px-2.5 py-1.5 rounded-card ${m.direction === "outbound" ? "bg-lavender-soft" : "bg-paper-white border border-bone"}`}>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.body}</p>
+                {m.reasoning && <div className={`text-[10px] text-slate-gray border-l-2 border-black/15 px-1.5 py-1 mt-1 rounded-r-sm leading-snug whitespace-pre-wrap break-words ${m.direction === "outbound" ? "bg-white/70" : "bg-bone/10"}`}>🤖 {m.reasoning}</div>}
+                <div className="text-[10px] text-mist-gray mt-1">
                   {m.sent_by && <span>{sentByLabel(m.sent_by)} · </span>}
                   {new Date(m.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </div>
@@ -977,39 +673,7 @@ function ChatHistory({
           ))
         )}
       </div>
-      <style jsx>{`
-        .ch h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-        .ch-list {
-          background: #f9fafb;
-          border-radius: 8px;
-          padding: 10px;
-          max-height: 280px;
-          overflow-y: auto;
-          display: flex; flex-direction: column; gap: 6px;
-        }
-        .ch-empty { padding: 24px; text-align: center; color: #9ca3af; font-size: 12px; }
-        .ch-row { display: flex; }
-        .ch-l { justify-content: flex-start; }
-        .ch-r { justify-content: flex-end; }
-        .ch-bub { max-width: 80%; padding: 7px 10px; border-radius: 8px; }
-        .ch-in { background: #fff; border: 1px solid #e8e8e0; }
-        .ch-out { background: #efecf4; }
-        .ch-bub p { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
-        .ch-reason {
-          font-size: 10px;
-          color: #6b7280;
-          background: rgba(255,255,255,0.7);
-          border-left: 2px solid rgba(0,0,0,0.15);
-          padding: 3px 6px;
-          margin-top: 4px;
-          border-radius: 0 3px 3px 0;
-          line-height: 1.4;
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-        .ch-in .ch-reason { background: #F9FAFB; }
-        .ch-time { font-size: 10px; color: #9ca3af; margin-top: 3px; }
-      `}</style>
+      
     </div>
   );
 }
@@ -1071,42 +735,25 @@ function ManagerActions({
   };
 
   return (
-    <div className="ma">
-      <h4>매니저 액션</h4>
+    <div className="flex flex-col">
+      <h4 className="text-xs font-bold mb-2">매니저 액션</h4>
       {candidate.paused_reason && (
-        <div className="ma-paused">
+        <div className="px-2.5 py-2 bg-amber-soft rounded-card text-xs text-burnt-amber mb-2">
           ⏸ <strong>일시정지</strong>: {candidate.paused_reason}
         </div>
       )}
-      <div className="ma-row">
+      <div className="flex gap-1.5 flex-wrap">
         {!isPaused && !isAbort && stage !== "active" && (
-          <button className="ma-btn" onClick={pause} disabled={busy}>일시정지</button>
+          <button className="px-3 py-1.5 bg-paper-white border-[1.5px] border-bone rounded-pill font-inherit text-xs cursor-pointer transition-colors hover:bg-bone/30 disabled:opacity-50 disabled:cursor-not-allowed" onClick={pause} disabled={busy}>일시정지</button>
         )}
         {isPaused && (
-          <button className="ma-btn ma-btn-ok" onClick={resume} disabled={busy}>AI 재개</button>
+          <button className="px-3 py-1.5 bg-deep-violet text-paper-white border-[1.5px] border-deep-violet rounded-pill font-inherit text-xs cursor-pointer transition-colors hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" onClick={resume} disabled={busy}>AI 재개</button>
         )}
         {!isAbort && (
-          <button className="ma-btn ma-btn-warn" onClick={abort} disabled={busy}>부적합 처리</button>
+          <button className="px-3 py-1.5 bg-paper-white text-burgundy border-[1.5px] border-blush-border rounded-pill font-inherit text-xs cursor-pointer transition-colors hover:bg-rose-soft disabled:opacity-50 disabled:cursor-not-allowed" onClick={abort} disabled={busy}>부적합 처리</button>
         )}
       </div>
-      <style jsx>{`
-        .ma h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-        .ma-paused {
-          padding: 8px 10px; background: #f7eedd;
-          border-radius: 6px; font-size: 12px; color: #65451d;
-          margin-bottom: 8px;
-        }
-        .ma-row { display: flex; gap: 6px; flex-wrap: wrap; }
-        .ma-btn {
-          padding: 6px 12px;
-          background: #fff; border: 1.5px solid #e8e8e0;
-          border-radius: 6px; font-family: inherit;
-          font-size: 12px; cursor: pointer;
-        }
-        .ma-btn-ok { background: #453b60; color: #fff; border-color: #453b60; }
-        .ma-btn-warn { background: #fff; color: #5c2529; border-color: #d79caa; }
-        .ma-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      `}</style>
+      
     </div>
   );
 }
