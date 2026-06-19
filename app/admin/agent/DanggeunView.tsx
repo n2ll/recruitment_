@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBrowserClient } from "@/lib/supabase";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
-import { LoadingState, EmptyState } from "@/components/ui/states";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import { SCREENING_KEYS } from "./types";
 import { sentByLabel } from "./sent-by-label";
 import ApplicantMiniDetail, { type MiniApplicantPatch } from "../ApplicantMiniDetail";
@@ -191,9 +191,11 @@ type FlowStage = (typeof STAGE_FLOW)[number];
 function StageProgress({
   stage,
   onStageClick,
+  busy = false,
 }: {
   stage: string | null;
   onStageClick?: (target: FlowStage) => void;
+  busy?: boolean;
 }) {
   // paused / abort는 별도 표시
   const isPaused = stage === "paused";
@@ -204,7 +206,7 @@ function StageProgress({
     : stage === "active" ? "onboarding"
     : stage;
   const currentIdx = STAGE_FLOW.indexOf(effective as FlowStage);
-  const clickable = !!onStageClick && !isAbort; // abort 상태에선 단계 변경 불가
+  const clickable = !!onStageClick && !isAbort && !busy; // abort/처리 중엔 단계 변경 불가
 
   return (
     <div className="dg-progress">
@@ -292,6 +294,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   // ── 후보 목록 ──────────────────────────────────────────
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState(false);
   const [search, setSearch] = useState("");
 
   // ── 우측 대화창 ────────────────────────────────────────
@@ -302,11 +305,15 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
   }, [selectedId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgLoading, setMsgLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState(false);
   const [outbound, setOutbound] = useState("");
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [agentStage, setAgentStage] = useState<string | null>(null);
   const [agentState, setAgentState] = useState<AgentState>({});
+  // 대화 헤더 액션(일시정지/단계변경/재개) 진행 중 가드 — 중복 클릭 시 중복 발송 방지.
+  const [actionBusy, setActionBusy] = useState(false);
+  const actionBusyRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const convBodyRef = useRef<HTMLDivElement>(null);
   const lastConvRef = useRef<number | null>(null);
@@ -336,9 +343,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
       const json = await res.json();
       if (res.ok) {
         setCandidates(Array.isArray(json.data) ? json.data : []);
+        setListError(false);
+      } else {
+        setListError(true);
       }
     } catch (e) {
       console.error("[danggeun list error]", e);
+      setListError(true);
     } finally {
       if (!opts.silent) setListLoading(false);
     }
@@ -359,9 +370,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
         setMessages(Array.isArray(json.messages) ? json.messages : []);
         setAgentStage(json.agent_stage ?? null);
         setAgentState((json.agent_state ?? {}) as AgentState);
+        setMessagesError(false);
+      } else {
+        setMessagesError(true);
       }
     } catch (e) {
       console.error("[danggeun messages error]", e);
+      setMessagesError(true);
     } finally {
       if (!opts.silent) setMsgLoading(false);
     }
@@ -671,6 +686,8 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
           <div className="dg-list">
             {listLoading ? (
               <LoadingState label="후보 불러오는 중…" />
+            ) : listError ? (
+              <ErrorState onRetry={() => fetchCandidates()} />
             ) : filteredCandidates.length === 0 ? (
               candidates.length === 0 ? (
                 <EmptyState
@@ -788,6 +805,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                   {(agentStage === "screening" || agentStage === "onboarding" || agentStage === "active") && (
                     <button
                       className="dg-btn-pause"
+                      disabled={actionBusy}
                       onClick={async () => {
                         if (selectedId == null) return;
                         const ok = await confirm({
@@ -798,6 +816,9 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                         if (!ok) {
                           return;
                         }
+                        if (actionBusyRef.current) return;
+                        actionBusyRef.current = true;
+                        setActionBusy(true);
                         try {
                           const res = await fetch("/api/admin/agent/pause", {
                             method: "POST",
@@ -812,10 +833,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                           await fetchMessages(selectedId, { silent: true });
                         } catch (e) {
                           toast({ title: "일시정지에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
+                        } finally {
+                          setActionBusy(false);
+                          actionBusyRef.current = false;
                         }
                       }}
                     >
-                      ⏸ AI 일시정지
+                      {actionBusy ? "처리 중…" : "⏸ AI 일시정지"}
                     </button>
                   )}
                 </div>
@@ -823,6 +847,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
 
               <StageProgress
                 stage={agentStage}
+                busy={actionBusy}
                 onStageClick={async (target) => {
                   if (selectedId == null) return;
                   const targetLabel = STAGE_LABEL[target];
@@ -836,6 +861,9 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     confirmText: "단계 변경",
                   });
                   if (!ok) return;
+                  if (actionBusyRef.current) return;
+                  actionBusyRef.current = true;
+                  setActionBusy(true);
                   try {
                     const res = await fetch("/api/admin/agent/set-stage", {
                       method: "POST",
@@ -850,6 +878,9 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     await fetchMessages(selectedId, { silent: true });
                   } catch (e) {
                     toast({ title: "단계 변경에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
+                  } finally {
+                    setActionBusy(false);
+                    actionBusyRef.current = false;
                   }
                 }}
               />
@@ -871,6 +902,7 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                     </div>
                     <button
                       className="dg-btn dg-btn-resume"
+                      disabled={actionBusy}
                       onClick={async () => {
                         if (selectedId == null) return;
                         const ok = await confirm({
@@ -881,6 +913,9 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                         if (!ok) {
                           return;
                         }
+                        if (actionBusyRef.current) return;
+                        actionBusyRef.current = true;
+                        setActionBusy(true);
                         try {
                           const res = await fetch("/api/admin/agent/resume", {
                             method: "POST",
@@ -896,10 +931,13 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
                           await fetchMessages(selectedId, { silent: true });
                         } catch (e) {
                           toast({ title: "재개에 실패했어요", description: e instanceof Error ? e.message : "알 수 없는 오류", tone: "error" });
+                        } finally {
+                          setActionBusy(false);
+                          actionBusyRef.current = false;
                         }
                       }}
                     >
-                      ▶ AI 응답 재개
+                      {actionBusy ? "처리 중…" : "▶ AI 응답 재개"}
                     </button>
                   </div>
                 </div>
@@ -948,6 +986,8 @@ export default function DanggeunView({ mode = "live", branches = [] }: DanggeunV
               <div className="dg-conv-body" ref={convBodyRef}>
                 {msgLoading ? (
                   <LoadingState label="대화 불러오는 중…" />
+                ) : messagesError ? (
+                  <ErrorState onRetry={() => selectedId != null && fetchMessages(selectedId)} />
                 ) : messages.length === 0 ? (
                   <EmptyState title="아직 대화가 없어요" />
                 ) : (
@@ -1287,7 +1327,8 @@ const css = `
     cursor: pointer;
     font-family: inherit;
   }
-  .dg-btn-pause:hover { background: #f0e0c0; }
+  .dg-btn-pause:hover:not(:disabled) { background: #f0e0c0; }
+  .dg-btn-pause:disabled { opacity: 0.6; cursor: wait; }
   .dg-conv-body {
     flex: 1;
     overflow-y: auto;
@@ -1429,7 +1470,8 @@ const css = `
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .dg-btn-resume:hover { background: #2f2843; }
+  .dg-btn-resume:hover:not(:disabled) { background: #2f2843; }
+  .dg-btn-resume:disabled { opacity: 0.6; cursor: wait; }
 
   .dg-progress {
     display: flex;
