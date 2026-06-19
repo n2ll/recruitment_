@@ -21,7 +21,7 @@ import { ConfirmedSlotsView } from "@/components/admin/ConfirmedSlotsView";
 import { ChatPanel } from "@/components/admin/ChatPanel";
 import { ApplicantDetailView } from "@/components/admin/ApplicantDetailView";
 import { useToast } from "@/components/ui/toast";
-import { LoadingState, EmptyState } from "@/components/ui/states";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/states";
 import {
   type Applicant,
   type Heartbeat,
@@ -64,6 +64,7 @@ export default function AdminPage() {
   const [loadError, setLoadError] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(true);
+  const [branchesError, setBranchesError] = useState(false);
   const [branchFilter, setBranchFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [search, setSearch] = useState("");
@@ -199,10 +200,13 @@ export default function AdminPage() {
   const fetchBranches = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/branches", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setBranches(json.data || []);
+      setBranchesError(false);
     } catch {
       console.error("지점 목록 로딩 실패");
+      setBranchesError(true);
     } finally {
       setBranchesLoading(false);
     }
@@ -405,7 +409,11 @@ export default function AdminPage() {
             <LoadingState label="데이터 불러오는 중…" />
           ) : tab === "dashboard" ? (
             <div className="content">
-              <DashboardView stats={stats} branchStats={branchStats} />
+              {loadError && data.length === 0 ? (
+                <ErrorState onRetry={() => fetchData()} />
+              ) : (
+                <DashboardView stats={stats} branchStats={branchStats} />
+              )}
             </div>
           ) : tab === "applicants" ? (
             <div className="content">
@@ -460,12 +468,16 @@ export default function AdminPage() {
           ) : tab === "recommend" ? (
             <RecommendView />
           ) : tab === "branches" ? (
-            <BranchAdminView
-              branches={branches}
-              branchesLoading={branchesLoading}
-              data={data}
-              onBranchesChanged={fetchBranches}
-            />
+            branchesError && branches.length === 0 ? (
+              <ErrorState onRetry={() => fetchBranches()} />
+            ) : (
+              <BranchAdminView
+                branches={branches}
+                branchesLoading={branchesLoading}
+                data={data}
+                onBranchesChanged={fetchBranches}
+              />
+            )
           ) : tab === "site-managers" ? (
             <SiteManagersView branches={allBranchNames} />
           ) : tab === "agent" ? (
@@ -513,7 +525,9 @@ export default function AdminPage() {
                       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
                     });
 
-                  return contactList.length === 0 ? (
+                  return loadError && data.length === 0 ? (
+                    <ErrorState onRetry={() => fetchData()} />
+                  ) : contactList.length === 0 ? (
                     <EmptyState title="대화할 지원자가 없어요" hint="검색어나 필터를 바꿔보세요." />
                   ) : (
                     contactList.map((a) => (
