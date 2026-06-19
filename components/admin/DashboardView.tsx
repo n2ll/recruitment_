@@ -12,6 +12,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { CountUp } from "@/components/ui/count-up";
 import { fadeUp as item, staggerContainer as container } from "@/lib/admin/motion";
 import { cn } from "@/lib/cn";
+import { CostCard, type UsageDailyCost } from "@/components/admin/CostCard";
 
 export interface DashStats {
   total: number;
@@ -47,6 +48,8 @@ interface DashboardViewProps {
   dailyApplied?: number[];
   /** 라이브 티커용 최근 활동 */
   recentActivity?: RecentActivity[];
+  /** 최근 30일 일별 운영 비용 (day DESC) */
+  usage?: UsageDailyCost[];
 }
 
 function DeltaPill({ value }: { value: number }) {
@@ -108,7 +111,7 @@ function activityVerb(status: string): string {
   return "지원했어요";
 }
 
-export function DashboardView({ stats, branchStats, dailyApplied, recentActivity }: DashboardViewProps) {
+export function DashboardView({ stats, branchStats, dailyApplied, recentActivity, usage }: DashboardViewProps) {
   const funnelMax = Math.max(1, ...FUNNEL.map((f) => stats[f.key]));
   const maxBranchTotal = Math.max(1, ...branchStats.map((b) => b.total));
 
@@ -162,6 +165,8 @@ export function DashboardView({ stats, branchStats, dailyApplied, recentActivity
         <StatTile label="스크리닝 완료" value={stats.screeningDone} sub="면접/확정 대기" tone="lavender" />
         <StatTile label="확정인력" value={stats.confirmed} sub="매니저 확정 완료" tone="rose" />
       </motion.div>
+
+      {usage && usage.length > 0 && <CostCard usage={usage} />}
 
       <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
         <motion.div variants={item} className="lg:col-span-5">
